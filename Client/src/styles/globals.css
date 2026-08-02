@@ -1,0 +1,30 @@
+/* font imports */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Serif+Display:ital@0;1&display=swap');
+
+/* variable definitions */
+:root {
+    --ink:       #0f0e0d;
+    --paper:     #f5f2ee;
+    --panel:     #faf8f5;
+    --accent:    #c8502a;
+    --accent-lt: #f0e0d8;
+    --muted:     #8a857e;
+    --border:    #e2ddd8;
+    --shadow:    rgba(15, 14, 13, 0.08);
+    --drag-scale: 1.08;
+    --drag-rotate: 2deg;
+}
+
+/* reset styles */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* element styles */
+body {
+    font-family: 'Noto Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+}
