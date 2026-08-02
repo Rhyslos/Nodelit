@@ -8,6 +8,8 @@ import {
     optionalColor,
     optionalInteger,
     optionalBoolean,
+    optionalDate,
+    optionalSubtasks,
     requireInteger,
     requireTaskReorder,
     requireListReorder
@@ -280,7 +282,9 @@ export default function createKanbanRouter(authz) {
                 description: optionalText(req.body?.description, 'description', 5000),
                 isCompleted: optionalBoolean(req.body?.isCompleted, 'isCompleted'),
                 category: optionalText(req.body?.category, 'category', 80),
-                color: optionalColor(req.body?.color, 'color')
+                color: optionalColor(req.body?.color, 'color'),
+                deadline: optionalDate(req.body?.deadline, 'deadline'),
+                subtasks: optionalSubtasks(req.body?.subtasks, 'subtasks')
             };
 
             const expectedUpdatedAt = typeof req.body?.updatedAt === 'string' ? req.body.updatedAt : undefined;

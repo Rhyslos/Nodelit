@@ -1,7 +1,9 @@
 // configuration constants
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,80}$/;
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BATCH_SIZE = 200;
+const MAX_SUBTASKS = 50;
 
 // error classes
 export class ValidationError extends Error {
@@ -65,6 +67,35 @@ export function optionalColor(value, field) {
     }
 
     return value;
+}
+
+export function optionalDate(value, field) {
+    if (value === undefined || value === null) return undefined;
+    if (value === '') return '';
+
+    if (typeof value !== 'string' || !DATE_PATTERN.test(value) || Number.isNaN(Date.parse(value))) {
+        throw new ValidationError(`${field} must be a date such as 2026-09-01`);
+    }
+
+    return value;
+}
+
+export function optionalSubtasks(value, field) {
+    if (value === undefined || value === null) return undefined;
+
+    if (!Array.isArray(value)) {
+        throw new ValidationError(`${field} must be a list`);
+    }
+
+    if (value.length > MAX_SUBTASKS) {
+        throw new ValidationError(`${field} cannot contain more than ${MAX_SUBTASKS} entries`);
+    }
+
+    return value.map(item => ({
+        id: requireID(item?.id, `${field}.id`),
+        text: optionalText(item?.text, `${field}.text`, 200) ?? '',
+        done: item?.done === true
+    }));
 }
 
 export function requireInteger(value, field, { min = 0, max = 10000 } = {}) {

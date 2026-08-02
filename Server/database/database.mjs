@@ -7,7 +7,7 @@ const SESSION_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived'];
 const LIST_FIELDS = ['name', 'columnID', 'listOrder', 'category', 'color'];
-const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'category', 'color'];
+const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'category', 'color', 'deadline', 'subtasks'];
 const PUBLIC_USER_FIELDS = ['id', 'username', 'email', 'displayName', 'firstName', 'lastName', 'role', 'cursorColor'];
 
 // utility functions
@@ -148,19 +148,26 @@ class Database {
 
         this.tasks.set('task-1', {
             id: 'task-1', listID: 'list-1', title: 'Wire up the board', description: '',
-            isCompleted: 0, taskOrder: 0, category: 'Planning', color: '#4a90d9', updatedAt: createdAt
+            isCompleted: false, taskOrder: 0, category: 'Planning', color: '#4a90d9',
+            deadline: '', subtasks: [], assignedUsers: [], updatedAt: createdAt
         });
         this.tasks.set('task-2', {
-            id: 'task-2', listID: 'list-1', title: 'Check drag and drop', description: '',
-            isCompleted: 0, taskOrder: 1, category: 'Planning', color: '#4a90d9', updatedAt: createdAt
+            id: 'task-2', listID: 'list-1', title: 'Check drag and drop', description: 'Across columns too.',
+            isCompleted: false, taskOrder: 1, category: 'Planning', color: '#4a90d9',
+            deadline: '', subtasks: [
+                { id: 'sub-1', text: 'Within a list', done: true },
+                { id: 'sub-2', text: 'Between columns', done: false }
+            ], assignedUsers: [], updatedAt: createdAt
         });
         this.tasks.set('task-3', {
             id: 'task-3', listID: 'list-2', title: 'Waiting on schema', description: '',
-            isCompleted: 0, taskOrder: 0, category: null, color: '#e6a817', updatedAt: createdAt
+            isCompleted: false, taskOrder: 0, category: null, color: '#e6a817',
+            deadline: '2026-09-01', subtasks: [], assignedUsers: [], updatedAt: createdAt
         });
         this.tasks.set('task-4', {
             id: 'task-4', listID: 'list-3', title: 'Live sync over SSE', description: '',
-            isCompleted: 1, taskOrder: 0, category: 'Research', color: '#7ab648', updatedAt: createdAt
+            isCompleted: true, taskOrder: 0, category: 'Research', color: '#7ab648',
+            deadline: '', subtasks: [], assignedUsers: [], updatedAt: createdAt
         });
     }
 
@@ -600,10 +607,13 @@ class Database {
             listID,
             title: fields.title ?? '',
             description: fields.description ?? '',
-            isCompleted: 0,
+            isCompleted: false,
             taskOrder: fields.taskOrder ?? nextOrder,
             category: fields.category ?? null,
             color: fields.color ?? null,
+            deadline: '',
+            subtasks: [],
+            assignedUsers: [],
             updatedAt: timestamp()
         };
 
@@ -620,7 +630,7 @@ class Database {
         }
 
         const applied = pickFields(changes, TASK_FIELDS);
-        if (applied.isCompleted !== undefined) applied.isCompleted = applied.isCompleted ? 1 : 0;
+        if (applied.isCompleted !== undefined) applied.isCompleted = Boolean(applied.isCompleted);
 
         const updated = { ...task, ...applied, updatedAt: timestamp() };
         this.tasks.set(taskID, updated);
