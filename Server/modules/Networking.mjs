@@ -1,80 +1,153 @@
 // imports
 import { Router } from 'express';
+import crypto from 'crypto';
+import db from '../database/Database.mjs';
+
+// configuration constants
+const HEARTBEAT_INTERVAL_MS = 15000;
 
 // state variables
-const clients = new Map();
-const activeWorkspaces = new Map();
+const connections = new Map();
+let heartbeatTimer = null;
 
-// broadcast functions
-export function broadcastToWorkspace(workspaceID, type, payload) {
-    if (!workspaceID) return;
-    
-    activeWorkspaces.forEach((wsID, userId) => {
-        if (wsID === workspaceID) {
-            const userStreams = clients.get(userId);
-            if (userStreams) {
-                const dataString = JSON.stringify({ type, ...payload });
-                userStreams.forEach(res => res.write(`data: ${dataString}\n\n`));
-            }
-        }
-    });
+// utility functions
+function writeEvent(res, payload) {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-// interval functions
-setInterval(() => {
-    clients.forEach(userStreams => {
-        userStreams.forEach(res => res.write(':\n\n'));
-    });
-}, 15000);
+function startHeartbeat() {
+    if (heartbeatTimer) return;
+
+    heartbeatTimer = setInterval(() => {
+        for (const connection of connections.values()) {
+            connection.res.write(':\n\n');
+        }
+    }, HEARTBEAT_INTERVAL_MS);
+
+    heartbeatTimer.unref?.();
+}
+
+function stopHeartbeat() {
+    if (connections.size > 0 || !heartbeatTimer) return;
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+}
+
+// broadcast functions
+export function broadcastToWorkspace(workspaceID, payload, originClientID) {
+    if (!workspaceID) return;
+
+    for (const connection of connections.values()) {
+        if (connection.workspaceID !== workspaceID) continue;
+        if (originClientID && connection.clientID === originClientID) continue;
+        writeEvent(connection.res, payload);
+    }
+}
+
+export function broadcastKanbanChange(workspaceID, changes, originClientID) {
+    broadcastToWorkspace(workspaceID, { type: 'kanban', ...changes }, originClientID);
+}
+
+// presence functions
+function getOnlineUserIDs(workspaceID) {
+    const online = new Set();
+
+    for (const connection of connections.values()) {
+        if (connection.workspaceID === workspaceID) online.add(connection.userID);
+    }
+
+    return online;
+}
+
+async function buildPresence(workspaceID) {
+    const members = await db.getMembers(workspaceID);
+    const online = getOnlineUserIDs(workspaceID);
+
+    return members.map(member => ({ ...member, isOnline: online.has(member.id) }));
+}
+
+async function broadcastPresence(workspaceID) {
+    if (!workspaceID) return;
+
+    const members = await buildPresence(workspaceID);
+    broadcastToWorkspace(workspaceID, { type: 'presence', workspaceID, members });
+}
+
+async function attachToWorkspace(connection, workspaceID) {
+    const previous = connection.workspaceID;
+    if (previous === workspaceID) return;
+
+    if (workspaceID && !await db.isMember(workspaceID, connection.userID)) return;
+
+    connection.workspaceID = workspaceID ?? null;
+
+    if (previous) await broadcastPresence(previous);
+    if (connection.workspaceID) await broadcastPresence(connection.workspaceID);
+}
 
 // router configuration
-export default function createNetworkingRouter() {
+export default function createNetworkingRouter(authz) {
     const router = Router();
 
     // sse routes
-    router.get('/stream/:userId', (req, res) => {
-        const { userId } = req.params;
+    router.get('/stream', async (req, res, next) => {
+        try {
+            const connectionID = crypto.randomUUID();
+            const clientID = typeof req.query.clientId === 'string' ? req.query.clientId.slice(0, 64) : null;
+            const requestedWorkspace = typeof req.query.workspaceID === 'string' ? req.query.workspaceID : null;
 
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.setHeader('X-Accel-Buffering', 'no');
-        res.flushHeaders();
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache, no-transform');
+            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('X-Accel-Buffering', 'no');
+            res.flushHeaders();
 
-        if (!clients.has(userId)) clients.set(userId, new Set());
-        clients.get(userId).add(res);
+            const connection = { id: connectionID, userID: req.user.id, clientID, workspaceID: null, res };
+            connections.set(connectionID, connection);
+            startHeartbeat();
 
-        res.write('retry: 3000\n\n');
-        res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+            res.write('retry: 3000\n\n');
+            writeEvent(res, { type: 'connected', connectionID });
 
-        // event handlers
-        req.on('close', () => {
-            const userStreams = clients.get(userId);
-            if (userStreams) {
-                userStreams.delete(res);
-                if (userStreams.size === 0) {
-                    clients.delete(userId);
-                    activeWorkspaces.delete(userId);
-                }
-            }
-        });
+            if (requestedWorkspace) await attachToWorkspace(connection, requestedWorkspace);
+
+            // event handlers
+            req.on('close', async () => {
+                const workspaceID = connection.workspaceID;
+                connections.delete(connectionID);
+                stopHeartbeat();
+                if (workspaceID) await broadcastPresence(workspaceID);
+            });
+        } catch (error) {
+            next(error);
+        }
     });
 
-    // api routes
-    router.post('/presence', (req, res) => {
-        const { userId, workspaceID } = req.body;
-        
-        if (!userId) {
-            return res.status(400).json({ error: 'User ID required' });
-        }
+    // presence routes
+    router.post('/presence', async (req, res, next) => {
+        try {
+            const { clientId, workspaceID } = req.body ?? {};
 
-        if (workspaceID) {
-            activeWorkspaces.set(userId, workspaceID);
-        } else {
-            activeWorkspaces.delete(userId);
-        }
+            const owned = Array.from(connections.values())
+                .filter(connection => connection.userID === req.user.id)
+                .filter(connection => !clientId || connection.clientID === clientId);
 
-        res.json({ success: true });
+            for (const connection of owned) {
+                await attachToWorkspace(connection, workspaceID ?? null);
+            }
+
+            res.json({ success: true, attached: owned.length });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.get('/members/:workspaceID', authz.workspaceParam(), async (req, res, next) => {
+        try {
+            res.json({ members: await buildPresence(req.workspaceID) });
+        } catch (error) {
+            next(error);
+        }
     });
 
     return router;
