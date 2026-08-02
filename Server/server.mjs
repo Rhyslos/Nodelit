@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 import Authentication from './modules/Authentication.mjs';
 import Authorization from './modules/Authorization.mjs';
 import createNetworkingRouter from './modules/networking.mjs';
+import createKanbanRouter from './api/KanbanAPI.mjs';
 
 // server classes
 class Server {
@@ -63,6 +64,7 @@ class Server {
 
     // networking routes
     this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter());
+    this.app.use('/api/kanban', this.authn.authenticate, createKanbanRouter());
   }
 
   // error handling configuration
