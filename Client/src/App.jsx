@@ -1,36 +1,84 @@
 // component imports
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { StreamProvider } from './contexts/StreamContext';
+import { KanbanProvider } from './contexts/KanbanContext';
 import Navbar from './components/navbar/Navbar';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Kanban from './pages/Kanban';
+
+// application constants
+export const appName = 'Nodelit';
+
+// guard components
+function ProtectedRoute() {
+    const { user, loading } = useAuth();
+    const location = useLocation();
+
+    if (loading) return <div className="route-loading">Loading…</div>;
+    if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+
+    return <Outlet />;
+}
+
+function PublicRoute() {
+    const { user, loading } = useAuth();
+
+    if (loading) return <div className="route-loading">Loading…</div>;
+    if (user) return <Navigate to="/dashboard" replace />;
+
+    return <Outlet />;
+}
 
 // layout functions
-function AppLayout() {
-  const location = useLocation();
-  const hideNavbar = location.pathname === '/login';
+function WorkspaceLayout() {
+    return (
+        <KanbanProvider>
+            <Outlet />
+        </KanbanProvider>
+    );
+}
 
-  return (
-    <>
-      {!hideNavbar && <Navbar />}
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </>
-  );
+function AppLayout() {
+    const location = useLocation();
+    const hideNavbar = location.pathname === '/login';
+
+    return (
+        <>
+            {!hideNavbar && <Navbar />}
+            <Routes>
+                <Route element={<PublicRoute />}>
+                    <Route path="/login" element={<Login />} />
+                </Route>
+
+                <Route element={<ProtectedRoute />}>
+                    <Route path="/dashboard" element={<Dashboard />} />
+
+                    <Route path="/workspace/:workspaceID" element={<WorkspaceLayout />}>
+                        <Route index element={<Navigate to="kanban" replace />} />
+                        <Route path="kanban" element={<Kanban />} />
+                    </Route>
+                </Route>
+
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+        </>
+    );
 }
 
 // component functions
 function App() {
-  return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppLayout />
-      </BrowserRouter>
-    </AuthProvider>
-  );
+    return (
+        <AuthProvider>
+            <StreamProvider>
+                <BrowserRouter>
+                    <AppLayout />
+                </BrowserRouter>
+            </StreamProvider>
+        </AuthProvider>
+    );
 }
 
 export default App;

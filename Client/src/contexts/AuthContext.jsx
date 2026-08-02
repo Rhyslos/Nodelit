@@ -1,42 +1,51 @@
 // context imports
-import { useState, createContext, useContext } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import { api, onUnauthorized } from '../lib/api';
 
 // context initialization
 const AuthContext = createContext(null);
 
 // context providers
 export function AuthProvider({ children }) {
+    // state variables
     const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    // session restoration
+    useEffect(() => {
+        let active = true;
+
+        api('/api/auth/session')
+            .then(data => { if (active) setUser(data); })
+            .catch(() => { if (active) setUser(null); })
+            .finally(() => { if (active) setLoading(false); });
+
+        return () => { active = false; };
+    }, []);
+
+    useEffect(() => onUnauthorized(() => setUser(null)), []);
 
     // authentication requests
-    async function login(username, password) {
-        const response = await fetch('http://localhost:3000/api/login', {
+    const login = useCallback(async (username, password) => {
+        const userData = await api('/api/auth/login', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({ username, password }),
-            credentials: 'include'
+            body: { username, password }
         });
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || 'Invalid credentials');
-        }
-
-        const userData = await response.json();
         setUser(userData);
         return userData;
-    }
+    }, []);
 
-    // session management
-    function logout() {
-        setUser(null);
-    }
+    const logout = useCallback(async () => {
+        try {
+            await api('/api/auth/logout', { method: 'POST' });
+        } finally {
+            setUser(null);
+        }
+    }, []);
 
     return (
-        <AuthContext.Provider value={{ user, login, logout }}>
+        <AuthContext.Provider value={{ user, loading, login, logout }}>
             {children}
         </AuthContext.Provider>
     );
@@ -44,5 +53,11 @@ export function AuthProvider({ children }) {
 
 // hook exports
 export function useAuth() {
-    return useContext(AuthContext);
+    const context = useContext(AuthContext);
+
+    if (!context) {
+        throw new Error('useAuth must be used inside an AuthProvider');
+    }
+
+    return context;
 }

@@ -6,81 +6,117 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import Authentication from './modules/Authentication.mjs';
 import Authorization from './modules/Authorization.mjs';
-import createNetworkingRouter from './modules/networking.mjs';
+import createNetworkingRouter from './modules/Networking.mjs';
 import createKanbanRouter from './api/KanbanAPI.mjs';
+import createWorkspaceRouter from './api/WorkspaceAPI.mjs';
+import { ValidationError } from './modules/Validation.mjs';
+
+// configuration constants
+const PORT = Number(process.env.PORT ?? 3000);
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN ?? 'http://localhost:5173';
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 // server classes
 class Server {
-  constructor() {
-    this.app = express();
-    this.port = 3000;
-    this.authn = new Authentication();
-    this.authz = new Authorization();
-    
-    this.setupMiddleware();
-    this.setupRoutes();
-    this.setupErrorHandling();
-  }
+    constructor() {
+        this.app = express();
+        this.port = PORT;
+        this.authn = new Authentication();
+        this.authz = new Authorization();
 
-  // middleware configuration
-  setupMiddleware() {
-    this.app.use(helmet());
-    
-    this.app.use(cors({ 
-        origin: 'http://localhost:5173',
-        credentials: true
-    }));
-    
-    this.app.use(express.json({ limit: '10kb' }));
-    
-    this.app.use(cookieParser());
-    
-    this.app.use((req, res, next) => {
-        if (req.method !== 'GET' && req.headers['x-requested-with'] !== 'XMLHttpRequest') {
-            return res.status(403).json({ error: 'CSRF validation failed' });
-        }
-        next();
-    });
-  }
+        this.setupMiddleware();
+        this.setupRoutes();
+        this.setupErrorHandling();
+    }
 
-  // route configuration
-  setupRoutes() {
-    const loginLimiter = rateLimit({
-        windowMs: 15 * 60 * 1000, 
-        max: 5, 
-        message: { error: 'Too many login attempts. Please try again later.' }
-    });
+    // middleware configuration
+    setupMiddleware() {
+        this.app.disable('x-powered-by');
+        if (process.env.TRUST_PROXY) this.app.set('trust proxy', Number(process.env.TRUST_PROXY));
 
-    this.app.post('/api/login', loginLimiter, this.authn.login);
+        this.app.use(helmet({
+            crossOriginResourcePolicy: { policy: 'cross-origin' }
+        }));
 
-    this.app.get(
-      '/api/protected', 
-      this.authn.authenticate, 
-      this.authz.authorize, 
-      (req, res) => {
-        res.send('Secure data accessed');
-      }
-    );
+        this.app.use(cors({
+            origin: CLIENT_ORIGIN,
+            credentials: true,
+            allowedHeaders: ['Content-Type', 'X-Requested-With', 'X-Client-Id']
+        }));
 
-    // networking routes
-    this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter());
-    this.app.use('/api/kanban', this.authn.authenticate, createKanbanRouter());
-  }
+        this.app.use(express.json({ limit: '100kb' }));
+        this.app.use(cookieParser());
 
-  // error handling configuration
-  setupErrorHandling() {
-    this.app.use((err, req, res, next) => {
-        console.error('Unhandled server error:', err.message);
-        res.status(500).json({ error: 'Internal Server Error' });
-    });
-  }
+        this.app.use((req, res, next) => {
+            if (SAFE_METHODS.has(req.method)) return next();
 
-  // server initialization
-  start() {
-    this.app.listen(this.port, () => {
-      console.log(`Server listening on port ${this.port}`);
-    });
-  }
+            if (req.headers['x-requested-with'] !== 'XMLHttpRequest') {
+                return res.status(403).json({ error: 'CSRF validation failed' });
+            }
+
+            next();
+        });
+    }
+
+    // route configuration
+    setupRoutes() {
+        const loginLimiter = rateLimit({
+            windowMs: 15 * 60 * 1000,
+            max: 10,
+            standardHeaders: true,
+            legacyHeaders: false,
+            message: { error: 'Too many login attempts. Please try again later.' }
+        });
+
+        const apiLimiter = rateLimit({
+            windowMs: 60 * 1000,
+            max: 600,
+            standardHeaders: true,
+            legacyHeaders: false,
+            message: { error: 'Too many requests. Please slow down.' }
+        });
+
+        // authentication routes
+        this.app.post('/api/auth/login', loginLimiter, this.authn.login);
+        this.app.post('/api/auth/logout', this.authn.logout);
+        this.app.get('/api/auth/session', this.authn.authenticate, this.authn.session);
+
+        // application routes
+        this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter(this.authz));
+        this.app.use('/api/workspaces', apiLimiter, this.authn.authenticate, createWorkspaceRouter(this.authz));
+        this.app.use('/api/kanban', apiLimiter, this.authn.authenticate, createKanbanRouter(this.authz));
+
+        this.app.use('/api', (req, res) => {
+            res.status(404).json({ error: 'Not found' });
+        });
+    }
+
+    // error handling configuration
+    setupErrorHandling() {
+        this.app.use((err, req, res, next) => {
+            if (err instanceof ValidationError) {
+                return res.status(err.status).json({ error: err.message });
+            }
+
+            if (err?.type === 'entity.too.large') {
+                return res.status(413).json({ error: 'Request body too large' });
+            }
+
+            if (err?.type === 'entity.parse.failed') {
+                return res.status(400).json({ error: 'Malformed JSON body' });
+            }
+
+            console.error('Unhandled server error:', err);
+            res.status(500).json({ error: 'Internal Server Error' });
+        });
+    }
+
+    // server initialization
+    start() {
+        this.app.listen(this.port, () => {
+            console.log(`Server listening on port ${this.port}`);
+        });
+    }
 }
 
 // application startup
