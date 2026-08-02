@@ -1,6 +1,9 @@
-// server imports
+// import modules
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import Authentication from './modules/Authentication.mjs';
 import Authorization from './modules/Authorization.mjs';
 
@@ -18,13 +21,29 @@ class Server {
 
   // middleware configuration
   setupMiddleware() {
-    this.app.use(cors({ origin: 'http://localhost:5173' }));
-    this.app.use(express.json());
+    this.app.use(helmet());
+    
+    this.app.use(cors({ 
+        origin: 'http://localhost:5173',
+        credentials: true
+    }));
+    
+    this.app.use(express.json({ limit: '10kb' }));
+    
+    this.app.use(cookieParser());
   }
 
   // route configuration
   setupRoutes() {
-    this.app.post('/api/login', this.authn.login);
+    
+    // security configuration
+    const loginLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000, 
+        max: 5, 
+        message: { error: 'Too many login attempts. Please try again later.' }
+    });
+
+    this.app.post('/api/login', loginLimiter, this.authn.login);
 
     this.app.get(
       '/api/protected', 
