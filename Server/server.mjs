@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import Authentication from './modules/Authentication.mjs';
 import Authorization from './modules/Authorization.mjs';
+import createNetworkingRouter from './modules/networking.mjs';
 
 // server classes
 class Server {
@@ -59,6 +60,9 @@ class Server {
         res.send('Secure data accessed');
       }
     );
+
+    // networking routes
+    this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter());
   }
 
   // error handling configuration
