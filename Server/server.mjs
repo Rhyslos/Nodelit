@@ -1,7 +1,8 @@
-// import modules
+// server imports
 import express from 'express';
-import Authentication from './Authentication.mjs';
-import Authorization from './Authorization.mjs';
+import cors from 'cors';
+import Authentication from './modules/Authentication.mjs';
+import Authorization from './modules/Authorization.mjs';
 
 // server classes
 class Server {
@@ -11,26 +12,31 @@ class Server {
     this.authn = new Authentication();
     this.authz = new Authorization();
     
+    this.setupMiddleware();
     this.setupRoutes();
   }
 
-  // route functions
+  // middleware configuration
+  setupMiddleware() {
+    this.app.use(cors({ origin: 'http://localhost:5173' }));
+    this.app.use(express.json());
+  }
+
+  // route configuration
   setupRoutes() {
-    this.app.get('/', (req, res) => {
-      res.send('Server is running');
-    });
+    this.app.post('/api/login', this.authn.login);
 
     this.app.get(
-      '/protected', 
+      '/api/protected', 
       this.authn.authenticate, 
       this.authz.authorize, 
       (req, res) => {
-        res.send('You have accessed a secure route');
+        res.send('Secure data accessed');
       }
     );
   }
 
-  // server functions
+  // server initialization
   start() {
     this.app.listen(this.port, () => {
       console.log(`Server listening on port ${this.port}`);
@@ -38,6 +44,6 @@ class Server {
   }
 }
 
-// initialization functions
+// application startup
 const server = new Server();
 server.start();
