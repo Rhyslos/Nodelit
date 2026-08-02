@@ -5,6 +5,7 @@ import crypto from 'crypto';
 class Database {
     constructor() {
         this.users = new Map();
+        this.sessions = new Map();
         this.initializeMockUser();
     }
 
@@ -22,9 +23,28 @@ class Database {
         });
     }
 
+    // session management functions
+    createSession(userId) {
+        // Generates a highly secure, random 64-character hex string
+        const sessionId = crypto.randomBytes(32).toString('hex');
+        this.sessions.set(sessionId, userId);
+        return sessionId;
+    }
+
     // database queries
     getUser(username) {
         return this.users.get(username);
+    }
+
+    getUserBySession(sessionId) {
+        const userId = this.sessions.get(sessionId);
+        if (!userId) return null;
+        
+        // Find the user by ID
+        for (const user of this.users.values()) {
+            if (user.id === userId) return user;
+        }
+        return null;
     }
 }
 
