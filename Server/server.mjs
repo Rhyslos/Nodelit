@@ -17,6 +17,7 @@ class Server {
     
     this.setupMiddleware();
     this.setupRoutes();
+    this.setupErrorHandling();
   }
 
   // middleware configuration
@@ -31,12 +32,17 @@ class Server {
     this.app.use(express.json({ limit: '10kb' }));
     
     this.app.use(cookieParser());
+    
+    this.app.use((req, res, next) => {
+        if (req.method !== 'GET' && req.headers['x-requested-with'] !== 'XMLHttpRequest') {
+            return res.status(403).json({ error: 'CSRF validation failed' });
+        }
+        next();
+    });
   }
 
   // route configuration
   setupRoutes() {
-    
-    // security configuration
     const loginLimiter = rateLimit({
         windowMs: 15 * 60 * 1000, 
         max: 5, 
@@ -53,6 +59,14 @@ class Server {
         res.send('Secure data accessed');
       }
     );
+  }
+
+  // error handling configuration
+  setupErrorHandling() {
+    this.app.use((err, req, res, next) => {
+        console.error('Unhandled server error:', err.message);
+        res.status(500).json({ error: 'Internal Server Error' });
+    });
   }
 
   // server initialization
