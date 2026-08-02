@@ -1,10 +1,8 @@
-// hook imports
-import { useState, useRef, useEffect } from 'react';
-
 // component imports
+import { useState, useRef, useEffect } from 'react';
 import CategoryDropdown from './CategoryDropdown';
 
-// ui components
+// component functions
 export default function KanbanTask({
     task,
     categories,
@@ -18,8 +16,6 @@ export default function KanbanTask({
 }) {
     // state variables
     const [showCatDropdown, setShowCatDropdown] = useState(false);
-    
-    // dom references
     const titleRef = useRef(null);
     const taskRef = useRef(null);
 
@@ -35,13 +31,13 @@ export default function KanbanTask({
         };
     }, [task.id, registerTask, registerElement, isClone]);
 
-    // data processing functions
-    const categoryData = categories.find(c => c.name === task.originalCategory);
-    const activeBannerColor = task.color || categoryData?.color || '#555';
+    // derived variables
+    const categoryData = categories.find(c => c.name === task.category);
+    const bannerColor = task.color || categoryData?.color || 'var(--border)';
     const totalSubtasks = task.subtasks?.length || 0;
     const completedSubtasks = task.subtasks?.filter(st => st.done).length || 0;
 
-    // event functions
+    // event handlers
     function handleClick(e) {
         if (
             e.target.closest('.kanban-task-title') ||
@@ -56,7 +52,7 @@ export default function KanbanTask({
 
     function handleTitleBlur() {
         const text = titleRef.current?.textContent.trim() || 'New Task';
-        onUpdate({ title: text });
+        if (text !== task.title) onUpdate({ title: text });
     }
 
     function handleTitleKeyDown(e) {
@@ -69,20 +65,23 @@ export default function KanbanTask({
     return (
         <div
             ref={taskRef}
-            className={`kanban-task ${isDragging ? 'is-dragging' : ''} ${isClone ? 'is-clone' : ''}`}
+            className={[
+                'kanban-task',
+                isDragging ? 'is-dragging' : '',
+                isClone ? 'is-clone' : '',
+                task.isCompleted ? 'is-completed' : ''
+            ].filter(Boolean).join(' ')}
             onClick={handleClick}
         >
-            <div className="kanban-task-banner" style={{ background: activeBannerColor }} />
+            <div className="kanban-task-banner" style={{ background: bannerColor }} />
 
-            <div className="kanban-task-body" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <div className="kanban-task-body">
+                <div className="kanban-task-main">
                     <input
                         type="checkbox"
-                        className="kanban-task-checkbox"
-                        checked={task.isCompleted}
+                        className="kanban-check kanban-task-checkbox"
+                        checked={!!task.isCompleted}
                         onChange={e => onUpdate({ isCompleted: e.target.checked })}
-                        style={{ marginTop: '3px', flexShrink: 0 }}
                     />
 
                     <span
@@ -96,7 +95,6 @@ export default function KanbanTask({
                             e.stopPropagation();
                             setTimeout(() => titleRef.current?.focus(), 0);
                         }}
-                        style={{ flex: 1, minWidth: 0, wordBreak: 'break-word', outline: 'none' }}
                     >
                         {task.title}
                     </span>
@@ -104,34 +102,31 @@ export default function KanbanTask({
                     <div
                         className="kanban-task-drag-handle"
                         onMouseDown={e => onStartDrag(e, task, taskRef.current)}
-                        style={{ cursor: 'grab', color: '#aaa', padding: '0 4px', fontSize: '14px', userSelect: 'none', flexShrink: 0 }}
                         title="Drag to move"
                     >
                         ⋮⋮
                     </div>
                 </div>
 
-                <div className="kanban-task-indicators" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div className="kanban-task-indicators">
                     {task.description && (
-                        <span title="Has description" style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                            ☰
-                        </span>
+                        <span className="kanban-task-indicator" title="Has description">☰</span>
                     )}
 
                     {task.deadline && (
-                        <span title={`Deadline: ${task.deadline}`} style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                        <span className="kanban-task-indicator" title={`Due ${task.deadline}`}>
                             📅 {task.deadline}
                         </span>
                     )}
 
                     {totalSubtasks > 0 && (
-                        <span title="Subtasks" style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                        <span className="kanban-task-indicator" title="Subtasks">
                             ☑ {completedSubtasks}/{totalSubtasks}
                         </span>
                     )}
 
                     {task.assignedUsers?.length > 0 && (
-                        <span title="Assigned members" style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                        <span className="kanban-task-indicator" title="Assigned members">
                             👤 {task.assignedUsers.length}
                         </span>
                     )}
@@ -139,8 +134,9 @@ export default function KanbanTask({
 
                 <div className="kanban-task-cat-row">
                     <span className="kanban-task-cat-label">
-                        {task.originalCategory || 'No category'}
+                        {task.category || 'No category'}
                     </span>
+
                     {!isClone && (
                         <button
                             className="kanban-task-cat-btn"
@@ -149,12 +145,13 @@ export default function KanbanTask({
                             ▾
                         </button>
                     )}
+
                     {showCatDropdown && (
                         <CategoryDropdown
                             categories={categories}
-                            selected={task.originalCategory}
+                            selected={task.category}
                             onSelect={cat => {
-                                onUpdate({ originalCategory: cat.name, color: cat.color });
+                                onUpdate({ category: cat.name, color: cat.color });
                                 setShowCatDropdown(false);
                             }}
                             onClose={() => setShowCatDropdown(false)}

@@ -1,7 +1,7 @@
 // component imports
 import KanbanList from './KanbanList';
 
-// ui components
+// component functions
 export default function KanbanColumn({
     column,
     lists,
@@ -27,7 +27,7 @@ export default function KanbanColumn({
     registerTaskElement,
     registerListElement,
 }) {
-    // data processing functions
+    // derived variables
     const sortedLists = [...lists].sort((a, b) => (a.listOrder ?? 0) - (b.listOrder ?? 0));
 
     const listInsertionIndex = insertionPoint?.type === 'list' && insertionPoint.colIndex === column.columnIndex
@@ -37,9 +37,9 @@ export default function KanbanColumn({
     return (
         <div className="kanban-column" style={{ '--col': column.columnIndex }}>
             {sortedLists.map((list, index) => (
-                <div key={list.id} style={{ width: '100%' }}>
+                <div key={list.id} className="kanban-column-slot">
                     {listInsertionIndex === index && (
-                        <div className="kanban-list-insertion-indicator" style={{ height: '4px', background: 'var(--accent)', margin: '4px 0', borderRadius: '2px' }} />
+                        <div className="kanban-list-insertion-indicator" />
                     )}
 
                     <KanbanList
@@ -68,7 +68,7 @@ export default function KanbanColumn({
             ))}
 
             {listInsertionIndex === sortedLists.length && (
-                <div className="kanban-list-insertion-indicator" style={{ height: '4px', background: 'var(--accent)', margin: '4px 0', borderRadius: '2px' }} />
+                <div className="kanban-list-insertion-indicator" />
             )}
 
             {isDraggingTaskToEmptyCol && (
@@ -84,7 +84,6 @@ export default function KanbanColumn({
                 <div
                     className="kanban-empty-column-dropzone"
                     ref={el => registerGhost(`ghost-list-col-${column.columnIndex}`, el)}
-                    style={{ flex: 1, border: '2px dashed var(--border)', borderRadius: '8px', minHeight: '100px', opacity: 0.5 }}
                 />
             )}
         </div>

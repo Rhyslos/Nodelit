@@ -1,27 +1,49 @@
-// hook imports
-import { useEffect, useState } from 'react';
+// component imports
+import { useRef, useLayoutEffect } from 'react';
 
-// ui components
-export default function AnimatedRemoval({ children, removing }) {
-    // state variables
-    const [isMounted, setIsMounted] = useState(true);
+// configuration constants
+const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
+
+// component functions
+export default function AnimatedRemoval({ removing, duration = 250, children }) {
+    // dom references
+    const wrapperRef = useRef(null);
 
     // lifecycle functions
-    useEffect(() => {
-        if (removing) {
-            const timer = setTimeout(() => setIsMounted(false), 250);
-            return () => clearTimeout(timer);
-        }
-    }, [removing]);
+    useLayoutEffect(() => {
+        const el = wrapperRef.current;
+        if (!el) return;
 
-    if (!isMounted) return null;
+        if (!removing) {
+            el.style.cssText = '';
+            return;
+        }
+
+        el.style.height = `${el.scrollHeight}px`;
+        el.style.overflow = 'hidden';
+
+        const outer = requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                el.style.transition = [
+                    `height ${duration}ms ${EASE}`,
+                    `opacity ${duration * 0.7}ms ${EASE}`,
+                    `transform ${duration}ms ${EASE}`,
+                    `margin ${duration}ms ${EASE}`
+                ].join(', ');
+
+                el.style.height = '0px';
+                el.style.opacity = '0';
+                el.style.transform = 'scale(0.95)';
+                el.style.marginTop = '0px';
+                el.style.marginBottom = '0px';
+            });
+        });
+
+        return () => cancelAnimationFrame(outer);
+    }, [removing, duration]);
 
     return (
-        <div style={{
-            transition: 'opacity 250ms ease, transform 250ms ease',
-            opacity: removing ? 0 : 1,
-            transform: removing ? 'scale(0.95)' : 'scale(1)'
-        }}>
+        <div ref={wrapperRef} className="animated-removal">
             {children}
         </div>
     );

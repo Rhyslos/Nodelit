@@ -1,11 +1,9 @@
-// hook imports
-import { useEffect, useRef } from 'react';
-
 // component imports
+import { useEffect, useRef } from 'react';
 import KanbanTask from './KanbanTask';
 import AnimatedRemoval from '../AnimatedRemoval';
 
-// ui components
+// component functions
 export default function KanbanList({
     list,
     tasks,
@@ -51,19 +49,21 @@ export default function KanbanList({
         if (!el || !el.isConnected) return;
 
         el.focus();
+
         const range = document.createRange();
         range.selectNodeContents(el);
-        const sel = window.getSelection();
-        if (sel) {
-            sel.removeAllRanges();
-            sel.addRange(range);
+
+        const selection = window.getSelection();
+        if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
         }
     }, [isFocused]);
 
-    // event functions
+    // event handlers
     function handleNameBlur() {
-        const text = nameRef.current?.textContent.trim() || 'New List';
-        onUpdate({ name: text });
+        const text = nameRef.current?.textContent.trim() || 'New list';
+        if (text !== list.name) onUpdate({ name: text });
         onFocusClear();
     }
 
@@ -74,7 +74,7 @@ export default function KanbanList({
         }
     }
 
-    // data processing functions
+    // derived variables
     const categoryData = categories.find(c => c.name === list.category);
     const sortedTasks = [...tasks].sort((a, b) => a.taskOrder - b.taskOrder);
 
@@ -88,11 +88,10 @@ export default function KanbanList({
                 className={`kanban-list ${isDraggingList ? 'is-dragging-list' : ''}`}
                 ref={listRef}
             >
-                <div className="kanban-list-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="kanban-list-header">
                     <div
                         className="kanban-list-drag-handle"
                         onMouseDown={e => onStartListDrag(e, list, listRef.current)}
-                        style={{ cursor: 'grab', color: '#aaa', padding: '0 2px', fontSize: '14px', userSelect: 'none' }}
                         title="Drag to move list"
                     >
                         ⋮⋮
@@ -101,7 +100,7 @@ export default function KanbanList({
                     {categoryData && (
                         <span
                             className="kanban-list-category-dot"
-                            style={{ background: categoryData.color, flexShrink: 0 }}
+                            style={{ background: categoryData.color }}
                         />
                     )}
 
@@ -112,7 +111,6 @@ export default function KanbanList({
                         suppressContentEditableWarning
                         onBlur={handleNameBlur}
                         onKeyDown={handleNameKeyDown}
-                        style={{ flex: 1, minWidth: 0, outline: 'none' }}
                     >
                         {list.name}
                     </span>
@@ -124,6 +122,7 @@ export default function KanbanList({
                             {taskInsertionIndex === index && (
                                 <div className="kanban-insertion-indicator" />
                             )}
+
                             <AnimatedRemoval removing={isTaskRemoving?.(task.id) ?? false}>
                                 <KanbanTask
                                     task={task}
@@ -138,6 +137,7 @@ export default function KanbanList({
                             </AnimatedRemoval>
                         </div>
                     ))}
+
                     {taskInsertionIndex === sortedTasks.length && (
                         <div className="kanban-insertion-indicator" />
                     )}

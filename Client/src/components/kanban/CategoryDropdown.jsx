@@ -1,24 +1,23 @@
-// hook imports
+// component imports
 import { useState, useEffect, useRef } from 'react';
 
-// ui components
+// component functions
 export default function CategoryDropdown({ categories, selected, onSelect, onClose }) {
     // state variables
     const [search, setSearch] = useState('');
-    
-    // dom references
     const ref = useRef(null);
 
-    // event functions
+    // lifecycle functions
     useEffect(() => {
         function handleClickOutside(e) {
             if (ref.current && !ref.current.contains(e.target)) onClose();
         }
+
         document.addEventListener('click', handleClickOutside);
         return () => document.removeEventListener('click', handleClickOutside);
     }, [onClose]);
 
-    // data processing functions
+    // filter variables
     const filtered = categories.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase())
     );
@@ -32,6 +31,7 @@ export default function CategoryDropdown({ categories, selected, onSelect, onClo
                 onChange={e => setSearch(e.target.value)}
                 autoFocus
             />
+
             <div className="cat-dropdown-list">
                 {filtered.map(c => (
                     <button
@@ -43,6 +43,7 @@ export default function CategoryDropdown({ categories, selected, onSelect, onClo
                         {c.name}
                     </button>
                 ))}
+
                 {filtered.length === 0 && (
                     <p className="cat-dropdown-empty">No categories found</p>
                 )}

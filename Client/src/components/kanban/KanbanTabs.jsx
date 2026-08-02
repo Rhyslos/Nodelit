@@ -1,13 +1,22 @@
-// hook imports
+// component imports
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-
-// component imports
 import TabContextMenu from './TabContextMenu';
 import ConfirmModal from './ConfirmModal';
 
-// ui components
-export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdate, onArchive, onDelete }) {
+// configuration constants
+const PRESET_COLORS = [
+    { color: '#ffb3b3', label: 'Red' },
+    { color: '#ffd0a8', label: 'Orange' },
+    { color: '#fff0a8', label: 'Yellow' },
+    { color: '#b8f0c8', label: 'Green' },
+    { color: '#b3d8ff', label: 'Blue' },
+    { color: '#ffb3d9', label: 'Pink' },
+    { color: '#e8b3ff', label: 'Magenta' }
+];
+
+// component functions
+export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onArchive, onUpdate, onDelete }) {
     // state variables
     const [editingId, setEditingId] = useState(null);
     const [editingColor, setEditingColor] = useState(null);
@@ -23,12 +32,14 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
     // lifecycle functions
     useEffect(() => {
         const validIds = new Set(tabs.map(t => t.id));
-        Object.keys(nameRefs.current).forEach(id => {
+
+        for (const id of Object.keys(nameRefs.current)) {
             if (!validIds.has(id)) delete nameRefs.current[id];
-        });
-        Object.keys(colorBtnRefs.current).forEach(id => {
+        }
+
+        for (const id of Object.keys(colorBtnRefs.current)) {
             if (!validIds.has(id)) delete colorBtnRefs.current[id];
-        });
+        }
     }, [tabs]);
 
     useEffect(() => {
@@ -47,28 +58,36 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
         };
     }, [editingColor]);
 
-    // event functions
+    // editing handlers
     function startEditing(tab) {
         setEditingId(tab.id);
+
         const el = nameRefs.current[tab.id];
         if (!el) return;
+
         requestAnimationFrame(() => {
             el.focus();
+
             const range = document.createRange();
             range.selectNodeContents(el);
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
+
+            const selection = window.getSelection();
+            if (!selection) return;
+
+            selection.removeAllRanges();
+            selection.addRange(range);
         });
     }
 
     function handleNameBlur(tab) {
         const text = nameRefs.current[tab.id]?.textContent.trim();
+
         if (text && text !== tab.name) {
-            onUpdate(tab.id, { name: text, color: tab.color });
+            onUpdate(tab.id, { name: text });
         } else if (nameRefs.current[tab.id]) {
             nameRefs.current[tab.id].textContent = tab.name;
         }
+
         setEditingId(null);
         setEditingColor(null);
     }
@@ -78,37 +97,40 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
             e.preventDefault();
             nameRefs.current[tab.id]?.blur();
         }
+
         if (e.key === 'Escape') {
             if (nameRefs.current[tab.id]) nameRefs.current[tab.id].textContent = tab.name;
             nameRefs.current[tab.id]?.blur();
         }
     }
 
+    // colour handlers
     function handleColorBtnClick(e, tab) {
         e.stopPropagation();
+
         if (editingColor === tab.id) {
             setEditingColor(null);
             return;
         }
+
         const btn = colorBtnRefs.current[tab.id];
         if (!btn) return;
 
         const rect = btn.getBoundingClientRect();
-        setPickerPos({
-            top: rect.bottom + 8,
-            left: rect.left,
-        });
+        setPickerPos({ top: rect.bottom + 8, left: rect.left });
         setEditingColor(tab.id);
     }
 
     function handleColorChange(tab, color) {
-        onUpdate(tab.id, { name: tab.name, color });
+        onUpdate(tab.id, { color });
         setEditingColor(null);
     }
 
+    // menu handlers
     function handleContextMenu(e, tab) {
         e.preventDefault();
         if (tabs.length <= 1) return;
+
         setMenuTab(tab);
         setMenuPos({ x: e.clientX, y: e.clientY });
     }
@@ -118,23 +140,18 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
         setMenuTab(null);
     }
 
+    function handleMenuArchive() {
+        if (menuTab) onArchive?.(menuTab.id);
+        setMenuTab(null);
+    }
+
     function handleConfirmDelete() {
         if (confirmTab) onDelete?.(confirmTab.id);
         setConfirmTab(null);
     }
 
-    // state variables
-    const PRESET_COLORS = [
-        { color: '#ffb3b3', label: 'Red'     },
-        { color: '#ffd0a8', label: 'Orange'  },
-        { color: '#fff0a8', label: 'Yellow'  },
-        { color: '#b8f0c8', label: 'Green'   },
-        { color: '#b3d8ff', label: 'Blue'    },
-        { color: '#ffb3d9', label: 'Pink'    },
-        { color: '#e8b3ff', label: 'Magenta' },
-    ];
-
-    const activeTab = tabs.find(t => t.id === editingColor);
+    // derived variables
+    const pickerTab = tabs.find(t => t.id === editingColor);
 
     return (
         <div className="kanban-tabs">
@@ -182,7 +199,7 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
                 </button>
             </div>
 
-            {editingColor && activeTab && createPortal(
+            {editingColor && pickerTab && createPortal(
                 <div
                     className="kanban-tab-color-picker"
                     style={{ top: pickerPos.top, left: pickerPos.left }}
@@ -191,10 +208,10 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
                     {PRESET_COLORS.map(({ color, label }) => (
                         <button
                             key={color}
-                            className={`kanban-tab-color-swatch ${activeTab?.color === color ? 'selected' : ''}`}
+                            className={`kanban-tab-color-swatch ${pickerTab.color === color ? 'selected' : ''}`}
                             style={{ background: color }}
                             title={label}
-                            onClick={() => handleColorChange(activeTab, color)}
+                            onClick={() => handleColorChange(pickerTab, color)}
                         />
                     ))}
                 </div>,
@@ -205,6 +222,7 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onUpdat
                 open={!!menuTab}
                 x={menuPos.x}
                 y={menuPos.y}
+                onArchive={handleMenuArchive}
                 onDelete={handleMenuDelete}
                 onClose={() => setMenuTab(null)}
             />

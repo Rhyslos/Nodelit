@@ -10,7 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useDragDrop } from "../hooks/useDragDrop";
 import { useFlipAnimation } from "../hooks/useFlipAnimation";
 import { useAnimatedRemoval } from "../hooks/useAnimatedRemoval";
-import KanbanSubbar from "../components/subbar/KanbanSubbar";
+import KanbanTabs from "../components/kanban/KanbanTabs";
 import KanbanColumn from "../components/kanban/KanbanColumn";
 import KanbanTask from "../components/kanban/KanbanTask";
 import TaskModal from "../components/kanban/TaskModal";
@@ -207,14 +207,14 @@ export default function Kanban() {
 
     return (
         <div className="kanban-root">
-            <KanbanSubbar
+            <KanbanTabs
                 tabs={tabs}
                 activeTabId={activeTabId}
-                onTabSelect={setActiveTabId}
-                onTabAdd={addTab}
-                onTabUpdate={updateTab}
-                onTabArchive={archiveTab}
-                onTabDelete={deleteTab}
+                onSelect={setActiveTabId}
+                onAdd={addTab}
+                onUpdate={updateTab}
+                onArchive={archiveTab}
+                onDelete={deleteTab}
             />
 
             <div className="kanban-topbar" ref={topbarRef}>
