@@ -1,31 +1,35 @@
-// ui imports
+// hook imports
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { appName } from '../App';
 
-// page components
+// ui components
 export default function Login() {
+    // state variables
+    const [username, setUsername] = useState('test');
+    const [password, setPassword] = useState('k');
+    const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    // hook references
     const { login } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
 
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    // form handlers
+    // event functions
     async function handleSubmit(e) {
         e.preventDefault();
         setError('');
-        setLoading(true);
+        setSubmitting(true);
 
         try {
             await login(username, password);
-            navigate('/dashboard'); 
+            navigate(location.state?.from ?? '/dashboard', { replace: true });
         } catch (err) {
-            setError(err.message);
+            setError(err.message || 'That username and password did not match');
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
     }
 
@@ -33,21 +37,22 @@ export default function Login() {
         <div className="auth-root">
             <div className="auth-panel">
                 <div className="auth-header">
-                    <h1 className="auth-title">Welcome back.</h1>
-                    <p className="auth-subtitle">Sign in to your workspace.</p>
+                    <h1 className="auth-title">{appName}</h1>
+                    <p className="auth-subtitle">Sign in to reach your workspaces</p>
                 </div>
 
-                <form className="auth-form" onSubmit={handleSubmit} noValidate>
+                {error && <div className="auth-error">{error}</div>}
+
+                <form className="auth-form" onSubmit={handleSubmit}>
                     <div className="auth-field">
                         <label htmlFor="username">Username</label>
                         <input
                             id="username"
                             type="text"
                             autoComplete="username"
-                            placeholder="Enter username"
                             value={username}
                             onChange={e => setUsername(e.target.value)}
-                            disabled={loading}
+                            disabled={submitting}
                             required
                         />
                     </div>
@@ -58,22 +63,15 @@ export default function Login() {
                             id="password"
                             type="password"
                             autoComplete="current-password"
-                            placeholder="••••••••"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
-                            disabled={loading}
+                            disabled={submitting}
                             required
                         />
                     </div>
 
-                    {error && <p className="auth-error" role="alert">{error}</p>}
-
-                    <button
-                        type="submit"
-                        className="auth-btn"
-                        disabled={loading || !username || !password}
-                    >
-                        {loading ? 'Signing in…' : 'Sign in'}
+                    <button className="auth-btn" type="submit" disabled={submitting}>
+                        {submitting ? 'Signing in…' : 'Sign in'}
                     </button>
                 </form>
             </div>

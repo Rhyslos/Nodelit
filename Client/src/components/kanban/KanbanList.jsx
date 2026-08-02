@@ -1,0 +1,152 @@
+// hook imports
+import { useEffect, useRef } from 'react';
+
+// component imports
+import KanbanTask from './KanbanTask';
+import AnimatedRemoval from '../AnimatedRemoval';
+
+// ui components
+export default function KanbanList({
+    list,
+    tasks,
+    categories,
+    isFocused,
+    dragging,
+    insertionPoint,
+    isDraggingList,
+    isTaskRemoving,
+    isListRemoving,
+    onUpdate,
+    onAddTask,
+    onUpdateTask,
+    onStartTaskDrag,
+    onStartListDrag,
+    onOpenTask,
+    onFocusClear,
+    registerList,
+    registerTask,
+    registerTaskElement,
+    registerListElement,
+}) {
+    // dom references
+    const nameRef = useRef(null);
+    const listRef = useRef(null);
+
+    // lifecycle functions
+    useEffect(() => {
+        const el = listRef.current;
+        if (registerList) registerList(list.id, el);
+        if (registerListElement) registerListElement(list.id, el);
+
+        return () => {
+            if (registerList) registerList(list.id, null);
+            if (registerListElement) registerListElement(list.id, null);
+        };
+    }, [list.id, registerList, registerListElement]);
+
+    useEffect(() => {
+        if (!isFocused) return;
+
+        const el = nameRef.current;
+        if (!el || !el.isConnected) return;
+
+        el.focus();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    }, [isFocused]);
+
+    // event functions
+    function handleNameBlur() {
+        const text = nameRef.current?.textContent.trim() || 'New List';
+        onUpdate({ name: text });
+        onFocusClear();
+    }
+
+    function handleNameKeyDown(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            nameRef.current?.blur();
+        }
+    }
+
+    // data processing functions
+    const categoryData = categories.find(c => c.name === list.category);
+    const sortedTasks = [...tasks].sort((a, b) => a.taskOrder - b.taskOrder);
+
+    const taskInsertionIndex = insertionPoint?.type === 'task' && insertionPoint.listId === list.id
+        ? insertionPoint.insertIndex
+        : null;
+
+    return (
+        <AnimatedRemoval removing={isListRemoving?.(list.id) ?? false}>
+            <div
+                className={`kanban-list ${isDraggingList ? 'is-dragging-list' : ''}`}
+                ref={listRef}
+            >
+                <div className="kanban-list-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div
+                        className="kanban-list-drag-handle"
+                        onMouseDown={e => onStartListDrag(e, list, listRef.current)}
+                        style={{ cursor: 'grab', color: '#aaa', padding: '0 2px', fontSize: '14px', userSelect: 'none' }}
+                        title="Drag to move list"
+                    >
+                        ⋮⋮
+                    </div>
+
+                    {categoryData && (
+                        <span
+                            className="kanban-list-category-dot"
+                            style={{ background: categoryData.color, flexShrink: 0 }}
+                        />
+                    )}
+
+                    <span
+                        ref={nameRef}
+                        className="kanban-list-name"
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={handleNameBlur}
+                        onKeyDown={handleNameKeyDown}
+                        style={{ flex: 1, minWidth: 0, outline: 'none' }}
+                    >
+                        {list.name}
+                    </span>
+                </div>
+
+                <div className="kanban-task-container">
+                    {sortedTasks.map((task, index) => (
+                        <div key={task.id}>
+                            {taskInsertionIndex === index && (
+                                <div className="kanban-insertion-indicator" />
+                            )}
+                            <AnimatedRemoval removing={isTaskRemoving?.(task.id) ?? false}>
+                                <KanbanTask
+                                    task={task}
+                                    categories={categories}
+                                    isDragging={dragging === task.id}
+                                    onUpdate={changes => onUpdateTask(task.id, changes)}
+                                    onStartDrag={onStartTaskDrag}
+                                    onOpen={() => onOpenTask(task)}
+                                    registerTask={registerTask}
+                                    registerElement={registerTaskElement}
+                                />
+                            </AnimatedRemoval>
+                        </div>
+                    ))}
+                    {taskInsertionIndex === sortedTasks.length && (
+                        <div className="kanban-insertion-indicator" />
+                    )}
+                </div>
+
+                <button className="kanban-add-task-btn" onClick={onAddTask}>
+                    + Add task
+                </button>
+            </div>
+        </AnimatedRemoval>
+    );
+}

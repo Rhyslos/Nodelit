@@ -1,12 +1,11 @@
-// imports
+// component imports
 import { useState } from 'react';
 
-// constant variables
+// configuration constants
 const PRESET_COLORS = ['#c8502a', '#4a90d9', '#7ab648', '#e6a817', '#9b59b6', '#e84393'];
 
 // component functions
 export default function CreateWorkspaceModal({ categories, onConfirm, onClose, onCreateCategory }) {
-    
     // state variables
     const [name, setName] = useState('');
     const [categoryID, setCategoryID] = useState('');
@@ -16,11 +15,18 @@ export default function CreateWorkspaceModal({ categories, onConfirm, onClose, o
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // submission functions
+    // event functions
     async function handleSubmit(e) {
         e.preventDefault();
-        if (!name.trim()) return setError('Workspace name is required.');
+
+        if (!name.trim()) {
+            setError('Give the workspace a name to continue');
+            return;
+        }
+
+        setError('');
         setLoading(true);
+
         try {
             await onConfirm(name.trim(), categoryID || null);
         } catch (err) {
@@ -30,13 +36,17 @@ export default function CreateWorkspaceModal({ categories, onConfirm, onClose, o
         }
     }
 
-    // creation functions
     async function handleCreateCategory() {
         if (!newCatName.trim()) return;
-        const cat = await onCreateCategory(newCatName.trim(), newCatColor);
-        setCategoryID(cat.id);
-        setNewCatName('');
-        setShowNewCat(false);
+
+        try {
+            const category = await onCreateCategory(newCatName.trim(), newCatColor);
+            setCategoryID(category.id);
+            setNewCatName('');
+            setShowNewCat(false);
+        } catch (err) {
+            setError(err.message);
+        }
     }
 
     return (
@@ -46,8 +56,9 @@ export default function CreateWorkspaceModal({ categories, onConfirm, onClose, o
 
                 <form className="modal-form" onSubmit={handleSubmit}>
                     <div className="modal-field">
-                        <label>Name</label>
+                        <label htmlFor="workspace-name">Name</label>
                         <input
+                            id="workspace-name"
                             type="text"
                             placeholder="e.g. Calculus project"
                             value={name}
@@ -57,8 +68,14 @@ export default function CreateWorkspaceModal({ categories, onConfirm, onClose, o
                     </div>
 
                     <div className="modal-field">
-                        <label>Category <span className="modal-optional">(optional)</span></label>
-                        <select value={categoryID} onChange={e => setCategoryID(e.target.value)}>
+                        <label htmlFor="workspace-category">
+                            Category <span className="modal-optional">(optional)</span>
+                        </label>
+                        <select
+                            id="workspace-category"
+                            value={categoryID}
+                            onChange={e => setCategoryID(e.target.value)}
+                        >
                             <option value="">No category</option>
                             {categories.map(c => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -82,17 +99,20 @@ export default function CreateWorkspaceModal({ categories, onConfirm, onClose, o
                                 value={newCatName}
                                 onChange={e => setNewCatName(e.target.value)}
                             />
+
                             <div className="modal-colors">
-                                {PRESET_COLORS.map(c => (
+                                {PRESET_COLORS.map(color => (
                                     <button
-                                        key={c}
+                                        key={color}
                                         type="button"
-                                        className={`modal-color-dot ${newCatColor === c ? 'selected' : ''}`}
-                                        style={{ background: c }}
-                                        onClick={() => setNewCatColor(c)}
+                                        className={`modal-color-dot ${newCatColor === color ? 'selected' : ''}`}
+                                        style={{ background: color }}
+                                        onClick={() => setNewCatColor(color)}
+                                        aria-label={`Use colour ${color}`}
                                     />
                                 ))}
                             </div>
+
                             <button type="button" className="modal-create-cat-btn" onClick={handleCreateCategory}>
                                 Add category
                             </button>

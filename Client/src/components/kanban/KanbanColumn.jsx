@@ -1,0 +1,92 @@
+// component imports
+import KanbanList from './KanbanList';
+
+// ui components
+export default function KanbanColumn({
+    column,
+    lists,
+    tasksByListID,
+    categories,
+    focusedListId,
+    dragging,
+    dragType,
+    insertionPoint,
+    isDraggingTaskToEmptyCol,
+    isTaskRemoving,
+    isListRemoving,
+    onAddTask,
+    onUpdateList,
+    onUpdateTask,
+    onStartTaskDrag,
+    onStartListDrag,
+    onOpenTask,
+    onFocusClear,
+    registerList,
+    registerTask,
+    registerGhost,
+    registerTaskElement,
+    registerListElement,
+}) {
+    // data processing functions
+    const sortedLists = [...lists].sort((a, b) => (a.listOrder ?? 0) - (b.listOrder ?? 0));
+
+    const listInsertionIndex = insertionPoint?.type === 'list' && insertionPoint.colIndex === column.columnIndex
+        ? insertionPoint.insertIndex
+        : null;
+
+    return (
+        <div className="kanban-column" style={{ '--col': column.columnIndex }}>
+            {sortedLists.map((list, index) => (
+                <div key={list.id} style={{ width: '100%' }}>
+                    {listInsertionIndex === index && (
+                        <div className="kanban-list-insertion-indicator" style={{ height: '4px', background: 'var(--accent)', margin: '4px 0', borderRadius: '2px' }} />
+                    )}
+
+                    <KanbanList
+                        list={list}
+                        tasks={tasksByListID[list.id] ?? []}
+                        categories={categories}
+                        isFocused={focusedListId === list.id}
+                        dragging={dragType === 'task' ? dragging : null}
+                        isDraggingList={dragType === 'list' && dragging === list.id}
+                        insertionPoint={insertionPoint}
+                        isTaskRemoving={isTaskRemoving}
+                        isListRemoving={isListRemoving}
+                        onUpdate={changes => onUpdateList(list.id, changes)}
+                        onAddTask={() => onAddTask(list.id)}
+                        onUpdateTask={onUpdateTask}
+                        onStartTaskDrag={onStartTaskDrag}
+                        onStartListDrag={onStartListDrag}
+                        onOpenTask={onOpenTask}
+                        onFocusClear={onFocusClear}
+                        registerList={registerList}
+                        registerTask={registerTask}
+                        registerTaskElement={registerTaskElement}
+                        registerListElement={registerListElement}
+                    />
+                </div>
+            ))}
+
+            {listInsertionIndex === sortedLists.length && (
+                <div className="kanban-list-insertion-indicator" style={{ height: '4px', background: 'var(--accent)', margin: '4px 0', borderRadius: '2px' }} />
+            )}
+
+            {isDraggingTaskToEmptyCol && (
+                <div
+                    className="kanban-ghost-list"
+                    ref={el => registerGhost(`ghost-task-col-${column.columnIndex}`, el)}
+                >
+                    <span>+ Drop to create list</span>
+                </div>
+            )}
+
+            {dragType === 'list' && sortedLists.length === 0 && (
+                <div
+                    className="kanban-empty-column-dropzone"
+                    ref={el => registerGhost(`ghost-list-col-${column.columnIndex}`, el)}
+                    style={{ flex: 1, border: '2px dashed var(--border)', borderRadius: '8px', minHeight: '100px', opacity: 0.5 }}
+                />
+            )}
+        </div>
+    );
+}

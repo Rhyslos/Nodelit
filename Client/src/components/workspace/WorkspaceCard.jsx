@@ -17,6 +17,7 @@ export default function WorkspaceCard({ workspace, onOpen, onDelete }) {
             <button
                 className="workspace-card-delete"
                 onClick={e => { e.stopPropagation(); onDelete(); }}
+                aria-label={`Delete ${workspace.name}`}
             >
                 ✕
             </button>

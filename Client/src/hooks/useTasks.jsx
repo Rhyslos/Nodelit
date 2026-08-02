@@ -1,0 +1,109 @@
+// hook imports
+import { useMemo } from 'react';
+import { api, ApiError } from '../lib/api';
+import { useKanban } from '../contexts/KanbanContext';
+
+// configuration constants
+const CONTENT_FIELDS = ['title', 'description', 'isCompleted', 'category', 'color'];
+
+// hook functions
+export function useTasks(listIDs) {
+    const { boardData, setBoardData, applyDelta, refresh } = useKanban();
+
+    // state variables
+    const listKey = listIDs.join('|');
+
+    const tasks = useMemo(() => {
+        const allowed = new Set(listKey ? listKey.split('|') : []);
+        return boardData.tasks
+            .filter(t => allowed.has(t.listID))
+            .sort((a, b) => a.taskOrder - b.taskOrder);
+    }, [boardData.tasks, listKey]);
+
+    // mutation functions
+    async function addTask(listID, listCategory, listColor) {
+        if (!listID) return null;
+
+        try {
+            const task = await api('/api/kanban/tasks', {
+                method: 'POST',
+                body: { listID, title: '', category: listCategory ?? null, color: listColor ?? null }
+            });
+
+            setBoardData(prev => applyDelta(prev, { upsert: { tasks: [task] } }));
+            return task.id;
+        } catch {
+            refresh();
+            return null;
+        }
+    }
+
+    async function updateTask(taskID, changes) {
+        const current = boardData.tasks.find(t => t.id === taskID);
+        if (!current) return;
+
+        const body = {};
+        for (const field of CONTENT_FIELDS) {
+            if (changes[field] !== undefined) body[field] = changes[field];
+        }
+
+        if (Object.keys(body).length === 0) return;
+
+        body.updatedAt = current.updatedAt;
+
+        setBoardData(prev => ({
+            ...prev,
+            tasks: prev.tasks.map(t => t.id === taskID ? { ...t, ...changes } : t)
+        }));
+
+        try {
+            const task = await api(`/api/kanban/tasks/${taskID}`, { method: 'PUT', body });
+            setBoardData(prev => applyDelta(prev, { upsert: { tasks: [task] } }));
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 409 && err.payload?.record) {
+                setBoardData(prev => applyDelta(prev, { upsert: { tasks: [err.payload.record] } }));
+                return;
+            }
+            refresh();
+        }
+    }
+
+    async function deleteTask(taskID) {
+        setBoardData(prev => applyDelta(prev, { remove: { tasks: [taskID] } }));
+
+        try {
+            await api(`/api/kanban/tasks/${taskID}`, { method: 'DELETE' });
+        } catch {
+            refresh();
+        }
+    }
+
+    async function reorderTasks(updates) {
+        if (!updates || updates.length === 0) return;
+
+        setBoardData(prev => {
+            const moved = new Map(updates.map(u => [u.id, u]));
+
+            return {
+                ...prev,
+                tasks: prev.tasks.map(t => {
+                    const update = moved.get(t.id);
+                    return update ? { ...t, listID: update.listID, taskOrder: update.taskOrder } : t;
+                })
+            };
+        });
+
+        try {
+            const result = await api('/api/kanban/tasks/reorder', {
+                method: 'PUT',
+                body: { updates }
+            });
+
+            setBoardData(prev => applyDelta(prev, { upsert: { tasks: result.tasks } }));
+        } catch {
+            refresh();
+        }
+    }
+
+    return { tasks, addTask, updateTask, deleteTask, reorderTasks };
+}

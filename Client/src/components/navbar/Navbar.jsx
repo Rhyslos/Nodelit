@@ -1,77 +1,111 @@
-// component imports
+// import functions
 import { useState } from 'react';
 import { useNavigate, useLocation, matchPath } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWorkspacePresence } from '../../hooks/useWorkspacePresence';
 import HamburgerMenu from './HamburgerMenu';
+import { appName } from '../../App';
+
+// configuration constants
+const WORKSPACE_PAGES = [
+    { key: 'kanban', label: 'Kanban' },
+    { key: 'notation', label: 'Notation' },
+    { key: 'calendar', label: 'Calendar' },
+    { key: 'drawing', label: 'Drawing' }
+];
+
+// helper functions
+function getAvatarLetter(member) {
+    if (member.displayName) return member.displayName.charAt(0).toUpperCase();
+    if (member.firstName) return member.firstName.charAt(0).toUpperCase();
+    if (member.email) return member.email.charAt(0).toUpperCase();
+    return '?';
+}
+
+function getAvatarColor(member) {
+    if (!member.isOnline) return '#4a4a4a';
+    if (member.cursorColor) return member.cursorColor;
+
+    let hash = 0;
+    const source = member.email || member.id || 'default';
+
+    for (let i = 0; i < source.length; i++) {
+        hash = source.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    const value = (hash & 0x00ffffff).toString(16).toUpperCase();
+    return '#' + '00000'.substring(0, 6 - value.length) + value;
+}
 
 // component functions
 export default function Navbar() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    
-    // routing variables
-    const match = matchPath({ path: "/workspace/:workspaceID/*" }, location.pathname);
+
+    const match = matchPath({ path: '/workspace/:workspaceID/*' }, location.pathname);
     const workspaceID = match?.params?.workspaceID;
-    
-    // state variables
-    const [menuOpen, setMenuOpen] = useState(false);
     const inWorkspace = !!workspaceID;
 
-    // navigation handlers
+    // state variables
+    const [menuOpen, setMenuOpen] = useState(false);
+
+    const { members } = useWorkspacePresence(workspaceID);
+
+    // navigation functions
     function navTo(page) {
         if (workspaceID) navigate(`/workspace/${workspaceID}/${page}`);
     }
 
     function isActive(page) {
-        return location.pathname.includes(`/${page}`);
+        return location.pathname.endsWith(`/${page}`);
     }
 
     return (
         <>
             <nav className="navbar">
-                <div className="navbar-brand" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
+                <div className="navbar-brand" onClick={() => navigate('/dashboard')} role="button" tabIndex={0}>
                     <span className="navbar-logo">✦</span>
-                    <span className="navbar-name">Nodelit</span>
+                    <span className="navbar-name">{appName}</span>
                 </div>
 
                 {inWorkspace && (
-                    <div className="navbar-pages">
-                        <button 
-                            className={`navbar-page-btn ${isActive('graph') ? 'active' : ''}`}
-                            onClick={() => navTo('graph')}
-                        >
-                            Graph Editor
-                        </button>
-                        <button
-                            className={`navbar-page-btn ${isActive('kanban') ? 'active' : ''}`}
-                            onClick={() => navTo('kanban')}
-                        >
-                            Kanban
-                        </button>
-                        <button
-                            className={`navbar-page-btn ${isActive('notation') ? 'active' : ''}`}
-                            onClick={() => navTo('notation')}
-                        >
-                            Notation
-                        </button>
-                        <button
-                            className={`navbar-page-btn ${isActive('calendar') ? 'active' : ''}`}
-                            onClick={() => navTo('calendar')}
-                        >
-                            Calendar
-                        </button>
-                    </div>
+                    <>
+                        <div className="navbar-pages">
+                            {WORKSPACE_PAGES.map(page => (
+                                <button
+                                    key={page.key}
+                                    className={`navbar-page-btn ${isActive(page.key) ? 'active' : ''}`}
+                                    onClick={() => navTo(page.key)}
+                                >
+                                    {page.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="navbar-presence">
+                            {members.map(member => (
+                                <div
+                                    key={member.id}
+                                    className={`navbar-avatar ${member.isOnline ? 'online' : 'offline'}`}
+                                    style={{ backgroundColor: getAvatarColor(member) }}
+                                    title={member.displayName || member.username || member.email}
+                                >
+                                    {getAvatarLetter(member)}
+                                </div>
+                            ))}
+                        </div>
+                    </>
                 )}
 
-                <div className="navbar-right" style={{ marginLeft: inWorkspace ? '0' : 'auto' }}>
-                    <span className="navbar-user">{user?.username}</span>
-                    <button className="navbar-hamburger" onClick={() => setMenuOpen(true)}>
+                <div className="navbar-right" style={{ marginLeft: inWorkspace ? 0 : 'auto' }}>
+                    <span className="navbar-user">{user?.displayName ?? user?.username}</span>
+                    <button className="navbar-hamburger" onClick={() => setMenuOpen(true)} aria-label="Open menu">
                         <span /><span /><span />
                     </button>
                 </div>
             </nav>
-            
+
             <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
         </>
     );

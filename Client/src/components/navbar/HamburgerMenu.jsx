@@ -1,6 +1,6 @@
 // component imports
-import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 // component functions
 export default function HamburgerMenu({ open, onClose }) {
@@ -8,41 +8,28 @@ export default function HamburgerMenu({ open, onClose }) {
     const navigate = useNavigate();
 
     // navigation handlers
-    function navTo(path) {
-        navigate(path);
+    async function handleLogout() {
+        await logout();
         onClose();
-    }
-
-    function handleLogout() {
-        logout();
-        navigate('/login');
-        onClose();
+        navigate('/login', { replace: true });
     }
 
     return (
         <>
             <div className={`hamburger-overlay ${open ? 'open' : ''}`} onClick={onClose} />
             <div className={`hamburger-panel ${open ? 'open' : ''}`}>
-                <button className="hamburger-close" onClick={onClose}>✕</button>
+                <button className="hamburger-close" onClick={onClose} aria-label="Close menu">✕</button>
                 <div className="hamburger-links">
-
-                    <button className="hamburger-item" onClick={() => navTo('/profile')}>   
-                        Profile
+                    <button className="hamburger-item" onClick={() => { navigate('/dashboard'); onClose(); }}>
+                        Dashboard
                     </button>
 
-                    <button className="hamburger-item" onClick={() => navTo('/settings')}>   
-                        Settings
-                    </button>
-
-                    <button className="hamburger-item">   
-                        Help
-                    </button>
-
-                    <button className="hamburger-item">   
-                        About
-                    </button>
+                    <button className="hamburger-item">Profile</button>
+                    <button className="hamburger-item">Settings</button>
+                    <button className="hamburger-item">Help</button>
 
                     <hr className="hamburger-divider" />
+
                     <button className="hamburger-item hamburger-item--danger" onClick={handleLogout}>
                         Sign out
                     </button>

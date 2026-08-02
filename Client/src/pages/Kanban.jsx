@@ -6,7 +6,7 @@ import { useLists } from "../hooks/useLists";
 import { useTasks } from "../hooks/useTasks";
 import { useTabs } from "../hooks/useTabs";
 import { useWorkspaces } from "../hooks/useWorkspaces";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from '../contexts/AuthContext';
 import { useDragDrop } from "../hooks/useDragDrop";
 import { useFlipAnimation } from "../hooks/useFlipAnimation";
 import { useAnimatedRemoval } from "../hooks/useAnimatedRemoval";
@@ -40,8 +40,8 @@ export default function Kanban() {
     const boardRef = useRef(null);
 
     // animations
-    const { registerElement: registerTaskElement } = useFlipAnimation(tasks);
-    const { registerElement: registerListElement } = useFlipAnimation(lists);
+    const { registerElement: registerTaskElement, snapshot: snapshotTasks } = useFlipAnimation(tasks);
+    const { registerElement: registerListElement, snapshot: snapshotLists } = useFlipAnimation(lists);
     
     const { triggerRemoval: triggerTaskRemoval, isRemoving: isTaskRemoving } = useAnimatedRemoval(deleteTask);
     const { triggerRemoval: triggerListRemoval, isRemoving: isListRemoving } = useAnimatedRemoval(handleDeleteList);
@@ -66,6 +66,8 @@ export default function Kanban() {
     async function handleReorderLists(updates) {
         if (!updates || updates.length === 0) return;
 
+        snapshotLists();
+
         const updateMap = new Map(updates.map(u => [u.id, u]));
         const predicted = lists.map(l => {
             const u = updateMap.get(l.id);
@@ -87,6 +89,8 @@ export default function Kanban() {
     async function handleDeleteList(listID) {
         const list = lists.find(l => l.id === listID);
         if (!list) return;
+
+        snapshotLists();
 
         const predicted = lists.filter(l => l.id !== listID);
         const sourceColumnIDs = new Set([list.columnID]);
@@ -113,7 +117,10 @@ export default function Kanban() {
         tasks,
         lists,
         columns,
-        onReorderTasks: reorderTasks,
+        onReorderTasks: updates => {
+            snapshotTasks();
+            reorderTasks(updates);
+        },
         onReorderLists: handleReorderLists,
         onDeleteDrop: (item, type) => {
             if (type === 'task') triggerTaskRemoval(item.id);

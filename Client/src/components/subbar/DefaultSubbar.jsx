@@ -2,50 +2,39 @@
 import { useState } from 'react';
 import Subbar from './Subbar';
 
+// configuration constants
+const SECTIONS = [
+    { label: 'Recent', placeholder: 'No recent workspaces' },
+    { label: 'Deadlines', placeholder: 'No upcoming deadlines' },
+    { label: 'Activity', placeholder: 'No recent activity' }
+];
+
 // component functions
 export default function DefaultSubbar() {
-    
     // state variables
     const [collapsed, setCollapsed] = useState(false);
 
     return (
         <Subbar>
-            <div className="subbar-section">
-                <span className="subbar-label">Recent</span>
-                <div className="subbar-placeholder">No recent workspaces</div>
-            </div>
-            
-            <div className="subbar-section">
-                <span className="subbar-label">Deadlines</span>
-                <div className="subbar-placeholder">No upcoming deadlines</div>
-            </div>
-            
-            <div className="subbar-section">
-                <span className="subbar-label">Activity</span>
-                <div className="subbar-placeholder">No recent activity</div>
-            </div>
+            {SECTIONS.map(section => (
+                <div className="subbar-section" key={section.label}>
+                    <span className="subbar-label">{section.label}</span>
+                    <div className="subbar-placeholder">{section.placeholder}</div>
+                </div>
+            ))}
 
-            <button
-                className="subbar-collapse-btn"
-                onClick={() => setCollapsed(o => !o)}
-            >
+            <button className="subbar-collapse-btn" onClick={() => setCollapsed(open => !open)}>
                 {collapsed ? '▲ Hide' : '☰ Overview'}
             </button>
 
             {collapsed && (
                 <div className="subbar-collapsed-dropdown">
-                    <div className="subbar-collapsed-section">
-                        <span className="subbar-label">Recent</span>
-                        <div className="subbar-placeholder">No recent workspaces</div>
-                    </div>
-                    <div className="subbar-collapsed-section">
-                        <span className="subbar-label">Deadlines</span>
-                        <div className="subbar-placeholder">No upcoming deadlines</div>
-                    </div>
-                    <div className="subbar-collapsed-section">
-                        <span className="subbar-label">Activity</span>
-                        <div className="subbar-placeholder">No recent activity</div>
-                    </div>
+                    {SECTIONS.map(section => (
+                        <div className="subbar-collapsed-section" key={section.label}>
+                            <span className="subbar-label">{section.label}</span>
+                            <div className="subbar-placeholder">{section.placeholder}</div>
+                        </div>
+                    ))}
                 </div>
             )}
         </Subbar>
