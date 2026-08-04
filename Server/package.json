@@ -7,8 +7,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node Server.mjs",
-    "server": "node --watch Server.mjs"
+    "start": "node server.mjs",
+    "server": "node --watch server.mjs"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
