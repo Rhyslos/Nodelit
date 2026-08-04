@@ -57,18 +57,9 @@ class Server {
 
     this.app.post('/api/login', loginLimiter, this.authn.login);
 
-    this.app.get(
-      '/api/protected', 
-      this.authn.authenticate, 
-      this.authz.authorize, 
-      (req, res) => {
-        res.send('Secure data accessed');
-      }
-    );
-
     // networking routes
-    this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter());
-    this.app.use('/api/kanban', this.authn.authenticate, createKanbanRouter());
+    this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter(this.authz));
+    this.app.use('/api/kanban', this.authn.authenticate, createKanbanRouter(this.authz));
   }
 
   // error handling configuration
