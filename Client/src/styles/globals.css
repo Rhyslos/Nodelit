@@ -11,8 +11,10 @@
     --muted:     #8a857e;
     --border:    #e2ddd8;
     --shadow:    rgba(15, 14, 13, 0.08);
+    --navbar-height: 52px;
     --drag-scale: 1.08;
     --drag-rotate: 2deg;
+    --navbar-h:  52px;
 }
 
 /* reset styles */

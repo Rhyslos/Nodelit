@@ -130,6 +130,16 @@ class Database {
             updatedAt: createdAt
         });
 
+        this.tabs.set('tab-2', {
+            id: 'tab-2',
+            workspaceID: 'workspace-1',
+            name: 'Backlog',
+            color: '#b8f0c8',
+            tabOrder: 1,
+            isArchived: false,
+            updatedAt: createdAt
+        });
+
         this.columns.set('col-1', { id: 'col-1', workspaceID: 'workspace-1', tabID: 'tab-1', columnIndex: 0, updatedAt: createdAt });
         this.columns.set('col-2', { id: 'col-2', workspaceID: 'workspace-1', tabID: 'tab-1', columnIndex: 1, updatedAt: createdAt });
 
@@ -144,6 +154,19 @@ class Database {
         this.lists.set('list-3', {
             id: 'list-3', workspaceID: 'workspace-1', tabID: 'tab-1', columnID: 'col-2',
             name: 'In Progress', listOrder: 0, category: 'Research', color: '#7ab648', updatedAt: createdAt
+        });
+
+        this.columns.set('col-3', { id: 'col-3', workspaceID: 'workspace-1', tabID: 'tab-2', columnIndex: 0, updatedAt: createdAt });
+
+        this.lists.set('list-4', {
+            id: 'list-4', workspaceID: 'workspace-1', tabID: 'tab-2', columnID: 'col-3',
+            name: 'Someday', listOrder: 0, category: null, color: '#9b59b6', updatedAt: createdAt
+        });
+
+        this.tasks.set('task-5', {
+            id: 'task-5', listID: 'list-4', title: 'Chat page', description: '',
+            isCompleted: false, taskOrder: 0, category: null, color: '#9b59b6',
+            deadline: '', subtasks: [], assignedUsers: [], updatedAt: createdAt
         });
 
         this.tasks.set('task-1', {
