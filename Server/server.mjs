@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import pool, { applySchema, closePool } from './database/Pool.mjs';
+import db from './database/Database.mjs';
 import Authentication from './modules/Authentication.mjs';
 import Authorization from './modules/Authorization.mjs';
 import createNetworkingRouter from './modules/Networking.mjs';
@@ -237,6 +238,7 @@ async function main() {
     const config = validateEnvironment();
 
     await applySchema();
+    await db.seed();
 
     const server = new Server(config);
     server.start();
