@@ -49,7 +49,7 @@ export function useLists(columnIDs) {
         }
     }
 
-    async function reorderLists(updates, pruneColumnID) {
+    async function reorderLists(updates) {
         if (!updates || updates.length === 0) return;
 
         setBoardData(prev => {
@@ -60,46 +60,43 @@ export function useLists(columnIDs) {
                 return update ? { ...l, columnID: update.columnID, listOrder: update.listOrder } : l;
             });
 
-            const nextColumns = pruneColumnID
-                ? prev.columns.filter(c => c.id !== pruneColumnID)
-                : prev.columns;
-
-            return { ...prev, lists: nextLists, columns: nextColumns };
+            return { ...prev, lists: nextLists };
         });
 
         try {
             const result = await api('/api/kanban/lists/reorder', {
                 method: 'PUT',
-                body: { updates, pruneColumnID: pruneColumnID ?? null }
+                body: { updates }
             });
 
             setBoardData(prev => applyDelta(prev, {
-                upsert: { lists: result.lists },
+                upsert: { lists: result.lists, columns: result.columns },
                 remove: result.removed
             }));
-        } catch {
+        } catch (error) {
+            console.error('reorderLists failed:', error);
             refresh();
         }
     }
 
-    async function deleteList(listID, pruneColumnID) {
+    async function deleteList(listID) {
         setBoardData(prev => {
             const removedTaskIDs = prev.tasks.filter(t => t.listID === listID).map(t => t.id);
 
             return applyDelta(prev, {
-                remove: {
-                    lists: [listID],
-                    tasks: removedTaskIDs,
-                    columns: pruneColumnID ? [pruneColumnID] : []
-                }
+                remove: { lists: [listID], tasks: removedTaskIDs }
             });
         });
 
         try {
-            const query = pruneColumnID ? `?pruneColumnID=${encodeURIComponent(pruneColumnID)}` : '';
-            const { removed } = await api(`/api/kanban/lists/${listID}${query}`, { method: 'DELETE' });
-            setBoardData(prev => applyDelta(prev, { remove: removed }));
-        } catch {
+            const result = await api(`/api/kanban/lists/${listID}`, { method: 'DELETE' });
+
+            setBoardData(prev => applyDelta(prev, {
+                upsert: { columns: result.columns },
+                remove: result.removed
+            }));
+        } catch (error) {
+            console.error('deleteList failed:', error);
             refresh();
         }
     }

@@ -37,9 +37,14 @@ export function useColumns(workspaceID, tabID) {
         setBoardData(prev => applyDelta(prev, { remove: { columns: [columnID] } }));
 
         try {
-            const { removed } = await api(`/api/kanban/columns/${columnID}`, { method: 'DELETE' });
-            setBoardData(prev => applyDelta(prev, { remove: removed }));
-        } catch {
+            const result = await api(`/api/kanban/columns/${columnID}`, { method: 'DELETE' });
+
+            setBoardData(prev => applyDelta(prev, {
+                upsert: { columns: result.columns },
+                remove: result.removed
+            }));
+        } catch (error) {
+            console.error('deleteColumn failed:', error);
             refresh();
         }
     }

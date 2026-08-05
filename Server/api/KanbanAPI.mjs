@@ -36,20 +36,6 @@ function publish(req, changes) {
     broadcastKanbanChange(req.workspaceID, buildDelta(changes), originOf(req));
 }
 
-// pruning functions
-async function pruneColumnIfEmpty(workspaceID, columnID) {
-    if (!columnID) return emptyCollections();
-
-    const column = await db.getColumn(columnID);
-    if (!column || column.workspaceID !== workspaceID) return emptyCollections();
-
-    const board = await db.getWorkspaceData(workspaceID);
-    const stillUsed = board.lists.some(list => list.columnID === columnID);
-    if (stillUsed) return emptyCollections();
-
-    return db.deleteColumn(columnID);
-}
-
 // router configuration
 export default function createKanbanRouter(authz) {
     const router = Router();
@@ -163,10 +149,10 @@ export default function createKanbanRouter(authz) {
 
     router.delete('/columns/:id', authz.columnAccess(), async (req, res, next) => {
         try {
-            const removed = await db.deleteColumn(req.params.id);
+            const { removed, columns } = await db.deleteColumn(req.params.id);
 
-            publish(req, { remove: removed });
-            res.json({ removed });
+            publish(req, { upsert: { columns }, remove: removed });
+            res.json({ removed, columns });
         } catch (error) {
             next(error);
         }
@@ -196,11 +182,10 @@ export default function createKanbanRouter(authz) {
         resolveBatchScope(id => db.getWorkspaceIDForList(id), ['columnID']),
         async (req, res, next) => {
             try {
-                const lists = await db.reorderLists(req.batchUpdates);
-                const pruned = await pruneColumnIfEmpty(req.workspaceID, req.body?.pruneColumnID ?? null);
+                const { lists, columns, removed } = await db.reorderLists(req.batchUpdates);
 
-                publish(req, { upsert: { lists }, remove: pruned });
-                res.json({ lists, removed: pruned });
+                publish(req, { upsert: { lists, columns }, remove: removed });
+                res.json({ lists, columns, removed });
             } catch (error) {
                 next(error);
             }
@@ -227,18 +212,10 @@ export default function createKanbanRouter(authz) {
 
     router.delete('/lists/:id', authz.listAccess(), async (req, res, next) => {
         try {
-            const removed = await db.deleteList(req.params.id);
-            const pruned = await pruneColumnIfEmpty(req.workspaceID, req.query.pruneColumnID ?? null);
+            const { removed, columns } = await db.deleteList(req.params.id);
 
-            const combined = {
-                tabs: [],
-                columns: pruned.columns,
-                lists: [...removed.lists, ...pruned.lists],
-                tasks: [...removed.tasks, ...pruned.tasks]
-            };
-
-            publish(req, { remove: combined });
-            res.json({ removed: combined });
+            publish(req, { upsert: { columns }, remove: removed });
+            res.json({ removed, columns });
         } catch (error) {
             next(error);
         }

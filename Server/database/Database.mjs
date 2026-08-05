@@ -156,6 +156,64 @@ function buildAssignments(changes, allowed, startIndex) {
     return { assignments, values, nextIndex: index };
 }
 
+// normalization functions
+async function normalizeColumns(client, tabIDs) {
+    const removedColumnIDs = [];
+    const renumberedIDs = [];
+
+    for (const tabID of new Set(tabIDs)) {
+        const { rows } = await client.query(
+            `SELECT c.id, c.column_index,
+                    EXISTS (SELECT 1 FROM lists l WHERE l.column_id = c.id) AS occupied
+             FROM board_columns c
+             WHERE c.tab_id = $1
+             ORDER BY c.column_index`,
+            [tabID]
+        );
+
+        const empty = rows.filter(row => !row.occupied).map(row => row.id);
+        const keep = rows.filter(row => row.occupied);
+
+        if (empty.length > 0) {
+            await client.query('DELETE FROM board_columns WHERE id = ANY($1::text[])', [empty]);
+            removedColumnIDs.push(...empty);
+        }
+
+        const moves = [];
+        keep.forEach((row, index) => {
+            if (row.column_index !== index) moves.push({ id: row.id, index });
+        });
+
+        if (moves.length === 0) continue;
+
+        const moveIDs = moves.map(move => move.id);
+
+        await client.query(
+            'UPDATE board_columns SET column_index = -1 - column_index WHERE id = ANY($1::text[])',
+            [moveIDs]
+        );
+
+        await client.query(
+            `UPDATE board_columns AS c
+             SET column_index = u.column_index
+             FROM unnest($1::text[], $2::int[]) AS u(id, column_index)
+             WHERE c.id = u.id`,
+            [moveIDs, moves.map(move => move.index)]
+        );
+
+        renumberedIDs.push(...moveIDs);
+    }
+
+    if (renumberedIDs.length === 0) return { removedColumnIDs, updatedColumns: [] };
+
+    const { rows: updatedColumns } = await client.query(
+        `SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE c.id = ANY($1::text[]) ORDER BY c.column_index`,
+        [renumberedIDs]
+    );
+
+    return { removedColumnIDs, updatedColumns };
+}
+
 // database classes
 class Database {
     constructor() {
@@ -595,12 +653,15 @@ class Database {
     }
 
     async createColumn(tabID, columnIndex) {
-        await query(
+        const created = await queryOne(
             `INSERT INTO board_columns (id, tab_id, column_index)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (tab_id, column_index) DO NOTHING`,
+             VALUES ($1, $2, LEAST($3, (SELECT COUNT(*) FROM board_columns WHERE tab_id = $2)))
+             ON CONFLICT (tab_id, column_index) DO NOTHING
+             RETURNING id`,
             [newID('col'), tabID, columnIndex]
         );
+
+        if (created) return this.getColumn(created.id);
 
         return this.getColumnByIndex(tabID, columnIndex);
     }
@@ -608,6 +669,9 @@ class Database {
     async deleteColumn(columnID) {
         return withTransaction(async client => {
             const removed = emptyChangeSet();
+
+            const scope = await client.query('SELECT tab_id AS "tabID" FROM board_columns WHERE id = $1', [columnID]);
+            if (scope.rowCount === 0) return { removed, columns: [] };
 
             const { rows } = await client.query(
                 `SELECT l.id AS list_id, k.id AS task_id
@@ -624,13 +688,15 @@ class Database {
                 if (row.task_id) removed.tasks.push(row.task_id);
             }
 
-            const { rowCount } = await client.query('DELETE FROM board_columns WHERE id = $1', [columnID]);
-            if (rowCount === 0) return emptyChangeSet();
+            await client.query('DELETE FROM board_columns WHERE id = $1', [columnID]);
 
             removed.lists = Array.from(listIDs);
             removed.columns.push(columnID);
 
-            return removed;
+            const { removedColumnIDs, updatedColumns } = await normalizeColumns(client, [scope.rows[0].tabID]);
+            removed.columns.push(...removedColumnIDs);
+
+            return { removed, columns: updatedColumns };
         });
     }
 
@@ -673,42 +739,73 @@ class Database {
         return withTransaction(async client => {
             const removed = emptyChangeSet();
 
+            const scope = await client.query(
+                `SELECT c.tab_id AS "tabID"
+                 FROM lists l JOIN board_columns c ON c.id = l.column_id
+                 WHERE l.id = $1`,
+                [listID]
+            );
+
+            if (scope.rowCount === 0) return { removed, columns: [] };
+
             const { rows } = await client.query('SELECT id FROM tasks WHERE list_id = $1', [listID]);
 
             const { rowCount } = await client.query('DELETE FROM lists WHERE id = $1', [listID]);
-            if (rowCount === 0) return emptyChangeSet();
+            if (rowCount === 0) return { removed, columns: [] };
 
             removed.tasks = rows.map(row => row.id);
             removed.lists.push(listID);
 
-            return removed;
+            const { removedColumnIDs, updatedColumns } = await normalizeColumns(client, [scope.rows[0].tabID]);
+            removed.columns = removedColumnIDs;
+
+            return { removed, columns: updatedColumns };
         });
     }
 
     async reorderLists(updates) {
-        if (!updates || updates.length === 0) return [];
+        const empty = { lists: [], columns: [], removed: emptyChangeSet() };
+        if (!updates || updates.length === 0) return empty;
 
         const ids = updates.map(update => update.id);
         const columnIDs = updates.map(update => update.columnID);
         const orders = updates.map(update => update.listOrder);
 
-        const { rows } = await query(
-            `UPDATE lists AS l
-             SET column_id = u.column_id, list_order = u.list_order, updated_at = now()
-             FROM unnest($1::text[], $2::text[], $3::int[]) AS u(id, column_id, list_order)
-             WHERE l.id = u.id
-             RETURNING l.id`,
-            [ids, columnIDs, orders]
-        );
+        return withTransaction(async client => {
+            const { rows: tabRows } = await client.query(
+                `SELECT DISTINCT c.tab_id AS "tabID"
+                 FROM board_columns c
+                 WHERE c.id = ANY($1::text[])
+                    OR c.id IN (SELECT column_id FROM lists WHERE id = ANY($2::text[]))`,
+                [columnIDs, ids]
+            );
 
-        if (rows.length === 0) return [];
+            const { rows: touched } = await client.query(
+                `UPDATE lists AS l
+                 SET column_id = u.column_id, list_order = u.list_order, updated_at = now()
+                 FROM unnest($1::text[], $2::text[], $3::int[]) AS u(id, column_id, list_order)
+                 WHERE l.id = u.id
+                 RETURNING l.id`,
+                [ids, columnIDs, orders]
+            );
 
-        const { rows: records } = await query(
-            `SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = ANY($1::text[]) ORDER BY l.list_order`,
-            [rows.map(row => row.id)]
-        );
+            if (touched.length === 0) return empty;
 
-        return records;
+            const { removedColumnIDs, updatedColumns } = await normalizeColumns(
+                client,
+                tabRows.map(row => row.tabID)
+            );
+
+            const { rows: lists } = await client.query(
+                `SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = ANY($1::text[]) ORDER BY l.list_order`,
+                [touched.map(row => row.id)]
+            );
+
+            const removed = emptyChangeSet();
+            removed.columns = removedColumnIDs;
+
+            return { lists, columns: updatedColumns, removed };
+        });
     }
 
     // task functions

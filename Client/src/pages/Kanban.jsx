@@ -46,57 +46,19 @@ export default function Kanban() {
     const { triggerRemoval: triggerTaskRemoval, isRemoving: isTaskRemoving } = useAnimatedRemoval(deleteTask);
     const { triggerRemoval: triggerListRemoval, isRemoving: isListRemoving } = useAnimatedRemoval(handleDeleteList);
 
-    // column pruning
-    function pickColumnToPrune(sourceColumnIDs, predictedLists) {
-        if (columns.length === 0 || sourceColumnIDs.size === 0) return null;
-
-        const maxIndex = columns.reduce((m, c) => Math.max(m, c.columnIndex), -1);
-        const occupied = new Set(predictedLists.map(l => l.columnID));
-
-        for (const col of columns) {
-            if (!sourceColumnIDs.has(col.id)) continue;
-            if (occupied.has(col.id)) continue;
-            if (col.columnIndex !== maxIndex) continue;
-            return col;
-        }
-        return null;
-    }
-
     // layout handlers
     async function handleReorderLists(updates) {
         if (!updates || updates.length === 0) return;
 
         snapshotLists();
-
-        const updateMap = new Map(updates.map(u => [u.id, u]));
-        const predicted = lists.map(l => {
-            const u = updateMap.get(l.id);
-            return u ? { ...l, columnID: u.columnID, listOrder: u.listOrder } : l;
-        });
-
-        const sourceColumnIDs = new Set();
-        for (const u of updates) {
-            const before = lists.find(l => l.id === u.id);
-            if (before && before.columnID !== u.columnID) {
-                sourceColumnIDs.add(before.columnID);
-            }
-        }
-
-        const colToDelete = pickColumnToPrune(sourceColumnIDs, predicted);
-        await reorderLists(updates, colToDelete?.id);
+        await reorderLists(updates);
     }
 
     async function handleDeleteList(listID) {
-        const list = lists.find(l => l.id === listID);
-        if (!list) return;
+        if (!lists.some(l => l.id === listID)) return;
 
         snapshotLists();
-
-        const predicted = lists.filter(l => l.id !== listID);
-        const sourceColumnIDs = new Set([list.columnID]);
-        const colToDelete = pickColumnToPrune(sourceColumnIDs, predicted);
-
-        await deleteList(listID, colToDelete?.id);
+        await deleteList(listID);
     }
 
     // drag and drop handlers
@@ -152,7 +114,7 @@ export default function Kanban() {
                 return;
             }
 
-            const listID = await addList(columnID, workspaceID, activeTabId);
+            const listID = await addList(columnID);
             if (!listID) return;
 
             reorderTasks([{ id: item.id, listID, taskOrder: 0 }]);
@@ -183,7 +145,7 @@ export default function Kanban() {
 
         if (!columnID) return;
 
-        const listID = await addList(columnID, workspaceID, activeTabId);
+        const listID = await addList(columnID);
         if (listID) setFocusedListId(listID);
     }
 
