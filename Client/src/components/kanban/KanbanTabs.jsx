@@ -194,7 +194,7 @@ export default function KanbanTabs({ tabs, activeTabId, onSelect, onAdd, onArchi
                     </div>
                 ))}
 
-                <button className="kanban-tab-add-btn" onClick={onAdd} title="New tab">
+                <button className="kanban-tab-add-btn" onClick={() => onAdd()} title="New tab">
                     +
                 </button>
             </div>

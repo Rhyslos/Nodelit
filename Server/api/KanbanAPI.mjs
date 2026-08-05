@@ -152,7 +152,7 @@ export default function createKanbanRouter(authz) {
             const existing = await db.getColumnByIndex(tabID, columnIndex);
             if (existing) return res.json(existing);
 
-            const column = await db.createColumn(req.workspaceID, tabID, columnIndex);
+            const column = await db.createColumn(tabID, columnIndex);
 
             publish(req, { upsert: { columns: [column] } });
             res.status(201).json(column);
@@ -175,9 +175,9 @@ export default function createKanbanRouter(authz) {
     // list routes
     router.post('/lists', authz.columnAccess('columnID'), async (req, res, next) => {
         try {
-            const column = await db.getColumn(requireID(req.body?.columnID, 'columnID'));
+            const columnID = requireID(req.body?.columnID, 'columnID');
 
-            const list = await db.createList(req.workspaceID, column.tabID, column.id, {
+            const list = await db.createList(columnID, {
                 name: optionalText(req.body?.name, 'name', 80) ?? 'New list',
                 category: optionalText(req.body?.category, 'category', 80),
                 color: optionalColor(req.body?.color, 'color'),
