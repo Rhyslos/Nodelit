@@ -1,6 +1,6 @@
 // authentication imports
 import crypto from 'crypto';
-import db from '../database/Database.mjs';
+import db from '../database/renameforthesakeoffixingatype.mjs';
 
 // configuration constants
 const SESSION_COOKIE = 'session_id';

@@ -1,7 +1,7 @@
 // imports
 import { Router } from 'express';
 import crypto from 'crypto';
-import db from '../database/Database.mjs';
+import db from '../database/renameforthesakeoffixingatype.mjs';
 
 // configuration constants
 const HEARTBEAT_INTERVAL_MS = 15000;
