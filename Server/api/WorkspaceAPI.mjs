@@ -1,6 +1,6 @@
 // import modules
 import { Router } from 'express';
-import db from '../database/renameforthesakeoffixingatype.mjs';
+import db from '../database/Database.mjs';
 import { requireText, optionalID, optionalColor } from '../modules/Validation.mjs';
 
 // router configuration

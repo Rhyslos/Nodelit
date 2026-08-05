@@ -1,5 +1,5 @@
 // authorization imports
-import db from '../database/renameforthesakeoffixingatype.mjs';
+import db from '../database/Database.mjs';
 
 // resolver functions
 const resolvers = {
