@@ -1,4 +1,6 @@
 // import modules
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -14,6 +16,11 @@ import createWorkspaceRouter from './api/WorkspaceAPI.mjs';
 // configuration constants
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const SHUTDOWN_GRACE_MS = 10000;
+const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+const CLIENT_DIST = process.env.CLIENT_DIST
+    ? path.resolve(process.env.CLIENT_DIST)
+    : path.resolve(SERVER_DIR, '../Client/dist');
 
 // environment functions
 function readOrigins() {
@@ -58,7 +65,7 @@ class Server {
         this.app.disable('x-powered-by');
 
         this.app.use(helmet({
-            crossOriginResourcePolicy: { policy: 'same-site' },
+            crossOriginResourcePolicy: { policy: 'same-origin' },
             referrerPolicy: { policy: 'no-referrer' }
         }));
 
@@ -76,11 +83,19 @@ class Server {
 
         this.app.use(rateLimit({
             windowMs: 60 * 1000,
-            limit: 300,
+            limit: 600,
             standardHeaders: true,
             legacyHeaders: false,
             skip: req => req.path === '/healthz',
             message: { error: 'Too many requests. Please slow down.' }
+        }));
+
+        this.app.use(express.static(CLIENT_DIST, {
+            index: false,
+            maxAge: '1y',
+            setHeaders: (res, filePath) => {
+                if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+            }
         }));
 
         this.app.use(express.json({ limit: '64kb' }));
@@ -129,14 +144,30 @@ class Server {
         });
 
         // authentication routes
-        this.app.post('/api/login', loginLimiter, this.authn.login);
-        this.app.post('/api/logout', this.authn.logout);
-        this.app.get('/api/session', this.authn.authenticate, this.authn.session);
+        this.app.post('/api/auth/login', loginLimiter, this.authn.login);
+        this.app.post('/api/auth/logout', this.authn.logout);
+        this.app.get('/api/auth/session', this.authn.authenticate, this.authn.session);
 
         // application routes
         this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter(this.authz));
         this.app.use('/api/kanban', this.authn.authenticate, createKanbanRouter(this.authz));
         this.app.use('/api/workspaces', this.authn.authenticate, createWorkspaceRouter(this.authz));
+
+        this.setupClientRoutes();
+    }
+
+    // client configuration
+    setupClientRoutes() {
+        this.app.use((req, res, next) => {
+            if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+            if (req.path.startsWith('/api')) return next();
+
+            res.sendFile(path.join(CLIENT_DIST, 'index.html'), {
+                headers: { 'Cache-Control': 'no-cache' }
+            }, error => {
+                if (error) next();
+            });
+        });
 
         this.app.use((req, res) => {
             res.status(404).json({ error: 'Not found' });
@@ -171,6 +202,7 @@ class Server {
     start() {
         this.httpServer = this.app.listen(this.port, '0.0.0.0', () => {
             console.log(`Server listening on port ${this.port}`);
+            console.log(`Serving client from ${CLIENT_DIST}`);
         });
 
         this.httpServer.headersTimeout = 65000;
