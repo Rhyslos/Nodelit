@@ -1,30 +1,122 @@
 // database imports
 import crypto from 'crypto';
+import { promisify } from 'node:util';
+import pool, { query, queryOne, withTransaction } from './Pool.mjs';
+
+const scrypt = promisify(crypto.scrypt);
 
 // configuration constants
 const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+const KEY_LENGTH = 64;
 
 const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived'];
 const LIST_FIELDS = ['name', 'columnID', 'listOrder', 'category', 'color'];
 const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'category', 'color', 'deadline', 'subtasks'];
-const PUBLIC_USER_FIELDS = ['id', 'username', 'email', 'displayName', 'firstName', 'lastName', 'role', 'cursorColor'];
+const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor'];
+
+const FIELD_DEFINITIONS = {
+    name: { column: 'name' },
+    color: { column: 'color' },
+    category: { column: 'category' },
+    tabOrder: { column: 'tab_order' },
+    isArchived: { column: 'is_archived', transform: Boolean },
+    columnID: { column: 'column_id' },
+    listOrder: { column: 'list_order' },
+    listID: { column: 'list_id' },
+    taskOrder: { column: 'task_order' },
+    title: { column: 'title' },
+    description: { column: 'description' },
+    isCompleted: { column: 'is_completed', transform: Boolean },
+    deadline: { column: 'deadline', cast: '::date', transform: value => (value === '' || value === undefined ? null : value) },
+    subtasks: { column: 'subtasks', cast: '::jsonb', transform: value => JSON.stringify(value ?? []) }
+};
+
+// projection constants
+const USER_SELECT = `
+    id,
+    username,
+    display_name AS "displayName",
+    role,
+    cursor_color AS "cursorColor"
+`;
+
+const WORKSPACE_SELECT = `
+    w.id,
+    w.name,
+    w.owner_id AS "ownerID",
+    w.category_id AS "categoryID",
+    w.created_at AS "createdAt"
+`;
+
+const TAB_SELECT = `
+    t.id,
+    t.workspace_id AS "workspaceID",
+    t.name,
+    t.color,
+    t.tab_order AS "tabOrder",
+    t.is_archived AS "isArchived",
+    t.updated_at AS "updatedAt"
+`;
+
+const COLUMN_SELECT = `
+    c.id,
+    c.tab_id AS "tabID",
+    t.workspace_id AS "workspaceID",
+    c.column_index AS "columnIndex"
+`;
+
+const COLUMN_FROM = `
+    FROM board_columns c
+    JOIN tabs t ON t.id = c.tab_id
+`;
+
+const LIST_SELECT = `
+    l.id,
+    l.column_id AS "columnID",
+    c.tab_id AS "tabID",
+    t.workspace_id AS "workspaceID",
+    l.name,
+    l.list_order AS "listOrder",
+    l.category,
+    l.color,
+    l.updated_at AS "updatedAt"
+`;
+
+const LIST_FROM = `
+    FROM lists l
+    JOIN board_columns c ON c.id = l.column_id
+    JOIN tabs t ON t.id = c.tab_id
+`;
+
+const TASK_SELECT = `
+    k.id,
+    k.list_id AS "listID",
+    k.title,
+    k.description,
+    k.is_completed AS "isCompleted",
+    k.task_order AS "taskOrder",
+    k.category,
+    k.color,
+    COALESCE(to_char(k.deadline, 'YYYY-MM-DD'), '') AS deadline,
+    k.subtasks,
+    k.updated_at AS "updatedAt"
+`;
+
+const TASK_FROM = `
+    FROM tasks k
+    JOIN lists l ON l.id = k.list_id
+    JOIN board_columns c ON c.id = l.column_id
+    JOIN tabs t ON t.id = c.tab_id
+`;
 
 // utility functions
-function timestamp() {
-    return new Date().toISOString();
-}
-
 function newID(prefix) {
     return `${prefix}-${crypto.randomUUID()}`;
 }
 
-function clone(record) {
-    return record ? { ...record } : null;
-}
-
-function cloneAll(records) {
-    return records.map(record => ({ ...record }));
+function hashSessionID(sessionID) {
+    return crypto.createHash('sha256').update(sessionID).digest('hex');
 }
 
 function pickFields(source, allowed) {
@@ -39,167 +131,129 @@ function emptyChangeSet() {
     return { tabs: [], columns: [], lists: [], tasks: [] };
 }
 
+function badRequest(message) {
+    const error = new Error(message);
+    error.status = 400;
+    return error;
+}
+
+function buildAssignments(changes, allowed, startIndex) {
+    const assignments = [];
+    const values = [];
+    let index = startIndex;
+
+    for (const field of allowed) {
+        if (changes[field] === undefined) continue;
+
+        const definition = FIELD_DEFINITIONS[field];
+        if (!definition) continue;
+
+        assignments.push(`${definition.column} = $${index}${definition.cast ?? ''}`);
+        values.push(definition.transform ? definition.transform(changes[field]) : changes[field]);
+        index += 1;
+    }
+
+    return { assignments, values, nextIndex: index };
+}
+
 // database classes
 class Database {
     constructor() {
-        this.users = new Map();
-        this.sessions = new Map();
-        this.categories = new Map();
-        this.workspaces = new Map();
-        this.memberships = new Map();
-        this.tabs = new Map();
-        this.columns = new Map();
-        this.lists = new Map();
-        this.tasks = new Map();
-
-        this.seedUsers();
-        this.seedWorkspace();
         this.startSessionSweep();
     }
 
     // seed functions
-    seedUsers() {
-        this.insertSeedUser({
-            id: 'user-1',
-            username: 'test',
-            password: 'k',
-            email: 'test@nodelit.local',
-            displayName: 'Test User',
-            firstName: 'Test',
-            lastName: 'User',
-            role: 'admin',
-            cursorColor: '#c8502a'
-        });
+    async seed() {
+        const password = process.env.SEED_PASSWORD ?? 'k';
 
-        this.insertSeedUser({
-            id: 'user-2',
-            username: 'demo',
-            password: 'k',
-            email: 'demo@nodelit.local',
-            displayName: 'Demo User',
-            firstName: 'Demo',
-            lastName: 'User',
-            role: 'member',
-            cursorColor: '#4a90d9'
-        });
+        if (process.env.NODE_ENV === 'production' && !process.env.SEED_PASSWORD) {
+            console.warn('WARNING: seeding demo users with the default development password');
+        }
+
+        await this.insertSeedUser({ id: 'user-1', username: 'test', password, displayName: 'Test User', role: 'admin', cursorColor: '#c8502a' });
+        await this.insertSeedUser({ id: 'user-2', username: 'demo', password, displayName: 'Demo User', role: 'member', cursorColor: '#4a90d9' });
+
+        await this.seedWorkspace();
     }
 
-    insertSeedUser({ id, username, password, email, displayName, firstName, lastName, role, cursorColor }) {
+    async insertSeedUser({ id, username, password, displayName, role, cursorColor }) {
         const salt = crypto.randomBytes(16).toString('hex');
-        const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+        const derived = await scrypt(password, salt, KEY_LENGTH);
 
-        this.users.set(id, {
-            id,
-            username,
-            email,
-            displayName,
-            firstName,
-            lastName,
-            role,
-            cursorColor,
-            salt,
-            hash,
-            createdAt: timestamp()
-        });
+        await query(
+            `INSERT INTO users (id, username, display_name, role, cursor_color, salt, hash)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (id) DO NOTHING`,
+            [id, username, displayName, role, cursorColor, salt, derived.toString('hex')]
+        );
     }
 
-    seedWorkspace() {
-        const createdAt = timestamp();
+    async seedWorkspace() {
+        await withTransaction(async client => {
+            await client.query(
+                `INSERT INTO categories (id, user_id, name, color) VALUES
+                 ('cat-1', 'user-1', 'Planning', '#4a90d9'),
+                 ('cat-2', 'user-1', 'Research', '#7ab648')
+                 ON CONFLICT (id) DO NOTHING`
+            );
 
-        this.categories.set('cat-1', { id: 'cat-1', userID: 'user-1', name: 'Planning', color: '#4a90d9', createdAt });
-        this.categories.set('cat-2', { id: 'cat-2', userID: 'user-1', name: 'Research', color: '#7ab648', createdAt });
+            await client.query(
+                `INSERT INTO workspaces (id, name, owner_id, category_id)
+                 VALUES ('workspace-1', 'Example Project', 'user-1', 'cat-1')
+                 ON CONFLICT (id) DO NOTHING`
+            );
 
-        this.workspaces.set('workspace-1', {
-            id: 'workspace-1',
-            name: 'Example Project',
-            ownerID: 'user-1',
-            categoryID: 'cat-1',
-            createdAt
-        });
+            await client.query(
+                `INSERT INTO memberships (workspace_id, user_id, role) VALUES
+                 ('workspace-1', 'user-1', 'owner'),
+                 ('workspace-1', 'user-2', 'member')
+                 ON CONFLICT (workspace_id, user_id) DO NOTHING`
+            );
 
-        this.memberships.set('workspace-1:user-1', { workspaceID: 'workspace-1', userID: 'user-1', role: 'owner', createdAt });
-        this.memberships.set('workspace-1:user-2', { workspaceID: 'workspace-1', userID: 'user-2', role: 'member', createdAt });
+            await client.query(
+                `INSERT INTO tabs (id, workspace_id, name, color, tab_order) VALUES
+                 ('tab-1', 'workspace-1', 'Main Board', '#6c8ebf', 0),
+                 ('tab-2', 'workspace-1', 'Backlog', '#b8f0c8', 1)
+                 ON CONFLICT (id) DO NOTHING`
+            );
 
-        this.tabs.set('tab-1', {
-            id: 'tab-1',
-            workspaceID: 'workspace-1',
-            name: 'Main Board',
-            color: '#6c8ebf',
-            tabOrder: 0,
-            isArchived: false,
-            updatedAt: createdAt
-        });
+            await client.query(
+                `INSERT INTO board_columns (id, tab_id, column_index) VALUES
+                 ('col-1', 'tab-1', 0),
+                 ('col-2', 'tab-1', 1),
+                 ('col-3', 'tab-2', 0)
+                 ON CONFLICT (id) DO NOTHING`
+            );
 
-        this.tabs.set('tab-2', {
-            id: 'tab-2',
-            workspaceID: 'workspace-1',
-            name: 'Backlog',
-            color: '#b8f0c8',
-            tabOrder: 1,
-            isArchived: false,
-            updatedAt: createdAt
-        });
+            await client.query(
+                `INSERT INTO lists (id, column_id, name, list_order, category, color) VALUES
+                 ('list-1', 'col-1', 'To Do', 0, 'Planning', '#4a90d9'),
+                 ('list-2', 'col-1', 'Blocked', 1, NULL, '#e6a817'),
+                 ('list-3', 'col-2', 'In Progress', 0, 'Research', '#7ab648'),
+                 ('list-4', 'col-3', 'Someday', 0, NULL, '#9b59b6')
+                 ON CONFLICT (id) DO NOTHING`
+            );
 
-        this.columns.set('col-1', { id: 'col-1', workspaceID: 'workspace-1', tabID: 'tab-1', columnIndex: 0, updatedAt: createdAt });
-        this.columns.set('col-2', { id: 'col-2', workspaceID: 'workspace-1', tabID: 'tab-1', columnIndex: 1, updatedAt: createdAt });
-
-        this.lists.set('list-1', {
-            id: 'list-1', workspaceID: 'workspace-1', tabID: 'tab-1', columnID: 'col-1',
-            name: 'To Do', listOrder: 0, category: 'Planning', color: '#4a90d9', updatedAt: createdAt
-        });
-        this.lists.set('list-2', {
-            id: 'list-2', workspaceID: 'workspace-1', tabID: 'tab-1', columnID: 'col-1',
-            name: 'Blocked', listOrder: 1, category: null, color: '#e6a817', updatedAt: createdAt
-        });
-        this.lists.set('list-3', {
-            id: 'list-3', workspaceID: 'workspace-1', tabID: 'tab-1', columnID: 'col-2',
-            name: 'In Progress', listOrder: 0, category: 'Research', color: '#7ab648', updatedAt: createdAt
-        });
-
-        this.columns.set('col-3', { id: 'col-3', workspaceID: 'workspace-1', tabID: 'tab-2', columnIndex: 0, updatedAt: createdAt });
-
-        this.lists.set('list-4', {
-            id: 'list-4', workspaceID: 'workspace-1', tabID: 'tab-2', columnID: 'col-3',
-            name: 'Someday', listOrder: 0, category: null, color: '#9b59b6', updatedAt: createdAt
-        });
-
-        this.tasks.set('task-5', {
-            id: 'task-5', listID: 'list-4', title: 'Chat page', description: '',
-            isCompleted: false, taskOrder: 0, category: null, color: '#9b59b6',
-            deadline: '', subtasks: [], assignedUsers: [], updatedAt: createdAt
-        });
-
-        this.tasks.set('task-1', {
-            id: 'task-1', listID: 'list-1', title: 'Wire up the board', description: '',
-            isCompleted: false, taskOrder: 0, category: 'Planning', color: '#4a90d9',
-            deadline: '', subtasks: [], assignedUsers: [], updatedAt: createdAt
-        });
-        this.tasks.set('task-2', {
-            id: 'task-2', listID: 'list-1', title: 'Check drag and drop', description: 'Across columns too.',
-            isCompleted: false, taskOrder: 1, category: 'Planning', color: '#4a90d9',
-            deadline: '', subtasks: [
-                { id: 'sub-1', text: 'Within a list', done: true },
-                { id: 'sub-2', text: 'Between columns', done: false }
-            ], assignedUsers: [], updatedAt: createdAt
-        });
-        this.tasks.set('task-3', {
-            id: 'task-3', listID: 'list-2', title: 'Waiting on schema', description: '',
-            isCompleted: false, taskOrder: 0, category: null, color: '#e6a817',
-            deadline: '2026-09-01', subtasks: [], assignedUsers: [], updatedAt: createdAt
-        });
-        this.tasks.set('task-4', {
-            id: 'task-4', listID: 'list-3', title: 'Live sync over SSE', description: '',
-            isCompleted: true, taskOrder: 0, category: 'Research', color: '#7ab648',
-            deadline: '', subtasks: [], assignedUsers: [], updatedAt: createdAt
+            await client.query(
+                `INSERT INTO tasks (id, list_id, title, description, is_completed, task_order, category, color, deadline, subtasks) VALUES
+                 ('task-1', 'list-1', 'Wire up the board', '', false, 0, 'Planning', '#4a90d9', NULL, '[]'::jsonb),
+                 ('task-2', 'list-1', 'Check drag and drop', 'Across columns too.', false, 1, 'Planning', '#4a90d9', NULL,
+                    '[{"id":"sub-1","text":"Within a list","done":true},{"id":"sub-2","text":"Between columns","done":false}]'::jsonb),
+                 ('task-3', 'list-2', 'Waiting on schema', '', false, 0, NULL, '#e6a817', '2026-09-01', '[]'::jsonb),
+                 ('task-4', 'list-3', 'Live sync over SSE', '', true, 0, 'Research', '#7ab648', NULL, '[]'::jsonb),
+                 ('task-5', 'list-4', 'Chat page', '', false, 0, NULL, '#9b59b6', NULL, '[]'::jsonb)
+                 ON CONFLICT (id) DO NOTHING`
+            );
         });
     }
 
     // session functions
     startSessionSweep() {
-        this.sweepTimer = setInterval(() => {
-            const cutoff = Date.now();
-            for (const [id, session] of this.sessions) {
-                if (session.expiresAt <= cutoff) this.sessions.delete(id);
+        this.sweepTimer = setInterval(async () => {
+            try {
+                await query('DELETE FROM sessions WHERE expires_at <= now()');
+            } catch (error) {
+                console.error('Session sweep failed:', error.message);
             }
         }, SESSION_SWEEP_INTERVAL_MS);
 
@@ -208,48 +262,50 @@ class Database {
 
     async createSession(userID) {
         const sessionID = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + SESSION_LIFETIME_MS);
 
-        this.sessions.set(sessionID, {
-            userID,
-            createdAt: Date.now(),
-            expiresAt: Date.now() + SESSION_LIFETIME_MS
-        });
+        await query(
+            `INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)`,
+            [hashSessionID(sessionID), userID, expiresAt]
+        );
 
         return sessionID;
     }
 
     async deleteSession(sessionID) {
-        return this.sessions.delete(sessionID);
+        const { rowCount } = await query('DELETE FROM sessions WHERE id = $1', [hashSessionID(sessionID)]);
+        return rowCount > 0;
     }
 
     async deleteSessionsForUser(userID) {
-        for (const [id, session] of this.sessions) {
-            if (session.userID === userID) this.sessions.delete(id);
-        }
+        await query('DELETE FROM sessions WHERE user_id = $1', [userID]);
     }
 
     async getUserBySession(sessionID) {
-        const session = this.sessions.get(sessionID);
-        if (!session) return null;
-
-        if (session.expiresAt <= Date.now()) {
-            this.sessions.delete(sessionID);
-            return null;
-        }
-
-        return clone(this.users.get(session.userID));
+        return queryOne(
+            `SELECT ${USER_SELECT}
+             FROM users
+             WHERE id = (
+                 SELECT user_id FROM sessions
+                 WHERE id = $1 AND expires_at > now()
+             )`,
+            [hashSessionID(sessionID)]
+        );
     }
 
     // user functions
     async getUserByUsername(username) {
-        for (const user of this.users.values()) {
-            if (user.username === username) return clone(user);
-        }
-        return null;
+        return queryOne(
+            `SELECT id, username, display_name AS "displayName", role,
+                    cursor_color AS "cursorColor", salt, hash
+             FROM users
+             WHERE lower(username) = lower($1)`,
+            [username]
+        );
     }
 
     async getUserByID(userID) {
-        return clone(this.users.get(userID));
+        return queryOne(`SELECT ${USER_SELECT} FROM users WHERE id = $1`, [userID]);
     }
 
     toPublicUser(user) {
@@ -258,429 +314,489 @@ class Database {
 
     // category functions
     async getCategoriesForUser(userID) {
-        const owned = Array.from(this.categories.values()).filter(c => c.userID === userID);
-        return cloneAll(owned);
+        const { rows } = await query(
+            'SELECT id, user_id AS "userID", name, color FROM categories WHERE user_id = $1 ORDER BY name',
+            [userID]
+        );
+        return rows;
     }
 
     async getCategory(categoryID) {
-        return clone(this.categories.get(categoryID));
+        return queryOne('SELECT id, user_id AS "userID", name, color FROM categories WHERE id = $1', [categoryID]);
     }
 
     async createCategory(userID, name, color) {
-        const category = { id: newID('cat'), userID, name, color, createdAt: timestamp() };
-        this.categories.set(category.id, category);
-        return clone(category);
+        return queryOne(
+            `INSERT INTO categories (id, user_id, name, color)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, user_id AS "userID", name, color`,
+            [newID('cat'), userID, name, color]
+        );
     }
 
     async deleteCategory(categoryID) {
-        for (const workspace of this.workspaces.values()) {
-            if (workspace.categoryID === categoryID) workspace.categoryID = null;
-        }
-        return this.categories.delete(categoryID);
+        const { rowCount } = await query('DELETE FROM categories WHERE id = $1', [categoryID]);
+        return rowCount > 0;
     }
 
     // workspace functions
     async getWorkspacesForUser(userID) {
-        const result = [];
-
-        for (const membership of this.memberships.values()) {
-            if (membership.userID !== userID) continue;
-
-            const workspace = this.workspaces.get(membership.workspaceID);
-            if (!workspace) continue;
-
-            const category = workspace.categoryID ? this.categories.get(workspace.categoryID) : null;
-
-            result.push({
-                ...workspace,
-                memberRole: membership.role,
-                categoryName: category?.name ?? null,
-                categoryColor: category?.color ?? null
-            });
-        }
-
-        return result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        const { rows } = await query(
+            `SELECT ${WORKSPACE_SELECT},
+                    m.role AS "memberRole",
+                    cat.name AS "categoryName",
+                    cat.color AS "categoryColor"
+             FROM workspaces w
+             JOIN memberships m ON m.workspace_id = w.id
+             LEFT JOIN categories cat ON cat.id = w.category_id
+             WHERE m.user_id = $1
+             ORDER BY w.created_at DESC`,
+            [userID]
+        );
+        return rows;
     }
 
     async getWorkspace(workspaceID) {
-        return clone(this.workspaces.get(workspaceID));
+        return queryOne(`SELECT ${WORKSPACE_SELECT} FROM workspaces w WHERE w.id = $1`, [workspaceID]);
     }
 
     async createWorkspace(userID, name, categoryID) {
-        const createdAt = timestamp();
-        const workspace = { id: newID('ws'), name, ownerID: userID, categoryID: categoryID ?? null, createdAt };
+        return withTransaction(async client => {
+            if (categoryID) {
+                const { rowCount } = await client.query(
+                    'SELECT 1 FROM categories WHERE id = $1 AND user_id = $2',
+                    [categoryID, userID]
+                );
+                if (rowCount === 0) throw badRequest('That category does not exist');
+            }
 
-        this.workspaces.set(workspace.id, workspace);
-        this.memberships.set(`${workspace.id}:${userID}`, {
-            workspaceID: workspace.id,
-            userID,
-            role: 'owner',
-            createdAt
+            const workspaceID = newID('ws');
+
+            const { rows } = await client.query(
+                `INSERT INTO workspaces (id, name, owner_id, category_id)
+                 VALUES ($1, $2, $3, $4)
+                 RETURNING id, name, owner_id AS "ownerID", category_id AS "categoryID", created_at AS "createdAt"`,
+                [workspaceID, name, userID, categoryID ?? null]
+            );
+
+            await client.query(
+                `INSERT INTO memberships (workspace_id, user_id, role) VALUES ($1, $2, 'owner')`,
+                [workspaceID, userID]
+            );
+
+            await client.query(
+                `INSERT INTO tabs (id, workspace_id, name, color, tab_order)
+                 VALUES ($1, $2, 'Main Board', '#6c8ebf', 0)`,
+                [newID('tab'), workspaceID]
+            );
+
+            const category = categoryID
+                ? (await client.query('SELECT name, color FROM categories WHERE id = $1', [categoryID])).rows[0]
+                : null;
+
+            return {
+                ...rows[0],
+                memberRole: 'owner',
+                categoryName: category?.name ?? null,
+                categoryColor: category?.color ?? null
+            };
         });
-
-        const tab = {
-            id: newID('tab'),
-            workspaceID: workspace.id,
-            name: 'Main Board',
-            color: '#6c8ebf',
-            tabOrder: 0,
-            isArchived: false,
-            updatedAt: createdAt
-        };
-        this.tabs.set(tab.id, tab);
-
-        const category = categoryID ? this.categories.get(categoryID) : null;
-
-        return {
-            ...workspace,
-            memberRole: 'owner',
-            categoryName: category?.name ?? null,
-            categoryColor: category?.color ?? null
-        };
     }
 
     async deleteWorkspace(workspaceID) {
-        for (const task of Array.from(this.tasks.values())) {
-            const list = this.lists.get(task.listID);
-            if (list?.workspaceID === workspaceID) this.tasks.delete(task.id);
-        }
-
-        for (const [id, list] of Array.from(this.lists)) {
-            if (list.workspaceID === workspaceID) this.lists.delete(id);
-        }
-
-        for (const [id, column] of Array.from(this.columns)) {
-            if (column.workspaceID === workspaceID) this.columns.delete(id);
-        }
-
-        for (const [id, tab] of Array.from(this.tabs)) {
-            if (tab.workspaceID === workspaceID) this.tabs.delete(id);
-        }
-
-        for (const [key, membership] of Array.from(this.memberships)) {
-            if (membership.workspaceID === workspaceID) this.memberships.delete(key);
-        }
-
-        return this.workspaces.delete(workspaceID);
+        const { rowCount } = await query('DELETE FROM workspaces WHERE id = $1', [workspaceID]);
+        return rowCount > 0;
     }
 
     // membership functions
     async isMember(workspaceID, userID) {
-        return this.memberships.has(`${workspaceID}:${userID}`);
+        const row = await queryOne(
+            'SELECT 1 AS present FROM memberships WHERE workspace_id = $1 AND user_id = $2',
+            [workspaceID, userID]
+        );
+        return row !== null;
     }
 
     async getMembership(workspaceID, userID) {
-        return clone(this.memberships.get(`${workspaceID}:${userID}`));
+        return queryOne(
+            `SELECT workspace_id AS "workspaceID", user_id AS "userID", role
+             FROM memberships WHERE workspace_id = $1 AND user_id = $2`,
+            [workspaceID, userID]
+        );
     }
 
     async getMembers(workspaceID) {
-        const members = [];
-
-        for (const membership of this.memberships.values()) {
-            if (membership.workspaceID !== workspaceID) continue;
-
-            const user = this.users.get(membership.userID);
-            if (!user) continue;
-
-            members.push({ ...this.toPublicUser(user), memberRole: membership.role });
-        }
-
-        return members;
+        const { rows } = await query(
+            `SELECT u.id, u.username, u.display_name AS "displayName", u.role,
+                    u.cursor_color AS "cursorColor", m.role AS "memberRole"
+             FROM memberships m
+             JOIN users u ON u.id = m.user_id
+             WHERE m.workspace_id = $1
+             ORDER BY m.role = 'owner' DESC, u.display_name`,
+            [workspaceID]
+        );
+        return rows;
     }
 
     async addMember(workspaceID, userID, role = 'member') {
-        const membership = { workspaceID, userID, role, createdAt: timestamp() };
-        this.memberships.set(`${workspaceID}:${userID}`, membership);
-        return clone(membership);
+        return queryOne(
+            `INSERT INTO memberships (workspace_id, user_id, role)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = EXCLUDED.role
+             RETURNING workspace_id AS "workspaceID", user_id AS "userID", role`,
+            [workspaceID, userID, role]
+        );
+    }
+
+    async removeMember(workspaceID, userID) {
+        const { rowCount } = await query(
+            `DELETE FROM memberships
+             WHERE workspace_id = $1 AND user_id = $2
+               AND user_id <> (SELECT owner_id FROM workspaces WHERE id = $1)`,
+            [workspaceID, userID]
+        );
+        return rowCount > 0;
     }
 
     // board retrieval functions
     async getWorkspaceData(workspaceID) {
-        const tabs = Array.from(this.tabs.values()).filter(t => t.workspaceID === workspaceID);
-        const columns = Array.from(this.columns.values()).filter(c => c.workspaceID === workspaceID);
-        const lists = Array.from(this.lists.values()).filter(l => l.workspaceID === workspaceID);
-
-        const listIDs = new Set(lists.map(l => l.id));
-        const tasks = Array.from(this.tasks.values()).filter(t => listIDs.has(t.listID));
+        const [tabs, columns, lists, tasks] = await Promise.all([
+            query(`SELECT ${TAB_SELECT} FROM tabs t WHERE t.workspace_id = $1 ORDER BY t.tab_order`, [workspaceID]),
+            query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE t.workspace_id = $1 ORDER BY c.column_index`, [workspaceID]),
+            query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE t.workspace_id = $1 ORDER BY l.list_order`, [workspaceID]),
+            query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE t.workspace_id = $1 ORDER BY k.task_order`, [workspaceID])
+        ]);
 
         return {
-            tabs: cloneAll(tabs).sort((a, b) => a.tabOrder - b.tabOrder),
-            columns: cloneAll(columns).sort((a, b) => a.columnIndex - b.columnIndex),
-            lists: cloneAll(lists).sort((a, b) => a.listOrder - b.listOrder),
-            tasks: cloneAll(tasks).sort((a, b) => a.taskOrder - b.taskOrder)
+            tabs: tabs.rows,
+            columns: columns.rows,
+            lists: lists.rows,
+            tasks: tasks.rows
         };
     }
 
     // resolution functions
     async getWorkspaceIDForTab(tabID) {
-        return this.tabs.get(tabID)?.workspaceID ?? null;
+        const row = await queryOne('SELECT workspace_id AS "workspaceID" FROM tabs WHERE id = $1', [tabID]);
+        return row?.workspaceID ?? null;
     }
 
     async getWorkspaceIDForColumn(columnID) {
-        return this.columns.get(columnID)?.workspaceID ?? null;
+        const row = await queryOne(
+            `SELECT t.workspace_id AS "workspaceID"
+             FROM board_columns c JOIN tabs t ON t.id = c.tab_id
+             WHERE c.id = $1`,
+            [columnID]
+        );
+        return row?.workspaceID ?? null;
     }
 
     async getWorkspaceIDForList(listID) {
-        return this.lists.get(listID)?.workspaceID ?? null;
+        const row = await queryOne(
+            `SELECT t.workspace_id AS "workspaceID"
+             FROM lists l
+             JOIN board_columns c ON c.id = l.column_id
+             JOIN tabs t ON t.id = c.tab_id
+             WHERE l.id = $1`,
+            [listID]
+        );
+        return row?.workspaceID ?? null;
     }
 
     async getWorkspaceIDForTask(taskID) {
-        const task = this.tasks.get(taskID);
-        if (!task) return null;
-        return this.lists.get(task.listID)?.workspaceID ?? null;
+        const row = await queryOne(
+            `SELECT t.workspace_id AS "workspaceID"
+             FROM tasks k
+             JOIN lists l ON l.id = k.list_id
+             JOIN board_columns c ON c.id = l.column_id
+             JOIN tabs t ON t.id = c.tab_id
+             WHERE k.id = $1`,
+            [taskID]
+        );
+        return row?.workspaceID ?? null;
     }
 
     // tab functions
     async getTab(tabID) {
-        return clone(this.tabs.get(tabID));
+        return queryOne(`SELECT ${TAB_SELECT} FROM tabs t WHERE t.id = $1`, [tabID]);
     }
 
-    async createTab(workspaceID, fields) {
-        const existing = Array.from(this.tabs.values()).filter(t => t.workspaceID === workspaceID);
-        const nextOrder = existing.reduce((max, t) => Math.max(max, t.tabOrder), -1) + 1;
-
-        const tab = {
-            id: newID('tab'),
-            workspaceID,
-            name: fields.name ?? 'New Board',
-            color: fields.color ?? '#6c8ebf',
-            tabOrder: fields.tabOrder ?? nextOrder,
-            isArchived: false,
-            updatedAt: timestamp()
-        };
-
-        this.tabs.set(tab.id, tab);
-        return clone(tab);
+    async createTab(workspaceID, fields = {}) {
+        return queryOne(
+            `INSERT INTO tabs (id, workspace_id, name, color, tab_order)
+             VALUES (
+                 $1, $2,
+                 COALESCE($3, 'New Board'),
+                 COALESCE($4, '#6c8ebf'),
+                 COALESCE($5, (SELECT COALESCE(MAX(tab_order), -1) + 1 FROM tabs WHERE workspace_id = $2))
+             )
+             RETURNING id, workspace_id AS "workspaceID", name, color,
+                       tab_order AS "tabOrder", is_archived AS "isArchived", updated_at AS "updatedAt"`,
+            [newID('tab'), workspaceID, fields.name ?? null, fields.color ?? null, fields.tabOrder ?? null]
+        );
     }
 
     async updateTab(tabID, changes) {
-        const tab = this.tabs.get(tabID);
-        if (!tab) return null;
+        const { assignments, values, nextIndex } = buildAssignments(changes, TAB_FIELDS, 1);
+        if (assignments.length === 0) return this.getTab(tabID);
 
-        const updated = { ...tab, ...pickFields(changes, TAB_FIELDS), updatedAt: timestamp() };
-        this.tabs.set(tabID, updated);
-        return clone(updated);
+        return queryOne(
+            `UPDATE tabs SET ${assignments.join(', ')}, updated_at = now()
+             WHERE id = $${nextIndex}
+             RETURNING id, workspace_id AS "workspaceID", name, color,
+                       tab_order AS "tabOrder", is_archived AS "isArchived", updated_at AS "updatedAt"`,
+            [...values, tabID]
+        );
     }
 
     async deleteTab(tabID) {
-        const removed = emptyChangeSet();
-        const tab = this.tabs.get(tabID);
-        if (!tab) return removed;
+        return withTransaction(async client => {
+            const removed = emptyChangeSet();
 
-        const columnIDs = Array.from(this.columns.values())
-            .filter(c => c.tabID === tabID)
-            .map(c => c.id);
+            const { rows } = await client.query(
+                `SELECT c.id AS column_id, l.id AS list_id, k.id AS task_id
+                 FROM board_columns c
+                 LEFT JOIN lists l ON l.column_id = c.id
+                 LEFT JOIN tasks k ON k.list_id = l.id
+                 WHERE c.tab_id = $1`,
+                [tabID]
+            );
 
-        const listIDs = Array.from(this.lists.values())
-            .filter(l => l.tabID === tabID)
-            .map(l => l.id);
+            const columnIDs = new Set();
+            const listIDs = new Set();
 
-        for (const [id, task] of Array.from(this.tasks)) {
-            if (listIDs.includes(task.listID)) {
-                this.tasks.delete(id);
-                removed.tasks.push(id);
+            for (const row of rows) {
+                if (row.column_id) columnIDs.add(row.column_id);
+                if (row.list_id) listIDs.add(row.list_id);
+                if (row.task_id) removed.tasks.push(row.task_id);
             }
-        }
 
-        for (const id of listIDs) {
-            this.lists.delete(id);
-            removed.lists.push(id);
-        }
+            const { rowCount } = await client.query('DELETE FROM tabs WHERE id = $1', [tabID]);
+            if (rowCount === 0) return emptyChangeSet();
 
-        for (const id of columnIDs) {
-            this.columns.delete(id);
-            removed.columns.push(id);
-        }
+            removed.columns = Array.from(columnIDs);
+            removed.lists = Array.from(listIDs);
+            removed.tabs.push(tabID);
 
-        this.tabs.delete(tabID);
-        removed.tabs.push(tabID);
-
-        return removed;
+            return removed;
+        });
     }
 
     // column functions
     async getColumn(columnID) {
-        return clone(this.columns.get(columnID));
+        return queryOne(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE c.id = $1`, [columnID]);
     }
 
     async getColumnByIndex(tabID, columnIndex) {
-        for (const column of this.columns.values()) {
-            if (column.tabID === tabID && column.columnIndex === columnIndex) return clone(column);
-        }
-        return null;
+        return queryOne(
+            `SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE c.tab_id = $1 AND c.column_index = $2`,
+            [tabID, columnIndex]
+        );
     }
 
-    async createColumn(workspaceID, tabID, columnIndex) {
-        const column = {
-            id: newID('col'),
-            workspaceID,
-            tabID,
-            columnIndex,
-            updatedAt: timestamp()
-        };
+    async createColumn(tabID, columnIndex) {
+        await query(
+            `INSERT INTO board_columns (id, tab_id, column_index)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (tab_id, column_index) DO NOTHING`,
+            [newID('col'), tabID, columnIndex]
+        );
 
-        this.columns.set(column.id, column);
-        return clone(column);
+        return this.getColumnByIndex(tabID, columnIndex);
     }
 
     async deleteColumn(columnID) {
-        const removed = emptyChangeSet();
-        if (!this.columns.has(columnID)) return removed;
+        return withTransaction(async client => {
+            const removed = emptyChangeSet();
 
-        const listIDs = Array.from(this.lists.values())
-            .filter(l => l.columnID === columnID)
-            .map(l => l.id);
+            const { rows } = await client.query(
+                `SELECT l.id AS list_id, k.id AS task_id
+                 FROM lists l
+                 LEFT JOIN tasks k ON k.list_id = l.id
+                 WHERE l.column_id = $1`,
+                [columnID]
+            );
 
-        for (const [id, task] of Array.from(this.tasks)) {
-            if (listIDs.includes(task.listID)) {
-                this.tasks.delete(id);
-                removed.tasks.push(id);
+            const listIDs = new Set();
+
+            for (const row of rows) {
+                if (row.list_id) listIDs.add(row.list_id);
+                if (row.task_id) removed.tasks.push(row.task_id);
             }
-        }
 
-        for (const id of listIDs) {
-            this.lists.delete(id);
-            removed.lists.push(id);
-        }
+            const { rowCount } = await client.query('DELETE FROM board_columns WHERE id = $1', [columnID]);
+            if (rowCount === 0) return emptyChangeSet();
 
-        this.columns.delete(columnID);
-        removed.columns.push(columnID);
+            removed.lists = Array.from(listIDs);
+            removed.columns.push(columnID);
 
-        return removed;
+            return removed;
+        });
     }
 
     // list functions
     async getList(listID) {
-        return clone(this.lists.get(listID));
+        return queryOne(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = $1`, [listID]);
     }
 
-    async createList(workspaceID, tabID, columnID, fields = {}) {
-        const siblings = Array.from(this.lists.values()).filter(l => l.columnID === columnID);
-        const nextOrder = siblings.reduce((max, l) => Math.max(max, l.listOrder), -1) + 1;
+    async createList(columnID, fields = {}) {
+        const created = await queryOne(
+            `INSERT INTO lists (id, column_id, name, list_order, category, color)
+             VALUES (
+                 $1, $2,
+                 COALESCE($3, 'New list'),
+                 COALESCE($4, (SELECT COALESCE(MAX(list_order), -1) + 1 FROM lists WHERE column_id = $2)),
+                 $5, $6
+             )
+             RETURNING id`,
+            [newID('list'), columnID, fields.name ?? null, fields.listOrder ?? null, fields.category ?? null, fields.color ?? null]
+        );
 
-        const list = {
-            id: newID('list'),
-            workspaceID,
-            tabID,
-            columnID,
-            name: fields.name ?? 'New list',
-            listOrder: fields.listOrder ?? nextOrder,
-            category: fields.category ?? null,
-            color: fields.color ?? null,
-            updatedAt: timestamp()
-        };
-
-        this.lists.set(list.id, list);
-        return clone(list);
+        return created ? this.getList(created.id) : null;
     }
 
     async updateList(listID, changes) {
-        const list = this.lists.get(listID);
-        if (!list) return null;
+        const { assignments, values, nextIndex } = buildAssignments(changes, LIST_FIELDS, 1);
+        if (assignments.length === 0) return this.getList(listID);
 
-        const updated = { ...list, ...pickFields(changes, LIST_FIELDS), updatedAt: timestamp() };
-        this.lists.set(listID, updated);
-        return clone(updated);
+        const updated = await queryOne(
+            `UPDATE lists SET ${assignments.join(', ')}, updated_at = now()
+             WHERE id = $${nextIndex}
+             RETURNING id`,
+            [...values, listID]
+        );
+
+        return updated ? this.getList(updated.id) : null;
     }
 
     async deleteList(listID) {
-        const removed = emptyChangeSet();
-        if (!this.lists.has(listID)) return removed;
+        return withTransaction(async client => {
+            const removed = emptyChangeSet();
 
-        for (const [id, task] of Array.from(this.tasks)) {
-            if (task.listID === listID) {
-                this.tasks.delete(id);
-                removed.tasks.push(id);
-            }
-        }
+            const { rows } = await client.query('SELECT id FROM tasks WHERE list_id = $1', [listID]);
 
-        this.lists.delete(listID);
-        removed.lists.push(listID);
+            const { rowCount } = await client.query('DELETE FROM lists WHERE id = $1', [listID]);
+            if (rowCount === 0) return emptyChangeSet();
 
-        return removed;
+            removed.tasks = rows.map(row => row.id);
+            removed.lists.push(listID);
+
+            return removed;
+        });
     }
 
     async reorderLists(updates) {
-        const applied = [];
-        const stamp = timestamp();
+        if (!updates || updates.length === 0) return [];
 
-        for (const update of updates) {
-            const list = this.lists.get(update.id);
-            if (!list) continue;
+        const ids = updates.map(update => update.id);
+        const columnIDs = updates.map(update => update.columnID);
+        const orders = updates.map(update => update.listOrder);
 
-            const next = { ...list, columnID: update.columnID, listOrder: update.listOrder, updatedAt: stamp };
-            this.lists.set(next.id, next);
-            applied.push(clone(next));
-        }
+        const { rows } = await query(
+            `UPDATE lists AS l
+             SET column_id = u.column_id, list_order = u.list_order, updated_at = now()
+             FROM unnest($1::text[], $2::text[], $3::int[]) AS u(id, column_id, list_order)
+             WHERE l.id = u.id
+             RETURNING l.id`,
+            [ids, columnIDs, orders]
+        );
 
-        return applied;
+        if (rows.length === 0) return [];
+
+        const { rows: records } = await query(
+            `SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = ANY($1::text[]) ORDER BY l.list_order`,
+            [rows.map(row => row.id)]
+        );
+
+        return records;
     }
 
     // task functions
     async getTask(taskID) {
-        return clone(this.tasks.get(taskID));
+        return queryOne(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = $1`, [taskID]);
     }
 
     async createTask(listID, fields = {}) {
-        const siblings = Array.from(this.tasks.values()).filter(t => t.listID === listID);
-        const nextOrder = siblings.reduce((max, t) => Math.max(max, t.taskOrder), -1) + 1;
+        const created = await queryOne(
+            `INSERT INTO tasks (id, list_id, title, description, task_order, category, color)
+             VALUES (
+                 $1, $2,
+                 COALESCE($3, ''),
+                 COALESCE($4, ''),
+                 COALESCE($5, (SELECT COALESCE(MAX(task_order), -1) + 1 FROM tasks WHERE list_id = $2)),
+                 $6, $7
+             )
+             RETURNING id`,
+            [newID('task'), listID, fields.title ?? null, fields.description ?? null,
+             fields.taskOrder ?? null, fields.category ?? null, fields.color ?? null]
+        );
 
-        const task = {
-            id: newID('task'),
-            listID,
-            title: fields.title ?? '',
-            description: fields.description ?? '',
-            isCompleted: false,
-            taskOrder: fields.taskOrder ?? nextOrder,
-            category: fields.category ?? null,
-            color: fields.color ?? null,
-            deadline: '',
-            subtasks: [],
-            assignedUsers: [],
-            updatedAt: timestamp()
-        };
-
-        this.tasks.set(task.id, task);
-        return clone(task);
+        return created ? this.getTask(created.id) : null;
     }
 
     async updateTask(taskID, changes, expectedUpdatedAt) {
-        const task = this.tasks.get(taskID);
-        if (!task) return { error: 'Task not found', status: 404 };
+        const applied = pickFields(changes, TASK_FIELDS);
+        const { assignments, values, nextIndex } = buildAssignments(applied, TASK_FIELDS, 1);
 
-        if (expectedUpdatedAt !== undefined && task.updatedAt !== expectedUpdatedAt) {
-            return { error: 'This task was changed by someone else', status: 409, record: clone(task) };
+        if (assignments.length === 0) {
+            const record = await this.getTask(taskID);
+            return record ? { record } : { error: 'Task not found', status: 404 };
         }
 
-        const applied = pickFields(changes, TASK_FIELDS);
-        if (applied.isCompleted !== undefined) applied.isCompleted = Boolean(applied.isCompleted);
+        const conditions = [`id = $${nextIndex}`];
+        const params = [...values, taskID];
 
-        const updated = { ...task, ...applied, updatedAt: timestamp() };
-        this.tasks.set(taskID, updated);
+        if (expectedUpdatedAt !== undefined) {
+            conditions.push(`updated_at = $${nextIndex + 1}::timestamptz`);
+            params.push(expectedUpdatedAt);
+        }
 
-        return { record: clone(updated) };
+        const updated = await queryOne(
+            `UPDATE tasks SET ${assignments.join(', ')}, updated_at = now()
+             WHERE ${conditions.join(' AND ')}
+             RETURNING id`,
+            params
+        );
+
+        if (updated) return { record: await this.getTask(updated.id) };
+
+        const current = await this.getTask(taskID);
+        if (!current) return { error: 'Task not found', status: 404 };
+
+        return { error: 'This task was changed by someone else', status: 409, record: current };
     }
 
     async deleteTask(taskID) {
         const removed = emptyChangeSet();
-        if (this.tasks.delete(taskID)) removed.tasks.push(taskID);
+        const { rowCount } = await query('DELETE FROM tasks WHERE id = $1', [taskID]);
+        if (rowCount > 0) removed.tasks.push(taskID);
         return removed;
     }
 
     async reorderTasks(updates) {
-        const applied = [];
-        const stamp = timestamp();
+        if (!updates || updates.length === 0) return [];
 
-        for (const update of updates) {
-            const task = this.tasks.get(update.id);
-            if (!task) continue;
+        const ids = updates.map(update => update.id);
+        const listIDs = updates.map(update => update.listID);
+        const orders = updates.map(update => update.taskOrder);
 
-            const next = { ...task, listID: update.listID, taskOrder: update.taskOrder, updatedAt: stamp };
-            this.tasks.set(next.id, next);
-            applied.push(clone(next));
-        }
+        const { rows } = await query(
+            `UPDATE tasks AS k
+             SET list_id = u.list_id, task_order = u.task_order, updated_at = now()
+             FROM unnest($1::text[], $2::text[], $3::int[]) AS u(id, list_id, task_order)
+             WHERE k.id = u.id
+             RETURNING k.id`,
+            [ids, listIDs, orders]
+        );
 
-        return applied;
+        if (rows.length === 0) return [];
+
+        const { rows: records } = await query(
+            `SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = ANY($1::text[]) ORDER BY k.task_order`,
+            [rows.map(row => row.id)]
+        );
+
+        return records;
     }
 }
 
