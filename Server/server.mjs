@@ -13,6 +13,7 @@ import Authorization from './modules/Authorization.mjs';
 import createNetworkingRouter from './modules/Networking.mjs';
 import createKanbanRouter from './api/KanbanAPI.mjs';
 import createWorkspaceRouter from './api/WorkspaceAPI.mjs';
+import createAdminRouter from './api/AdminAPI.mjs';
 
 // configuration constants
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -153,6 +154,7 @@ class Server {
         this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter(this.authz));
         this.app.use('/api/kanban', this.authn.authenticate, createKanbanRouter(this.authz));
         this.app.use('/api/workspaces', this.authn.authenticate, createWorkspaceRouter(this.authz));
+        this.app.use('/api/admin', this.authn.authenticate, createAdminRouter(this.authz));
 
         this.setupClientRoutes();
     }

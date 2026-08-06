@@ -67,6 +67,15 @@ class Authorization {
     }
 
     // convenience middleware
+    requireAdmin() {
+        return (req, res, next) => {
+            if (req.user?.role !== 'admin') {
+                return res.status(404).json({ error: 'Not found' });
+            }
+            next();
+        };
+    }
+
     workspaceParam(field = 'workspaceID') {
         return this.requireMembership(resolvers.param(field));
     }

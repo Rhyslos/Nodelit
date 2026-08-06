@@ -1,0 +1,131 @@
+/* layout styles */
+.admin-root {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+}
+
+.admin-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+}
+
+.admin-section {
+    margin-bottom: 36px;
+}
+
+/* typography styles */
+.admin-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 28px;
+    font-weight: 400;
+    margin: 0;
+}
+
+.admin-subtitle {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+}
+
+.admin-empty {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+/* form styles */
+.admin-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.admin-input {
+    flex: 1;
+    min-width: 160px;
+    padding: 10px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: white;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 14px;
+    color: var(--ink);
+    outline: none;
+}
+
+.admin-input:focus {
+    border-color: var(--accent);
+}
+
+/* button styles */
+.admin-btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 10px;
+    background: var(--ink);
+    color: white;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.admin-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.admin-btn--danger {
+    background: var(--accent);
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+/* table styles */
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.admin-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+.admin-table td {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* status styles */
+.admin-error,
+.admin-notice {
+    font-size: 13px;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 18px;
+}
+
+.admin-error {
+    color: var(--accent);
+    background: var(--accent-lt);
+    border: 1px solid rgba(200, 80, 42, 0.2);
+}
+
+.admin-notice {
+    color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--border);
+}

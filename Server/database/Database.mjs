@@ -137,6 +137,12 @@ function badRequest(message) {
     return error;
 }
 
+async function derivePassword(password) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const derived = await scrypt(password, salt, KEY_LENGTH);
+    return { salt, hash: derived.toString('hex') };
+}
+
 function buildAssignments(changes, allowed, startIndex) {
     const assignments = [];
     const values = [];
@@ -222,6 +228,11 @@ class Database {
 
     // seed functions
     async seed() {
+        if (process.env.SEED_DEMO_DATA === 'false') return;
+
+        const existing = await queryOne('SELECT 1 AS present FROM users LIMIT 1');
+        if (existing) return;
+
         const password = process.env.SEED_PASSWORD ?? 'k';
 
         if (process.env.NODE_ENV === 'production' && !process.env.SEED_PASSWORD) {
@@ -235,14 +246,13 @@ class Database {
     }
 
     async insertSeedUser({ id, username, password, displayName, role, cursorColor }) {
-        const salt = crypto.randomBytes(16).toString('hex');
-        const derived = await scrypt(password, salt, KEY_LENGTH);
+        const { salt, hash } = await derivePassword(password);
 
         await query(
             `INSERT INTO users (id, username, display_name, role, cursor_color, salt, hash)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT (id) DO NOTHING`,
-            [id, username, displayName, role, cursorColor, salt, derived.toString('hex')]
+            [id, username, displayName, role, cursorColor, salt, hash]
         );
     }
 
@@ -368,6 +378,80 @@ class Database {
 
     toPublicUser(user) {
         return user ? pickFields(user, PUBLIC_USER_FIELDS) : null;
+    }
+
+    // administration functions
+    async getAllUsers() {
+        const { rows } = await query(
+            `SELECT u.id, u.username, u.display_name AS "displayName", u.role,
+                    u.cursor_color AS "cursorColor", u.created_at AS "createdAt",
+                    (SELECT COUNT(*)::int FROM workspaces w WHERE w.owner_id = u.id) AS "ownedWorkspaces",
+                    (SELECT COUNT(*)::int FROM memberships m WHERE m.user_id = u.id) AS "memberships"
+             FROM users u
+             ORDER BY u.created_at`
+        );
+        return rows;
+    }
+
+    async countAdmins() {
+        const row = await queryOne(`SELECT COUNT(*)::int AS total FROM users WHERE role = 'admin'`);
+        return row?.total ?? 0;
+    }
+
+    async createUser({ username, password, displayName, role = 'member', cursorColor = '#c8502a' }) {
+        const { salt, hash } = await derivePassword(password);
+
+        try {
+            return await queryOne(
+                `INSERT INTO users (id, username, display_name, role, cursor_color, salt, hash)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 RETURNING id, username, display_name AS "displayName", role,
+                           cursor_color AS "cursorColor", created_at AS "createdAt"`,
+                [newID('user'), username, displayName, role, cursorColor, salt, hash]
+            );
+        } catch (error) {
+            if (error.code === '23505') {
+                const conflict = new Error('That username is already taken');
+                conflict.status = 409;
+                throw conflict;
+            }
+            throw error;
+        }
+    }
+
+    async deleteUser(userID) {
+        const { rowCount } = await query('DELETE FROM users WHERE id = $1', [userID]);
+        return rowCount > 0;
+    }
+
+    async exportAll() {
+        const [users, categories, workspaces, memberships, tabs, columns, lists, tasks] = await Promise.all([
+            query(`SELECT id, username, display_name AS "displayName", role,
+                          cursor_color AS "cursorColor", created_at AS "createdAt"
+                   FROM users ORDER BY created_at`),
+            query('SELECT id, user_id AS "userID", name, color FROM categories ORDER BY id'),
+            query(`SELECT id, name, owner_id AS "ownerID", category_id AS "categoryID",
+                          created_at AS "createdAt"
+                   FROM workspaces ORDER BY created_at`),
+            query('SELECT workspace_id AS "workspaceID", user_id AS "userID", role FROM memberships ORDER BY workspace_id'),
+            query(`SELECT ${TAB_SELECT} FROM tabs t ORDER BY t.workspace_id, t.tab_order`),
+            query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} ORDER BY c.tab_id, c.column_index`),
+            query(`SELECT ${LIST_SELECT} ${LIST_FROM} ORDER BY l.column_id, l.list_order`),
+            query(`SELECT ${TASK_SELECT} ${TASK_FROM} ORDER BY k.list_id, k.task_order`)
+        ]);
+
+        return {
+            exportedAt: new Date().toISOString(),
+            version: 1,
+            users: users.rows,
+            categories: categories.rows,
+            workspaces: workspaces.rows,
+            memberships: memberships.rows,
+            tabs: tabs.rows,
+            columns: columns.rows,
+            lists: lists.rows,
+            tasks: tasks.rows
+        };
     }
 
     // category functions

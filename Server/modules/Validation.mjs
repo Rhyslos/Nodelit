@@ -4,6 +4,10 @@ const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BATCH_SIZE = 200;
 const MAX_SUBTASKS = 50;
+const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,32}$/;
+const MIN_PASSWORD_LENGTH = 12;
+const MAX_PASSWORD_LENGTH = 200;
+const USER_ROLES = ['admin', 'member'];
 
 // error classes
 export class ValidationError extends Error {
@@ -151,4 +155,29 @@ export function requireListReorder(updates) {
         columnID: requireID(update?.columnID, 'updates.columnID'),
         listOrder: requireInteger(update?.listOrder, 'updates.listOrder')
     }));
+}
+
+// account validation functions
+export function requireUsername(value, field = 'username') {
+    if (typeof value !== 'string' || !USERNAME_PATTERN.test(value)) {
+        throw new ValidationError(`${field} must be 3 to 32 characters, letters, numbers, underscore or hyphen only`);
+    }
+    return value;
+}
+
+export function requirePassword(value, field = 'password') {
+    if (typeof value !== 'string' || value.length < MIN_PASSWORD_LENGTH) {
+        throw new ValidationError(`${field} must be at least ${MIN_PASSWORD_LENGTH} characters`);
+    }
+    if (value.length > MAX_PASSWORD_LENGTH) {
+        throw new ValidationError(`${field} cannot be longer than ${MAX_PASSWORD_LENGTH} characters`);
+    }
+    return value;
+}
+
+export function requireRole(value, field = 'role') {
+    if (!USER_ROLES.includes(value)) {
+        throw new ValidationError(`${field} must be one of ${USER_ROLES.join(', ')}`);
+    }
+    return value;
 }

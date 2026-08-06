@@ -7,6 +7,7 @@ import Navbar from './components/navbar/Navbar';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Kanban from './pages/Kanban';
+import Admin from './pages/Admin';
 
 // application constants
 export const appName = 'Nodelit';
@@ -18,6 +19,16 @@ function ProtectedRoute() {
 
     if (loading) return <div className="route-loading">Loading…</div>;
     if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+
+    return <Outlet />;
+}
+
+function AdminRoute() {
+    const { user, loading } = useAuth();
+
+    if (loading) return <div className="route-loading">Loading…</div>;
+    if (!user) return <Navigate to="/login" replace />;
+    if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
 
     return <Outlet />;
 }
@@ -50,6 +61,10 @@ function AppLayout() {
             <Routes>
                 <Route element={<PublicRoute />}>
                     <Route path="/login" element={<Login />} />
+                </Route>
+
+                <Route element={<AdminRoute />}>
+                    <Route path="/admin" element={<Admin />} />
                 </Route>
 
                 <Route element={<ProtectedRoute />}>
