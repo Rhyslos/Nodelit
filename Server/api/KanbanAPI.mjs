@@ -36,32 +36,44 @@ function publish(req, changes) {
     broadcastKanbanChange(req.workspaceID, buildDelta(changes), originOf(req));
 }
 
+// configuration constants
+const EDIT_ROLES = new Set(['owner', 'member']);
+
 // router configuration
 export default function createKanbanRouter(authz) {
     const router = Router();
 
     // batch scope middleware
-    function resolveBatchScope(resolveEntity, extraFields = []) {
+    function resolveBatchScope(resolveEntities, targetField, resolveTargets) {
         return async (req, res, next) => {
             try {
                 const updates = req.batchUpdates;
-                const anchor = await resolveEntity(updates[0].id);
 
-                if (!anchor) return res.status(404).json({ error: 'Not found' });
-                if (!await db.isMember(anchor, req.user.id)) return res.status(404).json({ error: 'Not found' });
+                const entityIDs = [...new Set(updates.map(update => update.id))];
+                const entities = await resolveEntities(entityIDs);
 
-                for (const update of updates.slice(1)) {
-                    const owner = await resolveEntity(update.id);
-                    if (owner !== anchor) return res.status(403).json({ error: 'Forbidden' });
+                if (entities.found !== entityIDs.length || entities.workspaceIDs.length !== 1) {
+                    return res.status(404).json({ error: 'Not found' });
                 }
 
-                for (const field of extraFields) {
-                    for (const update of updates) {
-                        const owner = field === 'listID'
-                            ? await db.getWorkspaceIDForList(update.listID)
-                            : await db.getWorkspaceIDForColumn(update.columnID);
-                        if (owner !== anchor) return res.status(403).json({ error: 'Forbidden' });
-                    }
+                const anchor = entities.workspaceIDs[0];
+                const membership = await db.getMembership(anchor, req.user.id);
+
+                if (!membership) {
+                    return res.status(404).json({ error: 'Not found' });
+                }
+
+                if (!EDIT_ROLES.has(membership.role)) {
+                    return res.status(403).json({ error: 'You have read only access to this workspace' });
+                }
+
+                const targetIDs = [...new Set(updates.map(update => update[targetField]))];
+                const targets = await resolveTargets(targetIDs);
+
+                if (targets.found !== targetIDs.length
+                    || targets.workspaceIDs.length !== 1
+                    || targets.workspaceIDs[0] !== anchor) {
+                    return res.status(403).json({ error: 'Forbidden' });
                 }
 
                 req.workspaceID = anchor;
@@ -84,7 +96,7 @@ export default function createKanbanRouter(authz) {
     }
 
     // tab routes
-    router.post('/tabs', authz.workspaceBody(), async (req, res, next) => {
+    router.post('/tabs', authz.workspaceBodyEdit(), async (req, res, next) => {
         try {
             const tab = await db.createTab(req.workspaceID, {
                 name: optionalText(req.body?.name, 'name', 80) ?? 'New Board',
@@ -99,7 +111,7 @@ export default function createKanbanRouter(authz) {
         }
     });
 
-    router.put('/tabs/:id', authz.tabAccess(), async (req, res, next) => {
+    router.put('/tabs/:id', authz.tabEdit(), async (req, res, next) => {
         try {
             const changes = {
                 name: optionalText(req.body?.name, 'name', 80),
@@ -118,7 +130,7 @@ export default function createKanbanRouter(authz) {
         }
     });
 
-    router.delete('/tabs/:id', authz.tabAccess(), async (req, res, next) => {
+    router.delete('/tabs/:id', authz.tabEdit(), async (req, res, next) => {
         try {
             const removed = await db.deleteTab(req.params.id);
 
@@ -130,7 +142,7 @@ export default function createKanbanRouter(authz) {
     });
 
     // column routes
-    router.post('/columns', authz.tabAccess('tabID'), async (req, res, next) => {
+    router.post('/columns', authz.tabEdit('tabID'), async (req, res, next) => {
         try {
             const tabID = requireID(req.body?.tabID, 'tabID');
             const columnIndex = requireInteger(req.body?.columnIndex, 'columnIndex', { min: 0, max: 500 });
@@ -147,7 +159,7 @@ export default function createKanbanRouter(authz) {
         }
     });
 
-    router.delete('/columns/:id', authz.columnAccess(), async (req, res, next) => {
+    router.delete('/columns/:id', authz.columnEdit(), async (req, res, next) => {
         try {
             const { removed, columns } = await db.deleteColumn(req.params.id);
 
@@ -159,7 +171,7 @@ export default function createKanbanRouter(authz) {
     });
 
     // list routes
-    router.post('/lists', authz.columnAccess('columnID'), async (req, res, next) => {
+    router.post('/lists', authz.columnEdit('columnID'), async (req, res, next) => {
         try {
             const columnID = requireID(req.body?.columnID, 'columnID');
 
@@ -179,7 +191,7 @@ export default function createKanbanRouter(authz) {
 
     router.put('/lists/reorder',
         parseBatch(requireListReorder),
-        resolveBatchScope(id => db.getWorkspaceIDForList(id), ['columnID']),
+        resolveBatchScope(ids => db.getWorkspaceScopeForLists(ids), 'columnID', ids => db.getWorkspaceScopeForColumns(ids)),
         async (req, res, next) => {
             try {
                 const { lists, columns, removed } = await db.reorderLists(req.batchUpdates);
@@ -191,7 +203,7 @@ export default function createKanbanRouter(authz) {
             }
         });
 
-    router.put('/lists/:id', authz.listAccess(), async (req, res, next) => {
+    router.put('/lists/:id', authz.listEdit(), async (req, res, next) => {
         try {
             const changes = {
                 name: optionalText(req.body?.name, 'name', 80),
@@ -210,7 +222,7 @@ export default function createKanbanRouter(authz) {
         }
     });
 
-    router.delete('/lists/:id', authz.listAccess(), async (req, res, next) => {
+    router.delete('/lists/:id', authz.listEdit(), async (req, res, next) => {
         try {
             const { removed, columns } = await db.deleteList(req.params.id);
 
@@ -222,7 +234,7 @@ export default function createKanbanRouter(authz) {
     });
 
     // task routes
-    router.post('/tasks', authz.listAccess('listID'), async (req, res, next) => {
+    router.post('/tasks', authz.listEdit('listID'), async (req, res, next) => {
         try {
             const task = await db.createTask(requireID(req.body?.listID, 'listID'), {
                 title: optionalText(req.body?.title, 'title', 200) ?? '',
@@ -240,7 +252,7 @@ export default function createKanbanRouter(authz) {
 
     router.put('/tasks/reorder',
         parseBatch(requireTaskReorder),
-        resolveBatchScope(id => db.getWorkspaceIDForTask(id), ['listID']),
+        resolveBatchScope(ids => db.getWorkspaceScopeForTasks(ids), 'listID', ids => db.getWorkspaceScopeForLists(ids)),
         async (req, res, next) => {
             try {
                 const tasks = await db.reorderTasks(req.batchUpdates);
@@ -252,7 +264,7 @@ export default function createKanbanRouter(authz) {
             }
         });
 
-    router.put('/tasks/:id', authz.taskAccess(), async (req, res, next) => {
+    router.put('/tasks/:id', authz.taskEdit(), async (req, res, next) => {
         try {
             const changes = {
                 title: optionalText(req.body?.title, 'title', 200),
@@ -278,7 +290,7 @@ export default function createKanbanRouter(authz) {
         }
     });
 
-    router.delete('/tasks/:id', authz.taskAccess(), async (req, res, next) => {
+    router.delete('/tasks/:id', authz.taskEdit(), async (req, res, next) => {
         try {
             const removed = await db.deleteTask(req.params.id);
 
@@ -292,7 +304,8 @@ export default function createKanbanRouter(authz) {
     // retrieval routes
     router.get('/:workspaceID', authz.workspaceParam(), async (req, res, next) => {
         try {
-            res.json(await db.getWorkspaceData(req.workspaceID));
+            const board = await db.getWorkspaceData(req.workspaceID);
+            res.json({ ...board, memberRole: req.membership.role });
         } catch (error) {
             next(error);
         }

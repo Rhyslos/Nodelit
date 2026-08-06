@@ -665,6 +665,34 @@ class Database {
         return rows;
     }
 
+    async getUsersForWorkspace(workspaceID) {
+        const { rows } = await query(
+            `SELECT u.id, u.username, u.display_name AS "displayName",
+                    u.cursor_color AS "cursorColor", m.role AS "memberRole"
+             FROM users u
+             LEFT JOIN memberships m ON m.user_id = u.id AND m.workspace_id = $1
+             WHERE u.deleted_at IS NULL
+             ORDER BY u.display_name`,
+            [workspaceID]
+        );
+        return rows;
+    }
+
+    async setMemberRole(workspaceID, userID, role) {
+        const owner = await queryOne(
+            'SELECT owner_id AS "ownerID" FROM workspaces WHERE id = $1',
+            [workspaceID]
+        );
+
+        if (owner?.ownerID === userID) {
+            const error = new Error('The workspace owner\'s access cannot be changed');
+            error.status = 400;
+            throw error;
+        }
+
+        return this.addMember(workspaceID, userID, role);
+    }
+
     async addMember(workspaceID, userID, role = 'member') {
         return queryOne(
             `INSERT INTO memberships (workspace_id, user_id, role)

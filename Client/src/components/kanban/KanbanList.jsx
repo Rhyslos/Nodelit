@@ -9,6 +9,7 @@ export default function KanbanList({
     tasks,
     categories,
     isFocused,
+    canEdit = true,
     dragging,
     insertionPoint,
     isDraggingList,
@@ -89,13 +90,15 @@ export default function KanbanList({
                 ref={listRef}
             >
                 <div className="kanban-list-header">
-                    <div
-                        className="kanban-list-drag-handle"
-                        onMouseDown={e => onStartListDrag(e, list, listRef.current)}
-                        title="Drag to move list"
-                    >
-                        ⋮⋮
-                    </div>
+                    {canEdit && (
+                        <div
+                            className="kanban-list-drag-handle"
+                            onMouseDown={e => onStartListDrag(e, list, listRef.current)}
+                            title="Drag to move list"
+                        >
+                            ⋮⋮
+                        </div>
+                    )}
 
                     {categoryData && (
                         <span
@@ -107,7 +110,7 @@ export default function KanbanList({
                     <span
                         ref={nameRef}
                         className="kanban-list-name"
-                        contentEditable
+                        contentEditable={canEdit}
                         suppressContentEditableWarning
                         onBlur={handleNameBlur}
                         onKeyDown={handleNameKeyDown}
@@ -128,6 +131,7 @@ export default function KanbanList({
                                     task={task}
                                     categories={categories}
                                     isDragging={dragging === task.id}
+                                    canEdit={canEdit}
                                     onUpdate={changes => onUpdateTask(task.id, changes)}
                                     onStartDrag={onStartTaskDrag}
                                     onOpen={() => onOpenTask(task)}
@@ -143,9 +147,11 @@ export default function KanbanList({
                     )}
                 </div>
 
-                <button className="kanban-add-task-btn" onClick={onAddTask}>
-                    + Add task
-                </button>
+                {canEdit && (
+                    <button className="kanban-add-task-btn" onClick={onAddTask}>
+                        + Add task
+                    </button>
+                )}
             </div>
         </AnimatedRemoval>
     );

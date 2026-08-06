@@ -9,6 +9,7 @@ const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_LENGTH = 200;
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/;
 const USER_ROLES = ['admin', 'member'];
+const MEMBER_ROLES = ['member', 'viewer'];
 
 // error classes
 export class ValidationError extends Error {
@@ -182,6 +183,13 @@ export function requirePassword(value, field = 'password') {
 export function requireRole(value, field = 'role') {
     if (!USER_ROLES.includes(value)) {
         throw new ValidationError(`${field} must be one of ${USER_ROLES.join(', ')}`);
+    }
+    return value;
+}
+
+export function requireMemberRole(value, field = 'role') {
+    if (!MEMBER_ROLES.includes(value)) {
+        throw new ValidationError(`${field} must be one of ${MEMBER_ROLES.join(', ')}`);
     }
     return value;
 }

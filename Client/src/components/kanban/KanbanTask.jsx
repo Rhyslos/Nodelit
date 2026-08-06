@@ -8,6 +8,7 @@ export default function KanbanTask({
     categories,
     isDragging,
     isClone,
+    canEdit = true,
     onUpdate,
     onStartDrag,
     onOpen,
@@ -81,13 +82,14 @@ export default function KanbanTask({
                         type="checkbox"
                         className="kanban-check kanban-task-checkbox"
                         checked={!!task.isCompleted}
+                        disabled={!canEdit}
                         onChange={e => onUpdate({ isCompleted: e.target.checked })}
                     />
 
                     <span
                         ref={titleRef}
                         className="kanban-task-title"
-                        contentEditable={!isClone}
+                        contentEditable={canEdit && !isClone}
                         suppressContentEditableWarning
                         onBlur={handleTitleBlur}
                         onKeyDown={handleTitleKeyDown}
@@ -99,13 +101,15 @@ export default function KanbanTask({
                         {task.title}
                     </span>
 
-                    <div
-                        className="kanban-task-drag-handle"
-                        onMouseDown={e => onStartDrag(e, task, taskRef.current)}
-                        title="Drag to move"
-                    >
-                        ⋮⋮
-                    </div>
+                    {canEdit && (
+                        <div
+                            className="kanban-task-drag-handle"
+                            onMouseDown={e => onStartDrag(e, task, taskRef.current)}
+                            title="Drag to move"
+                        >
+                            ⋮⋮
+                        </div>
+                    )}
                 </div>
 
                 <div className="kanban-task-indicators">
@@ -137,7 +141,7 @@ export default function KanbanTask({
                         {task.category || 'No category'}
                     </span>
 
-                    {!isClone && (
+                    {canEdit && !isClone && (
                         <button
                             className="kanban-task-cat-btn"
                             onClick={e => { e.stopPropagation(); setShowCatDropdown(o => !o); }}

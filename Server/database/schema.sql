@@ -58,9 +58,14 @@ CREATE INDEX IF NOT EXISTS workspaces_category_id_idx ON workspaces (category_id
 CREATE TABLE IF NOT EXISTS memberships (
     workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     user_id      text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role         text NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
+    role         text NOT NULL DEFAULT 'member',
     PRIMARY KEY (workspace_id, user_id)
 );
+
+ALTER TABLE memberships DROP CONSTRAINT IF EXISTS memberships_role_check;
+
+ALTER TABLE memberships ADD CONSTRAINT memberships_role_check
+    CHECK (role IN ('owner', 'member', 'viewer'));
 
 CREATE INDEX IF NOT EXISTS memberships_user_id_idx ON memberships (user_id);
 

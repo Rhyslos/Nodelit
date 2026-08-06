@@ -1,6 +1,9 @@
 // authorization imports
 import db from '../database/Database.mjs';
 
+// configuration constants
+const EDIT_ROLES = new Set(['owner', 'member']);
+
 // resolver functions
 const resolvers = {
     param: field => async req => req.params[field],
@@ -15,7 +18,7 @@ const resolvers = {
 class Authorization {
 
     // middleware factories
-    requireMembership(resolve) {
+    requireAccess(resolve, { write = false } = {}) {
         return async (req, res, next) => {
             try {
                 const workspaceID = await resolve(req);
@@ -30,12 +33,19 @@ class Authorization {
                     return res.status(404).json({ error: 'Not found' });
                 }
 
-                if (!await db.isMember(workspaceID, req.user.id)) {
+                const membership = await db.getMembership(workspaceID, req.user.id);
+
+                if (!membership) {
                     return res.status(404).json({ error: 'Not found' });
+                }
+
+                if (write && !EDIT_ROLES.has(membership.role)) {
+                    return res.status(403).json({ error: 'You have read only access to this workspace' });
                 }
 
                 req.workspaceID = workspaceID;
                 req.workspace = workspace;
+                req.membership = membership;
                 next();
             } catch (error) {
                 next(error);
@@ -43,13 +53,24 @@ class Authorization {
         };
     }
 
+    requireMembership(resolve) {
+        return this.requireAccess(resolve);
+    }
+
+    requireEditor(resolve) {
+        return this.requireAccess(resolve, { write: true });
+    }
+
     requireOwnership(resolve) {
         return async (req, res, next) => {
             try {
                 const workspaceID = await resolve(req);
                 const workspace = await db.getWorkspace(workspaceID);
+                const membership = workspace
+                    ? await db.getMembership(workspaceID, req.user.id)
+                    : null;
 
-                if (!workspace || !await db.isMember(workspaceID, req.user.id)) {
+                if (!workspace || !membership) {
                     return res.status(404).json({ error: 'Not found' });
                 }
 
@@ -59,6 +80,7 @@ class Authorization {
 
                 req.workspaceID = workspaceID;
                 req.workspace = workspace;
+                req.membership = membership;
                 next();
             } catch (error) {
                 next(error);
@@ -84,6 +106,10 @@ class Authorization {
         return this.requireMembership(resolvers.body(field));
     }
 
+    workspaceBodyEdit(field = 'workspaceID') {
+        return this.requireEditor(resolvers.body(field));
+    }
+
     workspaceOwnerParam(field = 'workspaceID') {
         return this.requireOwnership(resolvers.param(field));
     }
@@ -92,16 +118,32 @@ class Authorization {
         return this.requireMembership(resolvers.tab(field));
     }
 
+    tabEdit(field = 'id') {
+        return this.requireEditor(resolvers.tab(field));
+    }
+
     columnAccess(field = 'id') {
         return this.requireMembership(resolvers.column(field));
+    }
+
+    columnEdit(field = 'id') {
+        return this.requireEditor(resolvers.column(field));
     }
 
     listAccess(field = 'id') {
         return this.requireMembership(resolvers.list(field));
     }
 
+    listEdit(field = 'id') {
+        return this.requireEditor(resolvers.list(field));
+    }
+
     taskAccess(field = 'id') {
         return this.requireMembership(resolvers.task(field));
+    }
+
+    taskEdit(field = 'id') {
+        return this.requireEditor(resolvers.task(field));
     }
 }
 

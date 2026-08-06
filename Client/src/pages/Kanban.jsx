@@ -1,6 +1,7 @@
 // imports
 import { useState, useRef, useMemo } from "react";
 import { useParams } from "react-router-dom";
+import { useKanban } from "../contexts/KanbanContext";
 import { useColumns } from "../hooks/useColumns";
 import { useLists } from "../hooks/useLists";
 import { useTasks } from "../hooks/useTasks";
@@ -20,6 +21,7 @@ import DeleteDropZone from "../components/kanban/DeleteDropZone";
 export default function Kanban() {
     const { workspaceID } = useParams();
     const { user } = useAuth();
+    const { canEdit } = useKanban();
     
     // data layer
     const { categories } = useWorkspaces(user?.id);
@@ -180,7 +182,7 @@ export default function Kanban() {
             />
 
             <div className="kanban-topbar" ref={topbarRef}>
-                {Array.from({ length: plusButtonCount }).map((_, i) => (
+                {canEdit && Array.from({ length: plusButtonCount }).map((_, i) => (
                     <button
                         key={i}
                         className="kanban-add-col-btn"
@@ -208,6 +210,7 @@ export default function Kanban() {
                             isDraggingTaskToEmptyCol={isDragging && dragType === 'task'}
                             isTaskRemoving={isTaskRemoving}
                             isListRemoving={isListRemoving}
+                            canEdit={canEdit}
                             onAddTask={(listID) => {
                                 const list = lists.find(l => l.id === listID);
                                 addTask(listID, list?.category, list?.color);

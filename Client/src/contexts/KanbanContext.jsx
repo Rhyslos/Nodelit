@@ -8,6 +8,7 @@ import { useStream } from './StreamContext';
 const KanbanContext = createContext(null);
 
 const EMPTY_BOARD = { tabs: [], columns: [], lists: [], tasks: [] };
+const EDIT_ROLES = new Set(['owner', 'member']);
 const COLLECTIONS = ['tabs', 'columns', 'lists', 'tasks'];
 
 // utility functions
@@ -40,6 +41,7 @@ export function KanbanProvider({ children }) {
     const [boardData, setBoardData] = useState(EMPTY_BOARD);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [memberRole, setMemberRole] = useState(null);
 
     const workspaceRef = useRef(workspaceID);
     workspaceRef.current = workspaceID;
@@ -87,7 +89,7 @@ export function KanbanProvider({ children }) {
     }, [subscribe, refresh]);
 
     return (
-        <KanbanContext.Provider value={{ boardData, setBoardData, applyDelta, workspaceID, loading, error, refresh }}>
+        <KanbanContext.Provider value={{ boardData, setBoardData, applyDelta, workspaceID, loading, error, refresh, memberRole, canEdit: EDIT_ROLES.has(memberRole) }}>
             {children}
         </KanbanContext.Provider>
     );

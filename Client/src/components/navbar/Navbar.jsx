@@ -4,6 +4,7 @@ import { useNavigate, useLocation, matchPath } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspacePresence } from '../../hooks/useWorkspacePresence';
 import HamburgerMenu from './HamburgerMenu';
+import MembersModal from '../workspace/MembersModal';
 import { appName } from '../../App';
 
 // configuration constants
@@ -27,7 +28,7 @@ function getAvatarColor(member) {
     if (member.cursorColor) return member.cursorColor;
 
     let hash = 0;
-    const source = member.email || member.id || 'default';
+    const source = member.username || member.id || 'default';
 
     for (let i = 0; i < source.length; i++) {
         hash = source.charCodeAt(i) + ((hash << 5) - hash);
@@ -49,8 +50,10 @@ export default function Navbar() {
 
     // state variables
     const [menuOpen, setMenuOpen] = useState(false);
+    const [membersOpen, setMembersOpen] = useState(false);
 
     const { members } = useWorkspacePresence(workspaceID);
+    const isOwner = members.some(m => m.id === user?.id && m.memberRole === 'owner');
 
     // navigation functions
     function navTo(page) {
@@ -84,12 +87,22 @@ export default function Navbar() {
                         </div>
 
                         <div className="navbar-presence">
+                            {isOwner && (
+                                <button
+                                    className="navbar-members-btn"
+                                    onClick={() => setMembersOpen(true)}
+                                    title="Manage access"
+                                >
+                                    + Invite
+                                </button>
+                            )}
+
                             {members.map(member => (
                                 <div
                                     key={member.id}
                                     className={`navbar-avatar ${member.isOnline ? 'online' : 'offline'}`}
                                     style={{ backgroundColor: getAvatarColor(member) }}
-                                    title={member.displayName || member.username || member.email}
+                                    title={member.displayName || member.username}
                                 >
                                     {getAvatarLetter(member)}
                                 </div>
@@ -107,6 +120,10 @@ export default function Navbar() {
             </nav>
 
             <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+            {membersOpen && workspaceID && (
+                <MembersModal workspaceID={workspaceID} onClose={() => setMembersOpen(false)} />
+            )}
         </>
     );
 }

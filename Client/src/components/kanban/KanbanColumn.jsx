@@ -8,6 +8,7 @@ export default function KanbanColumn({
     tasksByListID,
     categories,
     focusedListId,
+    canEdit = true,
     dragging,
     dragType,
     insertionPoint,
@@ -47,6 +48,7 @@ export default function KanbanColumn({
                         tasks={tasksByListID[list.id] ?? []}
                         categories={categories}
                         isFocused={focusedListId === list.id}
+                        canEdit={canEdit}
                         dragging={dragType === 'task' ? dragging : null}
                         isDraggingList={dragType === 'list' && dragging === list.id}
                         insertionPoint={insertionPoint}
