@@ -4,6 +4,7 @@ import db from '../database/Database.mjs';
 import { broadcastKanbanChange } from '../modules/Networking.mjs';
 import {
     requireID,
+    optionalColor,
     optionalText,
     optionalInteger,
     optionalBoolean,
@@ -101,6 +102,7 @@ export default function createKanbanRouter(authz) {
         try {
             const tab = await db.createTab(req.workspaceID, {
                 name: optionalText(req.body?.name, 'name', 80) ?? 'New Board',
+                color: optionalColor(req.body?.color, 'color'),
                 tabOrder: optionalInteger(req.body?.tabOrder, 'tabOrder')
             });
 
@@ -115,6 +117,7 @@ export default function createKanbanRouter(authz) {
         try {
             const changes = {
                 name: optionalText(req.body?.name, 'name', 80),
+                color: optionalColor(req.body?.color, 'color'),
                 tabOrder: optionalInteger(req.body?.tabOrder, 'tabOrder'),
                 isArchived: optionalBoolean(req.body?.isArchived, 'isArchived')
             };

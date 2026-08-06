@@ -18,6 +18,7 @@ const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColo
 
 const FIELD_DEFINITIONS = {
     name: { column: 'name' },
+    color: { column: 'color' },
     tabOrder: { column: 'tab_order' },
     isArchived: { column: 'is_archived', transform: Boolean },
     columnID: { column: 'column_id' },

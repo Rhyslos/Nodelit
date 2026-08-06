@@ -18,6 +18,7 @@ export default function KanbanColumn({
     isListRemoving,
     onAddTask,
     onUpdateList,
+    onSetListTags,
     onUpdateTask,
     onSetTaskTags,
     onStartTaskDrag,
@@ -58,6 +59,7 @@ export default function KanbanColumn({
                         isTaskRemoving={isTaskRemoving}
                         isListRemoving={isListRemoving}
                         onUpdate={changes => onUpdateList(list.id, changes)}
+                        onSetTags={tagIDs => onSetListTags(list.id, tagIDs)}
                         onAddTask={() => onAddTask(list.id)}
                         onUpdateTask={onUpdateTask}
                         onSetTaskTags={onSetTaskTags}

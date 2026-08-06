@@ -215,6 +215,7 @@ export default function Kanban() {
                             canEdit={canEdit}
                             onAddTask={(listID) => addTask(listID)}
                             onUpdateList={updateList}
+                            onSetListTags={setListTags}
                             onUpdateTask={updateTask}
                             onSetTaskTags={setTaskTags}
                             onStartTaskDrag={(e, task, el) => startDrag(e, task, el, 'task')}
