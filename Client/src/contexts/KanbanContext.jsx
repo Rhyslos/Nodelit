@@ -54,7 +54,9 @@ export function KanbanProvider({ children }) {
             const data = await api(`/api/kanban/${workspaceID}`);
             if (workspaceRef.current !== workspaceID) return;
 
-            setBoardData({ ...EMPTY_BOARD, ...data });
+            const { memberRole: role, ...board } = data;
+            setMemberRole(role ?? null);
+            setBoardData({ ...EMPTY_BOARD, ...board });
             setError(null);
         } catch (err) {
             if (workspaceRef.current === workspaceID) setError(err);
