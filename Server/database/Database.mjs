@@ -8,6 +8,7 @@ const scrypt = promisify(crypto.scrypt);
 // configuration constants
 const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+const AUDIT_RETENTION_DAYS = 90;
 const KEY_LENGTH = 64;
 
 const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived'];
@@ -258,8 +259,12 @@ class Database {
         this.sweepTimer = setInterval(async () => {
             try {
                 await query('DELETE FROM sessions WHERE expires_at <= now()');
+                await query(
+                    `DELETE FROM audit_log WHERE created_at < now() - ($1::int * interval '1 day')`,
+                    [AUDIT_RETENTION_DAYS]
+                );
             } catch (error) {
-                console.error('Session sweep failed:', error.message);
+                console.error('Maintenance sweep failed:', error.message);
             }
         }, SESSION_SWEEP_INTERVAL_MS);
 

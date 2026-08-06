@@ -7,6 +7,7 @@ const MAX_SUBTASKS = 50;
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,32}$/;
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_LENGTH = 200;
+const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/;
 const USER_ROLES = ['admin', 'member'];
 
 // error classes
@@ -171,6 +172,9 @@ export function requirePassword(value, field = 'password') {
     }
     if (value.length > MAX_PASSWORD_LENGTH) {
         throw new ValidationError(`${field} cannot be longer than ${MAX_PASSWORD_LENGTH} characters`);
+    }
+    if (CONTROL_CHARACTERS.test(value)) {
+        throw new ValidationError(`${field} cannot contain control characters`);
     }
     return value;
 }

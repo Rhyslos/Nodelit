@@ -10,6 +10,8 @@ const SESSION_COOKIE = 'session_id';
 const KEY_LENGTH = 64;
 const SALT_BYTES = 16;
 const MAX_CREDENTIAL_LENGTH = 200;
+const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/;
+const MAX_AUDIT_TARGET_LENGTH = 64;
 const SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 const LOCKOUT_WINDOW_MINUTES = 15;
@@ -56,7 +58,12 @@ class Authentication {
     isUsableCredential(value) {
         return typeof value === 'string'
             && value.length > 0
-            && value.length <= MAX_CREDENTIAL_LENGTH;
+            && value.length <= MAX_CREDENTIAL_LENGTH
+            && !CONTROL_CHARACTERS.test(value);
+    }
+
+    auditTarget(username) {
+        return username.toLowerCase().slice(0, MAX_AUDIT_TARGET_LENGTH);
     }
 
     // route controllers
@@ -66,6 +73,14 @@ class Authentication {
             const ip = req.ip;
 
             if (!this.isUsableCredential(username) || !this.isUsableCredential(password)) {
+                await db.recordAudit({
+                    action: 'login.failed',
+                    targetType: 'username',
+                    targetID: typeof username === 'string' ? this.auditTarget(username) : null,
+                    detail: { reason: 'malformed credential' },
+                    ip
+                });
+
                 return res.status(401).json({ error: 'Invalid credentials' });
             }
 
@@ -79,7 +94,7 @@ class Authentication {
                 await db.recordAudit({
                     action: 'login.blocked',
                     targetType: 'username',
-                    targetID: username.toLowerCase(),
+                    targetID: this.auditTarget(username),
                     detail: failures,
                     ip
                 });
@@ -97,7 +112,7 @@ class Authentication {
                 await db.recordAudit({
                     action: 'login.failed',
                     targetType: 'username',
-                    targetID: username.toLowerCase(),
+                    targetID: this.auditTarget(username),
                     ip
                 });
 
