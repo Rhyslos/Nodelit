@@ -173,6 +173,7 @@ class Server {
         this.app.post('/api/auth/logout', this.authn.logout);
         this.app.get('/api/auth/session', this.authn.authenticate, this.authn.session);
         this.app.put('/api/auth/password', passwordLimiter, this.authn.authenticate, this.authn.changePassword);
+        this.app.put('/api/auth/profile', this.authn.authenticate, this.authn.updateProfile);
 
         // application routes
         this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter(this.authz));

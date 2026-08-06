@@ -2,7 +2,7 @@
 import crypto from 'crypto';
 import { promisify } from 'node:util';
 import db from '../database/Database.mjs';
-import { requirePassword } from './Validation.mjs';
+import { requirePassword, requireText, optionalColor, optionalTheme } from './Validation.mjs';
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -204,6 +204,25 @@ class Authentication {
             });
 
             res.json({ success: true });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    updateProfile = async (req, res, next) => {
+        try {
+            const changes = {
+                displayName: req.body?.displayName === undefined
+                    ? undefined
+                    : requireText(req.body.displayName, 'displayName', 80),
+                cursorColor: optionalColor(req.body?.cursorColor, 'cursorColor'),
+                theme: optionalTheme(req.body?.theme, 'theme')
+            };
+
+            const user = await db.updateProfile(req.user.id, changes);
+            if (!user) return res.status(404).json({ error: 'Not found' });
+
+            res.json(db.toPublicUser(user));
         } catch (error) {
             next(error);
         }

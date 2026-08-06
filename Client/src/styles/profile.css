@@ -1,0 +1,242 @@
+/* layout styles */
+.profile-root {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 24px;
+}
+
+.profile-header {
+    margin-bottom: 32px;
+}
+
+.profile-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 28px;
+    font-weight: 400;
+    color: var(--ink);
+    margin-bottom: 8px;
+}
+
+.profile-subtitle {
+    font-size: 15px;
+    color: var(--muted);
+}
+
+.profile-content {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.profile-section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 4px 16px var(--shadow);
+}
+
+.profile-section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.profile-display-name {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 24px;
+    background: var(--paper);
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px dashed var(--border);
+}
+
+.profile-display-name strong {
+    color: var(--ink);
+}
+
+/* form styles */
+.profile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.profile-row {
+    display: flex;
+    gap: 16px;
+}
+
+.profile-row .profile-field {
+    flex: 1;
+}
+
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.profile-field label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.profile-required {
+    color: var(--accent);
+}
+
+.profile-field input {
+    padding: 10px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 14px;
+    color: var(--ink);
+    background: white;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.profile-field input:focus {
+    border-color: var(--accent);
+}
+
+.profile-field input:disabled {
+    background: var(--paper);
+    color: var(--muted);
+    cursor: not-allowed;
+}
+
+.profile-btn {
+    align-self: flex-start;
+    padding: 10px 24px;
+    background: var(--ink);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    margin-top: 8px;
+}
+
+.profile-btn:hover {
+    opacity: 0.85;
+}
+
+.profile-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+    .profile-row {
+        flex-direction: column;
+    }
+}
+
+
+/* colour styles */
+.profile-color-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.profile-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.profile-swatch.selected {
+    border-color: var(--ink);
+}
+
+/* theme styles */
+.profile-modes {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+}
+
+.profile-mode {
+    flex: 1;
+    min-width: 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    background: var(--paper);
+    text-align: left;
+    cursor: pointer;
+    font-family: 'Noto Sans', sans-serif;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.profile-mode:hover {
+    border-color: var(--accent);
+}
+
+.profile-mode.selected {
+    border-color: var(--accent);
+    background: var(--accent-lt);
+}
+
+.profile-mode-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.profile-mode-hint {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.profile-custom {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+}
+
+.profile-custom.is-inactive {
+    opacity: 0.5;
+}
+
+.profile-custom-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.profile-custom-label {
+    flex: 1;
+    font-size: 14px;
+    color: var(--ink);
+}
+
+.profile-custom-hex {
+    font-size: 12px;
+    color: var(--muted);
+    width: 72px;
+}

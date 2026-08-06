@@ -199,3 +199,6 @@ ALTER TABLE lists DROP COLUMN IF EXISTS category;
 ALTER TABLE lists DROP COLUMN IF EXISTS color;
 ALTER TABLE tasks DROP COLUMN IF EXISTS category;
 ALTER TABLE tasks DROP COLUMN IF EXISTS color;
+
+-- theme columns
+ALTER TABLE users ADD COLUMN IF NOT EXISTS theme jsonb NOT NULL DEFAULT '{"mode":"default","custom":{}}'::jsonb;

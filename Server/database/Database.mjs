@@ -14,7 +14,7 @@ const KEY_LENGTH = 64;
 const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived'];
 const LIST_FIELDS = ['name', 'columnID', 'listOrder'];
 const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'deadline', 'checklists'];
-const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor'];
+const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor', 'theme'];
 
 const FIELD_DEFINITIONS = {
     name: { column: 'name' },
@@ -38,7 +38,8 @@ const USER_SELECT = `
     username,
     display_name AS "displayName",
     role,
-    cursor_color AS "cursorColor"
+    cursor_color AS "cursorColor",
+    theme
 `;
 
 const WORKSPACE_SELECT = `
@@ -329,6 +330,35 @@ class Database {
 
     toPublicUser(user) {
         return user ? pickFields(user, PUBLIC_USER_FIELDS) : null;
+    }
+
+    async updateProfile(userID, changes) {
+        const assignments = [];
+        const values = [];
+
+        if (changes.displayName !== undefined) {
+            assignments.push(`display_name = $${assignments.length + 1}`);
+            values.push(changes.displayName);
+        }
+
+        if (changes.cursorColor !== undefined) {
+            assignments.push(`cursor_color = $${assignments.length + 1}`);
+            values.push(changes.cursorColor);
+        }
+
+        if (changes.theme !== undefined) {
+            assignments.push(`theme = $${assignments.length + 1}::jsonb`);
+            values.push(JSON.stringify(changes.theme));
+        }
+
+        if (assignments.length === 0) return this.getUserByID(userID);
+
+        return queryOne(
+            `UPDATE users SET ${assignments.join(', ')}
+             WHERE id = $${values.length + 1} AND deleted_at IS NULL
+             RETURNING ${USER_SELECT}`,
+            [...values, userID]
+        );
     }
 
     // administration functions
