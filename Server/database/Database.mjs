@@ -380,6 +380,24 @@ class Database {
         }
     }
 
+    async getCredentials(userID) {
+        return queryOne(
+            'SELECT salt, hash FROM users WHERE id = $1 AND deleted_at IS NULL',
+            [userID]
+        );
+    }
+
+    async setUserPassword(userID, password) {
+        const { salt, hash } = await derivePassword(password);
+
+        const { rowCount } = await query(
+            'UPDATE users SET salt = $2, hash = $3 WHERE id = $1 AND deleted_at IS NULL',
+            [userID, salt, hash]
+        );
+
+        return rowCount > 0;
+    }
+
     async deleteUser(userID) {
         return withTransaction(async client => {
             const { rows } = await client.query(
@@ -654,7 +672,7 @@ class Database {
 
     async getMembers(workspaceID) {
         const { rows } = await query(
-            `SELECT u.id, u.username, u.display_name AS "displayName", u.role,
+            `SELECT u.id, u.display_name AS "displayName",
                     u.cursor_color AS "cursorColor", m.role AS "memberRole"
              FROM memberships m
              JOIN users u ON u.id = m.user_id
@@ -667,7 +685,7 @@ class Database {
 
     async getUsersForWorkspace(workspaceID) {
         const { rows } = await query(
-            `SELECT u.id, u.username, u.display_name AS "displayName",
+            `SELECT u.id, u.display_name AS "displayName",
                     u.cursor_color AS "cursorColor", m.role AS "memberRole"
              FROM users u
              LEFT JOIN memberships m ON m.user_id = u.id AND m.workspace_id = $1

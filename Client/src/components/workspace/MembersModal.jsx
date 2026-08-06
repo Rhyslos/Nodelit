@@ -60,9 +60,7 @@ export default function MembersModal({ workspaceID, onClose }) {
     // filter variables
     const query = search.trim().toLowerCase();
     const filtered = query
-        ? users.filter(u =>
-            u.username.toLowerCase().includes(query) ||
-            u.displayName.toLowerCase().includes(query))
+        ? users.filter(u => u.displayName.toLowerCase().includes(query))
         : users;
 
     return createPortal(
@@ -90,7 +88,6 @@ export default function MembersModal({ workspaceID, onClose }) {
 
                                 <div className="members-identity">
                                     <span className="members-name">{row.displayName}</span>
-                                    <span className="members-username">{row.username}</span>
                                 </div>
 
                                 {row.memberRole === 'owner' ? (

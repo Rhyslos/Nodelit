@@ -1,305 +1,329 @@
-// import modules
-import { Router } from 'express';
-import db from '../database/Database.mjs';
-import { broadcastKanbanChange } from '../modules/Networking.mjs';
-import {
-    requireID,
-    optionalText,
-    optionalColor,
-    optionalInteger,
-    optionalBoolean,
-    optionalDate,
-    optionalSubtasks,
-    requireInteger,
-    requireTaskReorder,
-    requireListReorder
-} from '../modules/Validation.mjs';
+// component imports
+import { useState, useEffect, useCallback } from 'react';
+import { api } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 
-// utility functions
-function emptyCollections() {
-    return { tabs: [], columns: [], lists: [], tasks: [] };
-}
+// configuration constants
+const EMPTY_FORM = { username: '', displayName: '', password: '', role: 'member' };
+const TABS = ['users', 'deleted', 'audit'];
 
-function buildDelta({ upsert = {}, remove = {} } = {}) {
-    return {
-        upsert: { ...emptyCollections(), ...upsert },
-        remove: { ...emptyCollections(), ...remove }
-    };
-}
+// component functions
+export default function Admin() {
+    const { user } = useAuth();
 
-function originOf(req) {
-    const header = req.headers['x-client-id'];
-    return typeof header === 'string' ? header.slice(0, 64) : null;
-}
+    // state variables
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [form, setForm] = useState(EMPTY_FORM);
+    const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [tab, setTab] = useState('users');
+    const [workspaces, setWorkspaces] = useState([]);
+    const [entries, setEntries] = useState([]);
 
-function publish(req, changes) {
-    broadcastKanbanChange(req.workspaceID, buildDelta(changes), originOf(req));
-}
+    // data fetching
+    const load = useCallback(async () => {
+        try {
+            const [userData, workspaceData, auditData] = await Promise.all([
+                api('/api/admin/users?includeDeleted=true'),
+                api('/api/admin/workspaces?includeDeleted=true'),
+                api('/api/admin/audit?limit=100')
+            ]);
 
-// router configuration
-export default function createKanbanRouter(authz) {
-    const router = Router();
+            setUsers(userData.users);
+            setWorkspaces(workspaceData.workspaces);
+            setEntries(auditData.entries);
+            setError('');
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-    // batch scope middleware
-    function resolveBatchScope(resolveEntities, targetField, resolveTargets) {
-        return async (req, res, next) => {
-            try {
-                const updates = req.batchUpdates;
+    useEffect(() => { load(); }, [load]);
 
-                const entityIDs = [...new Set(updates.map(update => update.id))];
-                const entities = await resolveEntities(entityIDs);
+    // derived variables
+    const activeUsers = users.filter(u => !u.deletedAt);
+    const deletedUsers = users.filter(u => u.deletedAt);
+    const deletedWorkspaces = workspaces.filter(w => w.deletedAt);
 
-                if (entities.found !== entityIDs.length || entities.workspaceIDs.length !== 1) {
-                    return res.status(404).json({ error: 'Not found' });
-                }
-
-                const anchor = entities.workspaceIDs[0];
-                if (!await db.isMember(anchor, req.user.id)) {
-                    return res.status(404).json({ error: 'Not found' });
-                }
-
-                const targetIDs = [...new Set(updates.map(update => update[targetField]))];
-                const targets = await resolveTargets(targetIDs);
-
-                if (targets.found !== targetIDs.length
-                    || targets.workspaceIDs.length !== 1
-                    || targets.workspaceIDs[0] !== anchor) {
-                    return res.status(403).json({ error: 'Forbidden' });
-                }
-
-                req.workspaceID = anchor;
-                next();
-            } catch (error) {
-                next(error);
-            }
-        };
+    // event handlers
+    function updateField(field, value) {
+        setForm(prev => ({ ...prev, [field]: value }));
     }
 
-    function parseBatch(parser) {
-        return (req, res, next) => {
-            try {
-                req.batchUpdates = parser(req.body?.updates);
-                next();
-            } catch (error) {
-                next(error);
-            }
-        };
+    async function handleCreate(e) {
+        e.preventDefault();
+        setError('');
+        setNotice('');
+        setBusy(true);
+
+        try {
+            const created = await api('/api/admin/users', { method: 'POST', body: form });
+            setForm(EMPTY_FORM);
+            setNotice(`Created ${created.username}`);
+            await load();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setBusy(false);
+        }
     }
 
-    // tab routes
-    router.post('/tabs', authz.workspaceBody(), async (req, res, next) => {
+    async function run(label, request) {
+        setError('');
+        setNotice('');
+
         try {
-            const tab = await db.createTab(req.workspaceID, {
-                name: optionalText(req.body?.name, 'name', 80) ?? 'New Board',
-                color: optionalColor(req.body?.color, 'color'),
-                tabOrder: optionalInteger(req.body?.tabOrder, 'tabOrder')
-            });
-
-            publish(req, { upsert: { tabs: [tab] } });
-            res.status(201).json(tab);
-        } catch (error) {
-            next(error);
+            await request();
+            setNotice(label);
+            await load();
+        } catch (err) {
+            setError(err.message);
         }
-    });
+    }
 
-    router.put('/tabs/:id', authz.tabAccess(), async (req, res, next) => {
+    function handleDelete(target) {
+        const message = target.ownedWorkspaces > 0
+            ? `Delete ${target.username}? This also hides ${target.ownedWorkspaces} workspace(s) they own. Both can be restored from the Deleted tab.`
+            : `Delete ${target.username}? This can be undone from the Deleted tab.`;
+
+        if (!window.confirm(message)) return;
+
+        run(`Deleted ${target.username}`, () =>
+            api(`/api/admin/users/${target.id}`, { method: 'DELETE' }));
+    }
+
+    function handleResetPassword(target) {
+        const password = window.prompt(`New password for ${target.username} (at least 12 characters):`);
+        if (!password) return;
+
+        run(`Password reset for ${target.username}`, () =>
+            api(`/api/admin/users/${target.id}/password`, { method: 'PUT', body: { password } }));
+    }
+
+    function handleRestoreUser(target) {
+        run(`Restored ${target.username}`, () =>
+            api(`/api/admin/users/${target.id}/restore`, { method: 'POST' }));
+    }
+
+    function handlePurgeUser(target) {
+        if (!window.confirm(`Permanently erase ${target.username} and all their data? This cannot be undone.`)) return;
+
+        run(`Purged ${target.username}`, () =>
+            api(`/api/admin/users/${target.id}/purge`, { method: 'DELETE' }));
+    }
+
+    function handleRestoreWorkspace(target) {
+        run(`Restored ${target.name}`, () =>
+            api(`/api/admin/workspaces/${target.id}/restore`, { method: 'POST' }));
+    }
+
+    function handlePurgeWorkspace(target) {
+        if (!window.confirm(`Permanently erase ${target.name} and all its boards? This cannot be undone.`)) return;
+
+        run(`Purged ${target.name}`, () =>
+            api(`/api/admin/workspaces/${target.id}/purge`, { method: 'DELETE' }));
+    }
+
+    async function handleExport() {
+        setError('');
+        setNotice('');
+
         try {
-            const changes = {
-                name: optionalText(req.body?.name, 'name', 80),
-                color: optionalColor(req.body?.color, 'color'),
-                tabOrder: optionalInteger(req.body?.tabOrder, 'tabOrder'),
-                isArchived: optionalBoolean(req.body?.isArchived, 'isArchived')
-            };
+            const data = await api('/api/admin/export');
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
 
-            const tab = await db.updateTab(req.params.id, changes);
-            if (!tab) return res.status(404).json({ error: 'Not found' });
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `nodelit-export-${new Date().toISOString().slice(0, 10)}.json`;
+            link.click();
 
-            publish(req, { upsert: { tabs: [tab] } });
-            res.json(tab);
-        } catch (error) {
-            next(error);
+            URL.revokeObjectURL(url);
+            setNotice('Export downloaded');
+        } catch (err) {
+            setError(err.message);
         }
-    });
+    }
 
-    router.delete('/tabs/:id', authz.tabAccess(), async (req, res, next) => {
-        try {
-            const removed = await db.deleteTab(req.params.id);
+    return (
+        <div className="admin-root">
+            <div className="admin-head">
+                <h1 className="admin-title">Administration</h1>
+                <button className="admin-btn" onClick={handleExport}>Export all data</button>
+            </div>
 
-            publish(req, { remove: removed });
-            res.json({ removed });
-        } catch (error) {
-            next(error);
-        }
-    });
+            {error && <div className="admin-error">{error}</div>}
+            {notice && <div className="admin-notice">{notice}</div>}
 
-    // column routes
-    router.post('/columns', authz.tabAccess('tabID'), async (req, res, next) => {
-        try {
-            const tabID = requireID(req.body?.tabID, 'tabID');
-            const columnIndex = requireInteger(req.body?.columnIndex, 'columnIndex', { min: 0, max: 500 });
+            <section className="admin-section">
+                <h2 className="admin-subtitle">Create user</h2>
 
-            const existing = await db.getColumnByIndex(tabID, columnIndex);
-            if (existing) return res.json(existing);
+                <form className="admin-form" onSubmit={handleCreate}>
+                    <input
+                        className="admin-input"
+                        placeholder="Username"
+                        value={form.username}
+                        onChange={e => updateField('username', e.target.value)}
+                        autoComplete="off"
+                    />
+                    <input
+                        className="admin-input"
+                        placeholder="Display name"
+                        value={form.displayName}
+                        onChange={e => updateField('displayName', e.target.value)}
+                        autoComplete="off"
+                    />
+                    <input
+                        className="admin-input"
+                        type="password"
+                        placeholder="Password (min 12 characters)"
+                        value={form.password}
+                        onChange={e => updateField('password', e.target.value)}
+                        autoComplete="new-password"
+                    />
+                    <select
+                        className="admin-input"
+                        value={form.role}
+                        onChange={e => updateField('role', e.target.value)}
+                    >
+                        <option value="member">member</option>
+                        <option value="admin">admin</option>
+                    </select>
+                    <button className="admin-btn" type="submit" disabled={busy}>
+                        {busy ? 'Creating…' : 'Create'}
+                    </button>
+                </form>
+            </section>
 
-            const column = await db.createColumn(tabID, columnIndex);
+            <div className="admin-tabs">
+                {TABS.map(name => (
+                    <button
+                        key={name}
+                        className={`admin-tab ${tab === name ? 'active' : ''}`}
+                        onClick={() => setTab(name)}
+                    >
+                        {name}
+                    </button>
+                ))}
+            </div>
 
-            publish(req, { upsert: { columns: [column] } });
-            res.status(201).json(column);
-        } catch (error) {
-            next(error);
-        }
-    });
+            {loading && <p className="admin-empty">Loading…</p>}
 
-    router.delete('/columns/:id', authz.columnAccess(), async (req, res, next) => {
-        try {
-            const { removed, columns } = await db.deleteColumn(req.params.id);
+            {!loading && tab === 'users' && (
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Display name</th>
+                            <th>Role</th>
+                            <th>Owns</th>
+                            <th>Member of</th>
+                            <th>Created</th>
+                            <th />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {activeUsers.map(row => (
+                            <tr key={row.id}>
+                                <td>{row.username}</td>
+                                <td>{row.displayName}</td>
+                                <td>{row.role}</td>
+                                <td>{row.ownedWorkspaces}</td>
+                                <td>{row.memberships}</td>
+                                <td>{new Date(row.createdAt).toLocaleDateString()}</td>
+                                <td className="admin-actions">
+                                    <button className="admin-btn" onClick={() => handleResetPassword(row)}>
+                                        Reset password
+                                    </button>
+                                    {row.id !== user?.id && (
+                                        <button className="admin-btn admin-btn--danger" onClick={() => handleDelete(row)}>
+                                            Delete
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
 
-            publish(req, { upsert: { columns }, remove: removed });
-            res.json({ removed, columns });
-        } catch (error) {
-            next(error);
-        }
-    });
+            {!loading && tab === 'deleted' && (
+                <>
+                    <h2 className="admin-subtitle">Deleted users ({deletedUsers.length})</h2>
 
-    // list routes
-    router.post('/lists', authz.columnAccess('columnID'), async (req, res, next) => {
-        try {
-            const columnID = requireID(req.body?.columnID, 'columnID');
+                    {deletedUsers.length === 0 ? (
+                        <p className="admin-empty">Nothing deleted.</p>
+                    ) : (
+                        <table className="admin-table">
+                            <thead>
+                                <tr><th>Username</th><th>Role</th><th>Deleted</th><th /></tr>
+                            </thead>
+                            <tbody>
+                                {deletedUsers.map(row => (
+                                    <tr key={row.id}>
+                                        <td>{row.username}</td>
+                                        <td>{row.role}</td>
+                                        <td>{new Date(row.deletedAt).toLocaleString()}</td>
+                                        <td className="admin-actions">
+                                            <button className="admin-btn" onClick={() => handleRestoreUser(row)}>Restore</button>
+                                            <button className="admin-btn admin-btn--danger" onClick={() => handlePurgeUser(row)}>Purge</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
 
-            const list = await db.createList(columnID, {
-                name: optionalText(req.body?.name, 'name', 80) ?? 'New list',
-                category: optionalText(req.body?.category, 'category', 80),
-                color: optionalColor(req.body?.color, 'color'),
-                listOrder: optionalInteger(req.body?.listOrder, 'listOrder')
-            });
+                    <h2 className="admin-subtitle admin-spaced">Deleted workspaces ({deletedWorkspaces.length})</h2>
 
-            publish(req, { upsert: { lists: [list] } });
-            res.status(201).json(list);
-        } catch (error) {
-            next(error);
-        }
-    });
+                    {deletedWorkspaces.length === 0 ? (
+                        <p className="admin-empty">Nothing deleted.</p>
+                    ) : (
+                        <table className="admin-table">
+                            <thead>
+                                <tr><th>Name</th><th>Owner</th><th>Members</th><th>Deleted</th><th /></tr>
+                            </thead>
+                            <tbody>
+                                {deletedWorkspaces.map(row => (
+                                    <tr key={row.id}>
+                                        <td>{row.name}</td>
+                                        <td>{row.ownerName ?? '—'}</td>
+                                        <td>{row.memberCount}</td>
+                                        <td>{new Date(row.deletedAt).toLocaleString()}</td>
+                                        <td className="admin-actions">
+                                            <button className="admin-btn" onClick={() => handleRestoreWorkspace(row)}>Restore</button>
+                                            <button className="admin-btn admin-btn--danger" onClick={() => handlePurgeWorkspace(row)}>Purge</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </>
+            )}
 
-    router.put('/lists/reorder',
-        parseBatch(requireListReorder),
-        resolveBatchScope(ids => db.getWorkspaceScopeForLists(ids), 'columnID', ids => db.getWorkspaceScopeForColumns(ids)),
-        async (req, res, next) => {
-            try {
-                const { lists, columns, removed } = await db.reorderLists(req.batchUpdates);
-
-                publish(req, { upsert: { lists, columns }, remove: removed });
-                res.json({ lists, columns, removed });
-            } catch (error) {
-                next(error);
-            }
-        });
-
-    router.put('/lists/:id', authz.listAccess(), async (req, res, next) => {
-        try {
-            const changes = {
-                name: optionalText(req.body?.name, 'name', 80),
-                category: optionalText(req.body?.category, 'category', 80),
-                color: optionalColor(req.body?.color, 'color'),
-                listOrder: optionalInteger(req.body?.listOrder, 'listOrder')
-            };
-
-            const list = await db.updateList(req.params.id, changes);
-            if (!list) return res.status(404).json({ error: 'Not found' });
-
-            publish(req, { upsert: { lists: [list] } });
-            res.json(list);
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.delete('/lists/:id', authz.listAccess(), async (req, res, next) => {
-        try {
-            const { removed, columns } = await db.deleteList(req.params.id);
-
-            publish(req, { upsert: { columns }, remove: removed });
-            res.json({ removed, columns });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    // task routes
-    router.post('/tasks', authz.listAccess('listID'), async (req, res, next) => {
-        try {
-            const task = await db.createTask(requireID(req.body?.listID, 'listID'), {
-                title: optionalText(req.body?.title, 'title', 200) ?? '',
-                description: optionalText(req.body?.description, 'description', 5000) ?? '',
-                category: optionalText(req.body?.category, 'category', 80),
-                color: optionalColor(req.body?.color, 'color')
-            });
-
-            publish(req, { upsert: { tasks: [task] } });
-            res.status(201).json(task);
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.put('/tasks/reorder',
-        parseBatch(requireTaskReorder),
-        resolveBatchScope(ids => db.getWorkspaceScopeForTasks(ids), 'listID', ids => db.getWorkspaceScopeForLists(ids)),
-        async (req, res, next) => {
-            try {
-                const tasks = await db.reorderTasks(req.batchUpdates);
-
-                publish(req, { upsert: { tasks } });
-                res.json({ tasks });
-            } catch (error) {
-                next(error);
-            }
-        });
-
-    router.put('/tasks/:id', authz.taskAccess(), async (req, res, next) => {
-        try {
-            const changes = {
-                title: optionalText(req.body?.title, 'title', 200),
-                description: optionalText(req.body?.description, 'description', 5000),
-                isCompleted: optionalBoolean(req.body?.isCompleted, 'isCompleted'),
-                category: optionalText(req.body?.category, 'category', 80),
-                color: optionalColor(req.body?.color, 'color'),
-                deadline: optionalDate(req.body?.deadline, 'deadline'),
-                subtasks: optionalSubtasks(req.body?.subtasks, 'subtasks')
-            };
-
-            const expectedUpdatedAt = typeof req.body?.updatedAt === 'string' ? req.body.updatedAt : undefined;
-            const result = await db.updateTask(req.params.id, changes, expectedUpdatedAt);
-
-            if (result.error) {
-                return res.status(result.status).json({ error: result.error, record: result.record });
-            }
-
-            publish(req, { upsert: { tasks: [result.record] } });
-            res.json(result.record);
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.delete('/tasks/:id', authz.taskAccess(), async (req, res, next) => {
-        try {
-            const removed = await db.deleteTask(req.params.id);
-
-            publish(req, { remove: removed });
-            res.json({ removed });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    // retrieval routes
-    router.get('/:workspaceID', authz.workspaceParam(), async (req, res, next) => {
-        try {
-            res.json(await db.getWorkspaceData(req.workspaceID));
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    return router;
+            {!loading && tab === 'audit' && (
+                <table className="admin-table">
+                    <thead>
+                        <tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>IP</th></tr>
+                    </thead>
+                    <tbody>
+                        {entries.map(row => (
+                            <tr key={row.id}>
+                                <td>{new Date(row.createdAt).toLocaleString()}</td>
+                                <td>{row.actorName ?? '—'}</td>
+                                <td>{row.action}</td>
+                                <td>{row.targetID ?? '—'}</td>
+                                <td>{row.ip ?? '—'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+        </div>
+    );
 }

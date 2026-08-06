@@ -1,11 +1,14 @@
 // component imports
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import PasswordModal from '../workspace/PasswordModal';
 
 // component functions
 export default function HamburgerMenu({ open, onClose }) {
     const { logout } = useAuth();
     const navigate = useNavigate();
+    const [passwordOpen, setPasswordOpen] = useState(false);
 
     // navigation handlers
     async function handleLogout() {
@@ -24,7 +27,9 @@ export default function HamburgerMenu({ open, onClose }) {
                         Dashboard
                     </button>
 
-                    <button className="hamburger-item">Profile</button>
+                    <button className="hamburger-item" onClick={() => setPasswordOpen(true)}>
+                        Change password
+                    </button>
                     <button className="hamburger-item">Settings</button>
                     <button className="hamburger-item">Help</button>
 

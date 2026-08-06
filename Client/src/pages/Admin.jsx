@@ -96,6 +96,14 @@ export default function Admin() {
             api(`/api/admin/users/${target.id}`, { method: 'DELETE' }));
     }
 
+    function handleResetPassword(target) {
+        const password = window.prompt(`New password for ${target.username} (at least 12 characters):`);
+        if (!password) return;
+
+        run(`Password reset for ${target.username}`, () =>
+            api(`/api/admin/users/${target.id}/password`, { method: 'PUT', body: { password } }));
+    }
+
     function handleRestoreUser(target) {
         run(`Restored ${target.username}`, () =>
             api(`/api/admin/users/${target.id}/restore`, { method: 'POST' }));
@@ -227,7 +235,10 @@ export default function Admin() {
                                 <td>{row.ownedWorkspaces}</td>
                                 <td>{row.memberships}</td>
                                 <td>{new Date(row.createdAt).toLocaleDateString()}</td>
-                                <td>
+                                <td className="admin-actions">
+                                    <button className="admin-btn" onClick={() => handleResetPassword(row)}>
+                                        Reset password
+                                    </button>
                                     {row.id !== user?.id && (
                                         <button className="admin-btn admin-btn--danger" onClick={() => handleDelete(row)}>
                                             Delete

@@ -28,7 +28,7 @@ function getAvatarColor(member) {
     if (member.cursorColor) return member.cursorColor;
 
     let hash = 0;
-    const source = member.username || member.id || 'default';
+    const source = member.displayName || member.id || 'default';
 
     for (let i = 0; i < source.length; i++) {
         hash = source.charCodeAt(i) + ((hash << 5) - hash);
@@ -102,7 +102,7 @@ export default function Navbar() {
                                     key={member.id}
                                     className={`navbar-avatar ${member.isOnline ? 'online' : 'offline'}`}
                                     style={{ backgroundColor: getAvatarColor(member) }}
-                                    title={member.displayName || member.username}
+                                    title={member.displayName}
                                 >
                                     {getAvatarLetter(member)}
                                 </div>
