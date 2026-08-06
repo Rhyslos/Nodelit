@@ -1,329 +1,216 @@
-// component imports
-import { useState, useEffect, useCallback } from 'react';
-import { api } from '../lib/api';
-import { useAuth } from '../contexts/AuthContext';
+// import modules
+import { Router } from 'express';
+import db from '../database/Database.mjs';
+import {
+    requireID,
+    requireText,
+    requireUsername,
+    requirePassword,
+    requireRole,
+    optionalColor
+} from '../modules/Validation.mjs';
 
-// configuration constants
-const EMPTY_FORM = { username: '', displayName: '', password: '', role: 'member' };
-const TABS = ['users', 'deleted', 'audit'];
+// audit functions
+function audit(req, entry) {
+    return db.recordAudit({
+        actorID: req.user?.id,
+        actorName: req.user?.username,
+        ip: req.ip,
+        ...entry
+    });
+}
 
-// component functions
-export default function Admin() {
-    const { user } = useAuth();
+// router configuration
+export default function createAdminRouter(authz) {
+    const router = Router();
 
-    // state variables
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [form, setForm] = useState(EMPTY_FORM);
-    const [error, setError] = useState('');
-    const [notice, setNotice] = useState('');
-    const [busy, setBusy] = useState(false);
-    const [tab, setTab] = useState('users');
-    const [workspaces, setWorkspaces] = useState([]);
-    const [entries, setEntries] = useState([]);
+    router.use(authz.requireAdmin());
 
-    // data fetching
-    const load = useCallback(async () => {
+    // user routes
+    router.get('/users', async (req, res, next) => {
         try {
-            const [userData, workspaceData, auditData] = await Promise.all([
-                api('/api/admin/users?includeDeleted=true'),
-                api('/api/admin/workspaces?includeDeleted=true'),
-                api('/api/admin/audit?limit=100')
-            ]);
-
-            setUsers(userData.users);
-            setWorkspaces(workspaceData.workspaces);
-            setEntries(auditData.entries);
-            setError('');
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
+            const users = await db.getAllUsers({ includeDeleted: req.query.includeDeleted === 'true' });
+            res.json({ users });
+        } catch (error) {
+            next(error);
         }
-    }, []);
+    });
 
-    useEffect(() => { load(); }, [load]);
-
-    // derived variables
-    const activeUsers = users.filter(u => !u.deletedAt);
-    const deletedUsers = users.filter(u => u.deletedAt);
-    const deletedWorkspaces = workspaces.filter(w => w.deletedAt);
-
-    // event handlers
-    function updateField(field, value) {
-        setForm(prev => ({ ...prev, [field]: value }));
-    }
-
-    async function handleCreate(e) {
-        e.preventDefault();
-        setError('');
-        setNotice('');
-        setBusy(true);
-
+    router.post('/users', async (req, res, next) => {
         try {
-            const created = await api('/api/admin/users', { method: 'POST', body: form });
-            setForm(EMPTY_FORM);
-            setNotice(`Created ${created.username}`);
-            await load();
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setBusy(false);
+            const user = await db.createUser({
+                username: requireUsername(req.body?.username),
+                password: requirePassword(req.body?.password),
+                displayName: requireText(req.body?.displayName, 'displayName', 80),
+                role: requireRole(req.body?.role ?? 'member'),
+                cursorColor: optionalColor(req.body?.cursorColor, 'cursorColor') ?? '#c8502a'
+            });
+
+            await audit(req, { action: 'user.created', targetType: 'user', targetID: user.id, detail: { username: user.username, role: user.role } });
+
+            res.status(201).json(user);
+        } catch (error) {
+            next(error);
         }
-    }
+    });
 
-    async function run(label, request) {
-        setError('');
-        setNotice('');
-
+    router.delete('/users/:id', async (req, res, next) => {
         try {
-            await request();
-            setNotice(label);
-            await load();
-        } catch (err) {
-            setError(err.message);
+            const userID = requireID(req.params.id, 'id');
+
+            if (userID === req.user.id) {
+                return res.status(400).json({ error: 'You cannot delete your own account' });
+            }
+
+            const target = await db.getUserByID(userID);
+            if (!target) return res.status(404).json({ error: 'Not found' });
+
+            if (target.role === 'admin' && await db.countAdmins() <= 1) {
+                return res.status(400).json({ error: 'Cannot delete the last remaining admin' });
+            }
+
+            const result = await db.deleteUser(userID);
+
+            await audit(req, {
+                action: 'user.deleted',
+                targetType: 'user',
+                targetID: userID,
+                detail: { username: target.username, workspaces: result.workspaces }
+            });
+
+            res.json({ deleted: userID, workspaces: result.workspaces });
+        } catch (error) {
+            next(error);
         }
-    }
+    });
 
-    function handleDelete(target) {
-        const message = target.ownedWorkspaces > 0
-            ? `Delete ${target.username}? This also hides ${target.ownedWorkspaces} workspace(s) they own. Both can be restored from the Deleted tab.`
-            : `Delete ${target.username}? This can be undone from the Deleted tab.`;
-
-        if (!window.confirm(message)) return;
-
-        run(`Deleted ${target.username}`, () =>
-            api(`/api/admin/users/${target.id}`, { method: 'DELETE' }));
-    }
-
-    function handleResetPassword(target) {
-        const password = window.prompt(`New password for ${target.username} (at least 12 characters):`);
-        if (!password) return;
-
-        run(`Password reset for ${target.username}`, () =>
-            api(`/api/admin/users/${target.id}/password`, { method: 'PUT', body: { password } }));
-    }
-
-    function handleRestoreUser(target) {
-        run(`Restored ${target.username}`, () =>
-            api(`/api/admin/users/${target.id}/restore`, { method: 'POST' }));
-    }
-
-    function handlePurgeUser(target) {
-        if (!window.confirm(`Permanently erase ${target.username} and all their data? This cannot be undone.`)) return;
-
-        run(`Purged ${target.username}`, () =>
-            api(`/api/admin/users/${target.id}/purge`, { method: 'DELETE' }));
-    }
-
-    function handleRestoreWorkspace(target) {
-        run(`Restored ${target.name}`, () =>
-            api(`/api/admin/workspaces/${target.id}/restore`, { method: 'POST' }));
-    }
-
-    function handlePurgeWorkspace(target) {
-        if (!window.confirm(`Permanently erase ${target.name} and all its boards? This cannot be undone.`)) return;
-
-        run(`Purged ${target.name}`, () =>
-            api(`/api/admin/workspaces/${target.id}/purge`, { method: 'DELETE' }));
-    }
-
-    async function handleExport() {
-        setError('');
-        setNotice('');
-
+    router.put('/users/:id/password', async (req, res, next) => {
         try {
-            const data = await api('/api/admin/export');
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
+            const userID = requireID(req.params.id, 'id');
+            const password = requirePassword(req.body?.password);
 
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `nodelit-export-${new Date().toISOString().slice(0, 10)}.json`;
-            link.click();
+            const target = await db.getUserByID(userID);
+            if (!target) return res.status(404).json({ error: 'Not found' });
 
-            URL.revokeObjectURL(url);
-            setNotice('Export downloaded');
-        } catch (err) {
-            setError(err.message);
+            await db.setUserPassword(userID, password);
+            await db.deleteSessionsForUser(userID);
+
+            await audit(req, {
+                action: 'password.reset',
+                targetType: 'user',
+                targetID: userID,
+                detail: { username: target.username }
+            });
+
+            res.json({ reset: userID });
+        } catch (error) {
+            next(error);
         }
-    }
+    });
 
-    return (
-        <div className="admin-root">
-            <div className="admin-head">
-                <h1 className="admin-title">Administration</h1>
-                <button className="admin-btn" onClick={handleExport}>Export all data</button>
-            </div>
+    router.post('/users/:id/restore', async (req, res, next) => {
+        try {
+            const userID = requireID(req.params.id, 'id');
+            const result = await db.restoreUser(userID);
 
-            {error && <div className="admin-error">{error}</div>}
-            {notice && <div className="admin-notice">{notice}</div>}
+            if (!result.restored) return res.status(404).json({ error: 'Not found' });
 
-            <section className="admin-section">
-                <h2 className="admin-subtitle">Create user</h2>
+            await audit(req, {
+                action: 'user.restored',
+                targetType: 'user',
+                targetID: userID,
+                detail: { workspaces: result.workspaces }
+            });
 
-                <form className="admin-form" onSubmit={handleCreate}>
-                    <input
-                        className="admin-input"
-                        placeholder="Username"
-                        value={form.username}
-                        onChange={e => updateField('username', e.target.value)}
-                        autoComplete="off"
-                    />
-                    <input
-                        className="admin-input"
-                        placeholder="Display name"
-                        value={form.displayName}
-                        onChange={e => updateField('displayName', e.target.value)}
-                        autoComplete="off"
-                    />
-                    <input
-                        className="admin-input"
-                        type="password"
-                        placeholder="Password (min 12 characters)"
-                        value={form.password}
-                        onChange={e => updateField('password', e.target.value)}
-                        autoComplete="new-password"
-                    />
-                    <select
-                        className="admin-input"
-                        value={form.role}
-                        onChange={e => updateField('role', e.target.value)}
-                    >
-                        <option value="member">member</option>
-                        <option value="admin">admin</option>
-                    </select>
-                    <button className="admin-btn" type="submit" disabled={busy}>
-                        {busy ? 'Creating…' : 'Create'}
-                    </button>
-                </form>
-            </section>
+            res.json({ restored: userID, workspaces: result.workspaces });
+        } catch (error) {
+            next(error);
+        }
+    });
 
-            <div className="admin-tabs">
-                {TABS.map(name => (
-                    <button
-                        key={name}
-                        className={`admin-tab ${tab === name ? 'active' : ''}`}
-                        onClick={() => setTab(name)}
-                    >
-                        {name}
-                    </button>
-                ))}
-            </div>
+    router.delete('/users/:id/purge', async (req, res, next) => {
+        try {
+            const userID = requireID(req.params.id, 'id');
+            const purged = await db.purgeUser(userID);
 
-            {loading && <p className="admin-empty">Loading…</p>}
+            if (!purged) return res.status(404).json({ error: 'Not found' });
 
-            {!loading && tab === 'users' && (
-                <table className="admin-table">
-                    <thead>
-                        <tr>
-                            <th>Username</th>
-                            <th>Display name</th>
-                            <th>Role</th>
-                            <th>Owns</th>
-                            <th>Member of</th>
-                            <th>Created</th>
-                            <th />
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {activeUsers.map(row => (
-                            <tr key={row.id}>
-                                <td>{row.username}</td>
-                                <td>{row.displayName}</td>
-                                <td>{row.role}</td>
-                                <td>{row.ownedWorkspaces}</td>
-                                <td>{row.memberships}</td>
-                                <td>{new Date(row.createdAt).toLocaleDateString()}</td>
-                                <td className="admin-actions">
-                                    <button className="admin-btn" onClick={() => handleResetPassword(row)}>
-                                        Reset password
-                                    </button>
-                                    {row.id !== user?.id && (
-                                        <button className="admin-btn admin-btn--danger" onClick={() => handleDelete(row)}>
-                                            Delete
-                                        </button>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
+            await audit(req, { action: 'user.purged', targetType: 'user', targetID: userID });
 
-            {!loading && tab === 'deleted' && (
-                <>
-                    <h2 className="admin-subtitle">Deleted users ({deletedUsers.length})</h2>
+            res.json({ purged: userID });
+        } catch (error) {
+            next(error);
+        }
+    });
 
-                    {deletedUsers.length === 0 ? (
-                        <p className="admin-empty">Nothing deleted.</p>
-                    ) : (
-                        <table className="admin-table">
-                            <thead>
-                                <tr><th>Username</th><th>Role</th><th>Deleted</th><th /></tr>
-                            </thead>
-                            <tbody>
-                                {deletedUsers.map(row => (
-                                    <tr key={row.id}>
-                                        <td>{row.username}</td>
-                                        <td>{row.role}</td>
-                                        <td>{new Date(row.deletedAt).toLocaleString()}</td>
-                                        <td className="admin-actions">
-                                            <button className="admin-btn" onClick={() => handleRestoreUser(row)}>Restore</button>
-                                            <button className="admin-btn admin-btn--danger" onClick={() => handlePurgeUser(row)}>Purge</button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
+    // workspace routes
+    router.get('/workspaces', async (req, res, next) => {
+        try {
+            const workspaces = await db.getAllWorkspaces({ includeDeleted: req.query.includeDeleted === 'true' });
+            res.json({ workspaces });
+        } catch (error) {
+            next(error);
+        }
+    });
 
-                    <h2 className="admin-subtitle admin-spaced">Deleted workspaces ({deletedWorkspaces.length})</h2>
+    router.post('/workspaces/:id/restore', async (req, res, next) => {
+        try {
+            const workspaceID = requireID(req.params.id, 'id');
+            const restored = await db.restoreWorkspace(workspaceID);
 
-                    {deletedWorkspaces.length === 0 ? (
-                        <p className="admin-empty">Nothing deleted.</p>
-                    ) : (
-                        <table className="admin-table">
-                            <thead>
-                                <tr><th>Name</th><th>Owner</th><th>Members</th><th>Deleted</th><th /></tr>
-                            </thead>
-                            <tbody>
-                                {deletedWorkspaces.map(row => (
-                                    <tr key={row.id}>
-                                        <td>{row.name}</td>
-                                        <td>{row.ownerName ?? '—'}</td>
-                                        <td>{row.memberCount}</td>
-                                        <td>{new Date(row.deletedAt).toLocaleString()}</td>
-                                        <td className="admin-actions">
-                                            <button className="admin-btn" onClick={() => handleRestoreWorkspace(row)}>Restore</button>
-                                            <button className="admin-btn admin-btn--danger" onClick={() => handlePurgeWorkspace(row)}>Purge</button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </>
-            )}
+            if (!restored) return res.status(404).json({ error: 'Not found' });
 
-            {!loading && tab === 'audit' && (
-                <table className="admin-table">
-                    <thead>
-                        <tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>IP</th></tr>
-                    </thead>
-                    <tbody>
-                        {entries.map(row => (
-                            <tr key={row.id}>
-                                <td>{new Date(row.createdAt).toLocaleString()}</td>
-                                <td>{row.actorName ?? '—'}</td>
-                                <td>{row.action}</td>
-                                <td>{row.targetID ?? '—'}</td>
-                                <td>{row.ip ?? '—'}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
-        </div>
-    );
+            await audit(req, { action: 'workspace.restored', targetType: 'workspace', targetID: workspaceID });
+
+            res.json({ restored: workspaceID });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.delete('/workspaces/:id/purge', async (req, res, next) => {
+        try {
+            const workspaceID = requireID(req.params.id, 'id');
+            const purged = await db.purgeWorkspace(workspaceID);
+
+            if (!purged) return res.status(404).json({ error: 'Not found' });
+
+            await audit(req, { action: 'workspace.purged', targetType: 'workspace', targetID: workspaceID });
+
+            res.json({ purged: workspaceID });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    // audit routes
+    router.get('/audit', async (req, res, next) => {
+        try {
+            const entries = await db.getAuditLog({
+                limit: Number(req.query.limit) || 100,
+                action: req.query.action || null
+            });
+
+            res.json({ entries });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    // export routes
+    router.get('/export', async (req, res, next) => {
+        try {
+            const data = await db.exportAll();
+            const stamp = new Date().toISOString().slice(0, 10);
+
+            await audit(req, { action: 'data.exported' });
+
+            res.setHeader('Content-Disposition', `attachment; filename="nodelit-export-${stamp}.json"`);
+            res.json(data);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    return router;
 }
