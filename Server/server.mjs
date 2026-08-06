@@ -8,7 +8,7 @@ import {
     requirePassword,
     requireRole,
     optionalColor
-} from '../modules/Validation.mjs';
+} from './modules/Validation.mjs';
 
 // audit functions
 function audit(req, entry) {
