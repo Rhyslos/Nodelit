@@ -1534,20 +1534,19 @@
 .kanban-list-tag-btn {
     display: inline-flex;
     align-items: center;
-    padding: 3px;
-    border: none;
+    justify-content: center;
+    padding: 3px 6px;
+    border: 1.5px solid var(--border);
+    border-radius: 50%;
     background: none;
     color: var(--muted);
     cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.15s, color 0.15s;
-}
-
-.kanban-list:hover .kanban-list-tag-btn {
-    opacity: 1;
+    flex-shrink: 0;
+    transition: border-color 0.15s, color 0.15s;
 }
 
 .kanban-list-tag-btn:hover {
+    border-color: var(--accent);
     color: var(--accent);
 }
 

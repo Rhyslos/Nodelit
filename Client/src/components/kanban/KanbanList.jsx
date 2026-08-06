@@ -109,12 +109,6 @@ export default function KanbanList({
                         </div>
                     )}
 
-                    {listTags.map(tag => (
-                        <span key={tag.id} className={`tag-chip ${tag.name ? '' : 'tag-chip--blank'}`} style={{ background: tag.color }} title={tag.name || 'Unnamed tag'}>
-                            {tag.name}
-                        </span>
-                    ))}
-
                     {canEdit && (
                         <button
                             ref={tagBtnRef}
@@ -154,6 +148,13 @@ export default function KanbanList({
                     >
                         {list.name}
                     </span>
+
+                    {listTags.map(tag => (
+                        <span key={tag.id} className={`tag-chip ${tag.name ? '' : 'tag-chip--blank'}`} style={{ background: tag.color }} title={tag.name || 'Unnamed tag'}>
+                            {tag.name}
+                        </span>
+                    ))}
+
                 </div>
 
                 <div className="kanban-task-container">
