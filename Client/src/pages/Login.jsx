@@ -7,8 +7,8 @@ import { appName } from '../App';
 // ui components
 export default function Login() {
     // state variables
-    const [username, setUsername] = useState('test');
-    const [password, setPassword] = useState('k');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
