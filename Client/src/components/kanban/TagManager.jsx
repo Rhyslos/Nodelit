@@ -7,6 +7,7 @@ import { api } from '../../lib/api';
 // configuration constants
 const PRESET_COLORS = ['#c8502a', '#4a90d9', '#7ab648', '#e6a817', '#9b59b6', '#e84393', '#16a085'];
 const BOARD_REFRESH_EVENT = 'nodelit:board-refresh';
+const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 // component functions
 export default function TagManager({ workspaceID, onClose }) {
@@ -15,6 +16,7 @@ export default function TagManager({ workspaceID, onClose }) {
     const [loading, setLoading] = useState(true);
     const [name, setName] = useState('');
     const [color, setColor] = useState(PRESET_COLORS[0]);
+    const [hexDraft, setHexDraft] = useState(PRESET_COLORS[0]);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
 
@@ -33,14 +35,23 @@ export default function TagManager({ workspaceID, onClose }) {
 
     useEffect(() => { load(); }, [load]);
 
+    // event handlers
     function announceChange() {
         window.dispatchEvent(new Event(BOARD_REFRESH_EVENT));
     }
 
-    // event handlers
+    function pickColor(value) {
+        setColor(value);
+        setHexDraft(value);
+    }
+
+    function commitHexDraft() {
+        if (HEX_PATTERN.test(hexDraft)) setColor(hexDraft.toLowerCase());
+        else setHexDraft(color);
+    }
+
     async function handleCreate(e) {
         e.preventDefault();
-
         setError('');
         setBusy(true);
 
@@ -61,6 +72,8 @@ export default function TagManager({ workspaceID, onClose }) {
     }
 
     async function handleRecolor(tag, nextColor) {
+        if (!HEX_PATTERN.test(nextColor) || nextColor === tag.color) return;
+
         try {
             const updated = await api(`/api/kanban/tags/${tag.id}`, {
                 method: 'PUT',
@@ -71,6 +84,7 @@ export default function TagManager({ workspaceID, onClose }) {
             announceChange();
         } catch (err) {
             setError(err.message);
+            load();
         }
     }
 
@@ -92,7 +106,7 @@ export default function TagManager({ workspaceID, onClose }) {
     }
 
     async function handleDelete(tag) {
-        if (!window.confirm(`Delete this tag? It will be removed from every list and task.`)) return;
+        if (!window.confirm('Delete this tag? It will be removed from every list and task.')) return;
 
         try {
             await api(`/api/kanban/tags/${tag.id}`, { method: 'DELETE' });
@@ -120,26 +134,38 @@ export default function TagManager({ workspaceID, onClose }) {
                         autoFocus
                     />
 
-                    <div className="tag-manager-swatches">
+                    <div className="tag-color-row">
+                        <span className="tag-color-label">Colour</span>
+
                         {PRESET_COLORS.map(preset => (
                             <button
                                 key={preset}
                                 type="button"
                                 className={`tag-manager-dot ${color === preset ? 'selected' : ''}`}
                                 style={{ background: preset }}
-                                onClick={() => setColor(preset)}
+                                onClick={() => pickColor(preset)}
                                 aria-label={`Use colour ${preset}`}
                             />
                         ))}
 
-                        <label className="tag-manager-custom" title="Custom colour">
-                            <input
-                                type="color"
-                                value={color}
-                                onChange={e => setColor(e.target.value)}
-                            />
-                            <span style={{ background: color }} />
-                        </label>
+                        <input
+                            type="color"
+                            className="tag-color-input"
+                            value={color}
+                            onChange={e => pickColor(e.target.value)}
+                            title="Pick any colour"
+                        />
+
+                        <input
+                            type="text"
+                            className="tag-color-hex"
+                            value={hexDraft}
+                            maxLength={7}
+                            spellCheck={false}
+                            onChange={e => setHexDraft(e.target.value)}
+                            onBlur={commitHexDraft}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitHexDraft(); } }}
+                        />
                     </div>
 
                     <button className="modal-submit" type="submit" disabled={busy}>
@@ -167,19 +193,18 @@ export default function TagManager({ workspaceID, onClose }) {
                                 onBlur={e => handleRename(tag, e.target.value)}
                             />
 
-                            <label className="tag-manager-custom" title="Custom colour">
-                                <input
-                                    type="color"
-                                    value={tag.color}
-                                    onChange={e => handleRecolor(tag, e.target.value)}
-                                />
-                                <span style={{ background: tag.color }} />
-                            </label>
+                            <input
+                                type="color"
+                                className="tag-color-input"
+                                value={tag.color}
+                                onChange={e => handleRecolor(tag, e.target.value)}
+                                title="Change colour"
+                            />
 
                             <button
                                 className="tag-manager-delete"
                                 onClick={() => handleDelete(tag)}
-                                aria-label={`Delete ${tag.name}`}
+                                aria-label="Delete tag"
                             >
                                 <Trash2 size={14} strokeWidth={2} />
                             </button>

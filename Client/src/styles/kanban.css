@@ -1567,43 +1567,6 @@
     font-style: italic;
 }
 
-/* custom colour styles */
-.tag-manager-swatches {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-}
-
-.tag-manager-custom {
-    position: relative;
-    width: 16px;
-    height: 16px;
-    display: inline-block;
-    cursor: pointer;
-    flex-shrink: 0;
-}
-
-.tag-manager-custom input[type="color"] {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    width: 100%;
-    height: 100%;
-    cursor: pointer;
-    border: none;
-    padding: 0;
-}
-
-.tag-manager-custom span {
-    display: block;
-    width: 100%;
-    height: 100%;
-    border-radius: 4px;
-    border: 2px solid var(--ink);
-    pointer-events: none;
-}
-
 .tag-manager-rename {
     flex: 1;
     min-width: 80px;
@@ -1619,4 +1582,67 @@
 
 .tag-manager-rename:focus {
     border-bottom-color: var(--accent);
+}
+
+/* tag colour picker styles */
+.tag-color-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.tag-color-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-right: 2px;
+}
+
+.tag-color-input {
+    width: 30px;
+    height: 26px;
+    padding: 2px;
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.tag-color-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.tag-color-input::-webkit-color-swatch {
+    border: none;
+    border-radius: 3px;
+}
+
+.tag-color-input::-moz-color-swatch {
+    border: none;
+    border-radius: 3px;
+}
+
+.tag-color-input:hover {
+    border-color: var(--accent);
+}
+
+.tag-color-hex {
+    width: 84px;
+    padding: 5px 8px;
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 12px;
+    color: var(--ink);
+    outline: none;
+    text-transform: lowercase;
+}
+
+.tag-color-hex:focus {
+    border-color: var(--accent);
 }
