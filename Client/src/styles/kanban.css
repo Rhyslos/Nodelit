@@ -1236,9 +1236,7 @@
 
 /* assignee dropdown styles */
 .assignee-dropdown {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
+    position: fixed;
     min-width: 200px;
     background: var(--panel);
     border: 1px solid var(--border);

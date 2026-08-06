@@ -21,7 +21,8 @@ export default function KanbanTask({
 }) {
     // state variables
     const [showCatDropdown, setShowCatDropdown] = useState(false);
-    const [showAssignees, setShowAssignees] = useState(false);
+    const [assignRect, setAssignRect] = useState(null);
+    const assignBtnRef = useRef(null);
     const { expandedChecklists, toggleChecklist } = useKanban();
     const showChecklist = expandedChecklists.has(task.id);
     const titleRef = useRef(null);
@@ -54,7 +55,6 @@ export default function KanbanTask({
             e.target.closest('.kanban-task-cat-btn') ||
             e.target.closest('.kanban-task-eye-btn') ||
             e.target.closest('.kanban-task-assign-btn') ||
-            e.target.closest('.assignee-dropdown') ||
             e.target.closest('.cat-dropdown') ||
             e.target.closest('.kanban-task-drag-handle')
         ) return;
@@ -183,16 +183,21 @@ export default function KanbanTask({
 
                     {canEdit && !isClone && (
                         <button
+                            ref={assignBtnRef}
                             className="kanban-task-assign-btn"
                             title="Assign members"
-                            onClick={e => { e.stopPropagation(); setShowAssignees(open => !open); }}
+                            onClick={e => {
+                                e.stopPropagation();
+                                setAssignRect(assignRect ? null : assignBtnRef.current.getBoundingClientRect());
+                            }}
                         >
                             <UserPlus size={13} strokeWidth={2} />
                         </button>
                     )}
 
-                    {showAssignees && (
+                    {assignRect && (
                         <AssigneeDropdown
+                            anchorRect={assignRect}
                             members={members}
                             assigned={task.assignedUsers ?? []}
                             onToggle={userID => {
@@ -202,7 +207,7 @@ export default function KanbanTask({
                                     : [...current, userID];
                                 onUpdate({ assignedUsers: next });
                             }}
-                            onClose={() => setShowAssignees(false)}
+                            onClose={() => setAssignRect(null)}
                         />
                     )}
 

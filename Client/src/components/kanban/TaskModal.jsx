@@ -1,5 +1,5 @@
 // component imports
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { UserPlus } from 'lucide-react';
 import AssigneeDropdown from './AssigneeDropdown';
@@ -18,7 +18,8 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
     const [deadline, setDeadline] = useState(task?.deadline || '');
     const [subtasks, setSubtasks] = useState(task?.subtasks || []);
     const [assignedUsers, setAssignedUsers] = useState(task?.assignedUsers || []);
-    const [showAssignees, setShowAssignees] = useState(false);
+    const [assignRect, setAssignRect] = useState(null);
+    const assignBtnRef = useRef(null);
 
     // mutation functions
     function addSubtask() {
@@ -149,20 +150,22 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
                         })}
 
                         <button
+                            ref={assignBtnRef}
                             type="button"
                             className="kanban-assign-btn"
-                            onClick={() => setShowAssignees(open => !open)}
+                            onClick={() => setAssignRect(assignRect ? null : assignBtnRef.current.getBoundingClientRect())}
                         >
                             <UserPlus size={13} strokeWidth={2} />
                             Assign
                         </button>
 
-                        {showAssignees && (
+                        {assignRect && (
                             <AssigneeDropdown
+                                anchorRect={assignRect}
                                 members={members}
                                 assigned={assignedUsers}
                                 onToggle={toggleAssignee}
-                                onClose={() => setShowAssignees(false)}
+                                onClose={() => setAssignRect(null)}
                             />
                         )}
                     </div>
