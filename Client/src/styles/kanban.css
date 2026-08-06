@@ -1243,7 +1243,7 @@
     border-radius: 12px;
     box-shadow: 0 8px 32px var(--shadow);
     padding: 6px;
-    z-index: 140;
+    z-index: 10000;
 }
 
 .assignee-dropdown-list {
