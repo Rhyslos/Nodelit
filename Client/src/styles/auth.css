@@ -21,7 +21,7 @@
     box-shadow:
         0 2px 4px var(--shadow),
         0 8px 32px var(--shadow),
-        0 0 0 1px rgba(255,255,255,0.6) inset;
+        0 0 0 1px rgba(255,255,255,0.06) inset;
     animation: panelIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -77,7 +77,7 @@
     padding: 12px 14px;
     border: 1.5px solid var(--border);
     border-radius: 10px;
-    background: white;
+    background: var(--field);
     font-family: 'Noto Sans', sans-serif;
     font-size: 15px;
     color: var(--ink);
@@ -104,7 +104,7 @@
     background: var(--accent-lt);
     border-radius: 8px;
     padding: 10px 12px;
-    border: 1px solid rgba(200, 80, 42, 0.2);
+    border: 1px solid var(--accent);
 }
 
 /* button styles */
@@ -112,7 +112,7 @@
     width: 100%;
     padding: 13px;
     background: var(--ink);
-    color: white;
+    color: var(--on-ink);
     border: none;
     border-radius: 10px;
     font-family: 'Noto Sans', sans-serif;
@@ -125,7 +125,7 @@
 }
 
 .auth-btn:hover:not(:disabled) {
-    background: #2a2724;
+    background: var(--ink-hover);
     transform: translateY(-1px);
 }
 

@@ -101,7 +101,7 @@
 .hamburger-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.2);
+    background: var(--overlay);
     z-index: 200;
     opacity: 0;
     pointer-events: none;

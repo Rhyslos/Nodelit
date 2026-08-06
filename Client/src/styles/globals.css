@@ -14,6 +14,15 @@
     --faint:     #8a837a;
     --border:    #e2ddd8;
     --shadow:    rgba(15, 14, 13, 0.08);
+    --field:     #ffffff;
+    --on-ink:    #ffffff;
+    --on-accent: #ffffff;
+    --ink-hover: #2a2724;
+    --overlay:   rgba(0, 0, 0, 0.34);
+    --scroll-thumb: rgba(15, 14, 13, 0.22);
+    --scroll-thumb-hover: rgba(15, 14, 13, 0.38);
+    --danger:    #dc2626;
+    --danger-lt: rgba(220, 38, 38, 0.1);
     --navbar-height: 52px;
     --drag-scale: 1.08;
     --drag-rotate: 2deg;
