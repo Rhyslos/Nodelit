@@ -10,6 +10,7 @@ const MAX_PASSWORD_LENGTH = 200;
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/;
 const USER_ROLES = ['admin', 'member'];
 const MEMBER_ROLES = ['member', 'viewer'];
+const MAX_ASSIGNEES = 20;
 
 // error classes
 export class ValidationError extends Error {
@@ -192,4 +193,18 @@ export function requireMemberRole(value, field = 'role') {
         throw new ValidationError(`${field} must be one of ${MEMBER_ROLES.join(', ')}`);
     }
     return value;
+}
+
+export function optionalIDList(value, field = 'ids') {
+    if (value === undefined) return undefined;
+
+    if (!Array.isArray(value)) {
+        throw new ValidationError(`${field} must be an array`);
+    }
+
+    if (value.length > MAX_ASSIGNEES) {
+        throw new ValidationError(`${field} cannot contain more than ${MAX_ASSIGNEES} entries`);
+    }
+
+    return [...new Set(value.map(entry => requireID(entry, field)))];
 }

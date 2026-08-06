@@ -101,7 +101,11 @@ const TASK_SELECT = `
     k.color,
     COALESCE(to_char(k.deadline, 'YYYY-MM-DD'), '') AS deadline,
     k.subtasks,
-    k.updated_at AS "updatedAt"
+    k.updated_at AS "updatedAt",
+    COALESCE((
+        SELECT array_agg(a.user_id ORDER BY a.user_id)
+        FROM task_assignees a WHERE a.task_id = k.id
+    ), '{}') AS "assignedUsers"
 `;
 
 const TASK_FROM = `
@@ -1089,34 +1093,71 @@ class Database {
 
     async updateTask(taskID, changes, expectedUpdatedAt) {
         const applied = pickFields(changes, TASK_FIELDS);
+        const assignees = changes.assignedUsers;
         const { assignments, values, nextIndex } = buildAssignments(applied, TASK_FIELDS, 1);
 
-        if (assignments.length === 0) {
+        if (assignments.length === 0 && assignees === undefined) {
             const record = await this.getTask(taskID);
             return record ? { record } : { error: 'Task not found', status: 404 };
         }
 
-        const conditions = [`id = $${nextIndex}`];
-        const params = [...values, taskID];
+        return withTransaction(async client => {
+            const setClause = assignments.length > 0
+                ? `${assignments.join(', ')}, updated_at = now()`
+                : 'updated_at = now()';
 
-        if (expectedUpdatedAt !== undefined) {
-            conditions.push(`updated_at = $${nextIndex + 1}::timestamptz`);
-            params.push(expectedUpdatedAt);
-        }
+            const conditions = [`id = $${nextIndex}`];
+            const params = [...values, taskID];
 
-        const updated = await queryOne(
-            `UPDATE tasks SET ${assignments.join(', ')}, updated_at = now()
-             WHERE ${conditions.join(' AND ')}
-             RETURNING id`,
-            params
+            if (expectedUpdatedAt !== undefined) {
+                conditions.push(`updated_at = $${nextIndex + 1}::timestamptz`);
+                params.push(expectedUpdatedAt);
+            }
+
+            const { rows } = await client.query(
+                `UPDATE tasks SET ${setClause} WHERE ${conditions.join(' AND ')} RETURNING id`,
+                params
+            );
+
+            if (rows.length === 0) {
+                const current = await this.fetchTask(client, taskID);
+                if (!current) return { error: 'Task not found', status: 404 };
+                return { error: 'This task was changed by someone else', status: 409, record: current };
+            }
+
+            if (assignees !== undefined) {
+                await client.query('DELETE FROM task_assignees WHERE task_id = $1', [taskID]);
+
+                if (assignees.length > 0) {
+                    await client.query(
+                        `INSERT INTO task_assignees (task_id, user_id)
+                         SELECT $1, m.user_id
+                         FROM memberships m
+                         WHERE m.user_id = ANY($2::text[])
+                           AND m.workspace_id = (
+                               SELECT t.workspace_id
+                               FROM tasks k
+                               JOIN lists l ON l.id = k.list_id
+                               JOIN board_columns c ON c.id = l.column_id
+                               JOIN tabs t ON t.id = c.tab_id
+                               WHERE k.id = $1
+                           )
+                         ON CONFLICT DO NOTHING`,
+                        [taskID, assignees]
+                    );
+                }
+            }
+
+            return { record: await this.fetchTask(client, taskID) };
+        });
+    }
+
+    async fetchTask(client, taskID) {
+        const { rows } = await client.query(
+            `SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = $1`,
+            [taskID]
         );
-
-        if (updated) return { record: await this.getTask(updated.id) };
-
-        const current = await this.getTask(taskID);
-        if (!current) return { error: 'Task not found', status: 404 };
-
-        return { error: 'This task was changed by someone else', status: 409, record: current };
+        return rows[0] ?? null;
     }
 
     async deleteTask(taskID) {

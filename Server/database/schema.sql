@@ -134,3 +134,12 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS audit_log_created_at_idx ON audit_log (created_at DESC);
 CREATE INDEX IF NOT EXISTS audit_log_lockout_idx ON audit_log (action, created_at DESC);
+
+-- assignment tables
+CREATE TABLE IF NOT EXISTS task_assignees (
+    task_id text NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (task_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS task_assignees_user_id_idx ON task_assignees (user_id);

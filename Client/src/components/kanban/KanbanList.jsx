@@ -8,6 +8,7 @@ export default function KanbanList({
     list,
     tasks,
     categories,
+    members,
     isFocused,
     canEdit = true,
     dragging,
@@ -130,6 +131,7 @@ export default function KanbanList({
                                 <KanbanTask
                                     task={task}
                                     categories={categories}
+                                    members={members}
                                     isDragging={dragging === task.id}
                                     canEdit={canEdit}
                                     onUpdate={changes => onUpdateTask(task.id, changes)}

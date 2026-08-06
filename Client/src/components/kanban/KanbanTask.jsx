@@ -1,11 +1,13 @@
 // component imports
 import { useState, useRef, useEffect } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import CategoryDropdown from './CategoryDropdown';
 
 // component functions
 export default function KanbanTask({
     task,
     categories,
+    members = [],
     isDragging,
     isClone,
     canEdit = true,
@@ -17,6 +19,7 @@ export default function KanbanTask({
 }) {
     // state variables
     const [showCatDropdown, setShowCatDropdown] = useState(false);
+    const [showChecklist, setShowChecklist] = useState(false);
     const titleRef = useRef(null);
     const taskRef = useRef(null);
 
@@ -37,6 +40,7 @@ export default function KanbanTask({
     const bannerColor = task.color || categoryData?.color || 'var(--border)';
     const totalSubtasks = task.subtasks?.length || 0;
     const completedSubtasks = task.subtasks?.filter(st => st.done).length || 0;
+    const assignees = members.filter(m => task.assignedUsers?.includes(m.id));
 
     // event handlers
     function handleClick(e) {
@@ -44,6 +48,7 @@ export default function KanbanTask({
             e.target.closest('.kanban-task-title') ||
             e.target.closest('.kanban-task-checkbox') ||
             e.target.closest('.kanban-task-cat-btn') ||
+            e.target.closest('.kanban-task-eye-btn') ||
             e.target.closest('.cat-dropdown') ||
             e.target.closest('.kanban-task-drag-handle')
         ) return;
@@ -126,15 +131,47 @@ export default function KanbanTask({
                     {totalSubtasks > 0 && (
                         <span className="kanban-task-indicator" title="Subtasks">
                             ☑ {completedSubtasks}/{totalSubtasks}
+                            <button
+                                type="button"
+                                className="kanban-task-eye-btn"
+                                title={showChecklist ? 'Hide checklist' : 'Show checklist'}
+                                aria-label={showChecklist ? 'Hide checklist' : 'Show checklist'}
+                                onClick={e => { e.stopPropagation(); setShowChecklist(open => !open); }}
+                            >
+                                {showChecklist ? <EyeOff size={13} strokeWidth={2} /> : <Eye size={13} strokeWidth={2} />}
+                            </button>
                         </span>
                     )}
 
-                    {task.assignedUsers?.length > 0 && (
-                        <span className="kanban-task-indicator" title="Assigned members">
-                            👤 {task.assignedUsers.length}
+                    {assignees.length > 0 && (
+                        <span className="kanban-task-assignees">
+                            {assignees.map(member => (
+                                <span
+                                    key={member.id}
+                                    className="kanban-task-avatar"
+                                    style={{ background: member.cursorColor }}
+                                    title={member.displayName}
+                                >
+                                    {member.displayName.charAt(0).toUpperCase()}
+                                </span>
+                            ))}
                         </span>
                     )}
                 </div>
+
+                {showChecklist && totalSubtasks > 0 && (
+                    <ul className="kanban-task-checklist">
+                        {task.subtasks.map(item => (
+                            <li
+                                key={item.id}
+                                className={`kanban-task-checklist-item ${item.done ? 'is-done' : ''}`}
+                            >
+                                <span className="kanban-task-checklist-mark">{item.done ? '☑' : '☐'}</span>
+                                {item.text || 'Untitled item'}
+                            </li>
+                        ))}
+                    </ul>
+                )}
 
                 <div className="kanban-task-cat-row">
                     <span className="kanban-task-cat-label">

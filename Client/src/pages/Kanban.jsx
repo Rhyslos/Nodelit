@@ -8,6 +8,7 @@ import { useTasks } from "../hooks/useTasks";
 import { useTabs } from "../hooks/useTabs";
 import { useWorkspaces } from "../hooks/useWorkspaces";
 import { useAuth } from '../contexts/AuthContext';
+import { useWorkspacePresence } from "../hooks/useWorkspacePresence";
 import { useDragDrop } from "../hooks/useDragDrop";
 import { useFlipAnimation } from "../hooks/useFlipAnimation";
 import { useAnimatedRemoval } from "../hooks/useAnimatedRemoval";
@@ -25,6 +26,7 @@ export default function Kanban() {
     
     // data layer
     const { categories } = useWorkspaces(user?.id);
+    const { members } = useWorkspacePresence(workspaceID);
     const { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab, deleteTab } = useTabs(workspaceID);
     const { columns, addColumn } = useColumns(workspaceID, activeTabId);
 
@@ -203,6 +205,7 @@ export default function Kanban() {
                             lists={listsByColumnID[column.id] ?? []}
                             tasksByListID={tasksByListID}
                             categories={categories}
+                            members={members}
                             focusedListId={focusedListId}
                             dragging={dragging}
                             dragType={dragType}
@@ -295,6 +298,7 @@ export default function Kanban() {
                 <TaskModal
                     task={activeTask}
                     categories={categories}
+                    members={members}
                     onSave={changes => {
                         updateTask(activeTask.id, changes);
                         setActiveTask(null);

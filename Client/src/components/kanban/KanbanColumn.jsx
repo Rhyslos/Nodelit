@@ -7,6 +7,7 @@ export default function KanbanColumn({
     lists,
     tasksByListID,
     categories,
+    members,
     focusedListId,
     canEdit = true,
     dragging,
@@ -47,6 +48,7 @@ export default function KanbanColumn({
                         list={list}
                         tasks={tasksByListID[list.id] ?? []}
                         categories={categories}
+                        members={members}
                         isFocused={focusedListId === list.id}
                         canEdit={canEdit}
                         dragging={dragType === 'task' ? dragging : null}

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 // component functions
-export default function TaskModal({ task, categories = [], onSave, onClose }) {
+export default function TaskModal({ task, categories = [], members = [], onSave, onClose }) {
     // derived variables
     const fallbackColor = categories.find(c => c.name === task?.category)?.color ?? '#c8502a';
 
@@ -15,6 +15,7 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
     const [color, setColor] = useState(task?.color || fallbackColor);
     const [deadline, setDeadline] = useState(task?.deadline || '');
     const [subtasks, setSubtasks] = useState(task?.subtasks || []);
+    const [assignedUsers, setAssignedUsers] = useState(task?.assignedUsers || []);
 
     // mutation functions
     function addSubtask() {
@@ -29,6 +30,12 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
         setSubtasks(prev => prev.filter((_, i) => i !== index));
     }
 
+    function toggleAssignee(userID) {
+        setAssignedUsers(prev => prev.includes(userID)
+            ? prev.filter(id => id !== userID)
+            : [...prev, userID]);
+    }
+
     // event handlers
     function handleSave() {
         onSave({
@@ -38,7 +45,8 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
             category: category || null,
             color,
             deadline,
-            subtasks
+            subtasks,
+            assignedUsers
         });
     }
 
@@ -116,6 +124,31 @@ export default function TaskModal({ task, categories = [], onSave, onClose }) {
                     placeholder="Add a description…"
                     rows={3}
                 />
+
+                <div className="kanban-modal-group">
+                    <label>Assigned to</label>
+
+                    <div className="kanban-assignee-picker">
+                        {members.map(member => (
+                            <button
+                                key={member.id}
+                                type="button"
+                                className={`kanban-assignee-chip ${assignedUsers.includes(member.id) ? 'is-selected' : ''}`}
+                                onClick={() => toggleAssignee(member.id)}
+                            >
+                                <span
+                                    className="kanban-assignee-dot"
+                                    style={{ background: member.cursorColor }}
+                                />
+                                {member.displayName}
+                            </button>
+                        ))}
+
+                        {members.length === 0 && (
+                            <p className="kanban-subtask-empty">No other members yet.</p>
+                        )}
+                    </div>
+                </div>
 
                 <div className="kanban-modal-group">
                     <div className="kanban-modal-group-head">

@@ -1126,3 +1126,107 @@
         animation-duration: 0.01ms !important;
     }
 }
+
+/* assignee styles */
+.kanban-task-assignees {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+}
+
+.kanban-task-avatar {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+}
+
+.kanban-assignee-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.kanban-assignee-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    background: white;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.kanban-assignee-chip:hover {
+    border-color: var(--accent);
+}
+
+.kanban-assignee-chip.is-selected {
+    border-color: var(--accent);
+    background: var(--accent-lt);
+}
+
+.kanban-assignee-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* checklist preview styles */
+.kanban-task-eye-btn {
+    background: none;
+    border: none;
+    padding: 0 0 0 4px;
+    margin: 0;
+    color: var(--muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+}
+
+.kanban-task-eye-btn:hover {
+    color: var(--accent);
+}
+
+.kanban-task-checklist {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 6px 0 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.kanban-task-checklist-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ink);
+    line-height: 1.35;
+}
+
+.kanban-task-checklist-item.is-done {
+    color: var(--muted);
+    text-decoration: line-through;
+}
+
+.kanban-task-checklist-mark {
+    flex-shrink: 0;
+    color: var(--muted);
+}

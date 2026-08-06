@@ -1,212 +1,313 @@
 // import modules
 import { Router } from 'express';
 import db from '../database/Database.mjs';
+import { broadcastKanbanChange } from '../modules/Networking.mjs';
 import {
     requireID,
-    requireText,
-    requireUsername,
-    requirePassword,
-    requireRole,
-    optionalColor
+    optionalText,
+    optionalColor,
+    optionalInteger,
+    optionalBoolean,
+    optionalDate,
+    optionalSubtasks,
+    optionalIDList,
+    requireInteger,
+    requireTaskReorder,
+    requireListReorder
 } from '../modules/Validation.mjs';
 
-// audit functions
-function audit(req, entry) {
-    return db.recordAudit({
-        actorID: req.user?.id,
-        actorName: req.user?.username,
-        ip: req.ip,
-        ...entry
-    });
+// utility functions
+function emptyCollections() {
+    return { tabs: [], columns: [], lists: [], tasks: [] };
 }
 
+function buildDelta({ upsert = {}, remove = {} } = {}) {
+    return {
+        upsert: { ...emptyCollections(), ...upsert },
+        remove: { ...emptyCollections(), ...remove }
+    };
+}
+
+function originOf(req) {
+    const header = req.headers['x-client-id'];
+    return typeof header === 'string' ? header.slice(0, 64) : null;
+}
+
+function publish(req, changes) {
+    broadcastKanbanChange(req.workspaceID, buildDelta(changes), originOf(req));
+}
+
+// configuration constants
+const EDIT_ROLES = new Set(['owner', 'member']);
+
 // router configuration
-export default function createAdminRouter(authz) {
+export default function createKanbanRouter(authz) {
     const router = Router();
 
-    router.use(authz.requireAdmin());
+    // batch scope middleware
+    function resolveBatchScope(resolveEntities, targetField, resolveTargets) {
+        return async (req, res, next) => {
+            try {
+                const updates = req.batchUpdates;
 
-    // user routes
-    router.get('/users', async (req, res, next) => {
-        try {
-            const users = await db.getAllUsers({ includeDeleted: req.query.includeDeleted === 'true' });
-            res.json({ users });
-        } catch (error) {
-            next(error);
-        }
-    });
+                const entityIDs = [...new Set(updates.map(update => update.id))];
+                const entities = await resolveEntities(entityIDs);
 
-    router.post('/users', async (req, res, next) => {
+                if (entities.found !== entityIDs.length || entities.workspaceIDs.length !== 1) {
+                    return res.status(404).json({ error: 'Not found' });
+                }
+
+                const anchor = entities.workspaceIDs[0];
+                const membership = await db.getMembership(anchor, req.user.id);
+
+                if (!membership) {
+                    return res.status(404).json({ error: 'Not found' });
+                }
+
+                if (!EDIT_ROLES.has(membership.role)) {
+                    return res.status(403).json({ error: 'You have read only access to this workspace' });
+                }
+
+                const targetIDs = [...new Set(updates.map(update => update[targetField]))];
+                const targets = await resolveTargets(targetIDs);
+
+                if (targets.found !== targetIDs.length
+                    || targets.workspaceIDs.length !== 1
+                    || targets.workspaceIDs[0] !== anchor) {
+                    return res.status(403).json({ error: 'Forbidden' });
+                }
+
+                req.workspaceID = anchor;
+                next();
+            } catch (error) {
+                next(error);
+            }
+        };
+    }
+
+    function parseBatch(parser) {
+        return (req, res, next) => {
+            try {
+                req.batchUpdates = parser(req.body?.updates);
+                next();
+            } catch (error) {
+                next(error);
+            }
+        };
+    }
+
+    // tab routes
+    router.post('/tabs', authz.workspaceBodyEdit(), async (req, res, next) => {
         try {
-            const user = await db.createUser({
-                username: requireUsername(req.body?.username),
-                password: requirePassword(req.body?.password),
-                displayName: requireText(req.body?.displayName, 'displayName', 80),
-                role: requireRole(req.body?.role ?? 'member'),
-                cursorColor: optionalColor(req.body?.cursorColor, 'cursorColor') ?? '#c8502a'
+            const tab = await db.createTab(req.workspaceID, {
+                name: optionalText(req.body?.name, 'name', 80) ?? 'New Board',
+                color: optionalColor(req.body?.color, 'color'),
+                tabOrder: optionalInteger(req.body?.tabOrder, 'tabOrder')
             });
 
-            await audit(req, { action: 'user.created', targetType: 'user', targetID: user.id, detail: { username: user.username, role: user.role } });
-
-            res.status(201).json(user);
+            publish(req, { upsert: { tabs: [tab] } });
+            res.status(201).json(tab);
         } catch (error) {
             next(error);
         }
     });
 
-    router.delete('/users/:id', async (req, res, next) => {
+    router.put('/tabs/:id', authz.tabEdit(), async (req, res, next) => {
         try {
-            const userID = requireID(req.params.id, 'id');
+            const changes = {
+                name: optionalText(req.body?.name, 'name', 80),
+                color: optionalColor(req.body?.color, 'color'),
+                tabOrder: optionalInteger(req.body?.tabOrder, 'tabOrder'),
+                isArchived: optionalBoolean(req.body?.isArchived, 'isArchived')
+            };
 
-            if (userID === req.user.id) {
-                return res.status(400).json({ error: 'You cannot delete your own account' });
+            const tab = await db.updateTab(req.params.id, changes);
+            if (!tab) return res.status(404).json({ error: 'Not found' });
+
+            publish(req, { upsert: { tabs: [tab] } });
+            res.json(tab);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.delete('/tabs/:id', authz.tabEdit(), async (req, res, next) => {
+        try {
+            const removed = await db.deleteTab(req.params.id);
+
+            publish(req, { remove: removed });
+            res.json({ removed });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    // column routes
+    router.post('/columns', authz.tabEdit('tabID'), async (req, res, next) => {
+        try {
+            const tabID = requireID(req.body?.tabID, 'tabID');
+            const columnIndex = requireInteger(req.body?.columnIndex, 'columnIndex', { min: 0, max: 500 });
+
+            const existing = await db.getColumnByIndex(tabID, columnIndex);
+            if (existing) return res.json(existing);
+
+            const column = await db.createColumn(tabID, columnIndex);
+
+            publish(req, { upsert: { columns: [column] } });
+            res.status(201).json(column);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.delete('/columns/:id', authz.columnEdit(), async (req, res, next) => {
+        try {
+            const { removed, columns } = await db.deleteColumn(req.params.id);
+
+            publish(req, { upsert: { columns }, remove: removed });
+            res.json({ removed, columns });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    // list routes
+    router.post('/lists', authz.columnEdit('columnID'), async (req, res, next) => {
+        try {
+            const columnID = requireID(req.body?.columnID, 'columnID');
+
+            const list = await db.createList(columnID, {
+                name: optionalText(req.body?.name, 'name', 80) ?? 'New list',
+                category: optionalText(req.body?.category, 'category', 80),
+                color: optionalColor(req.body?.color, 'color'),
+                listOrder: optionalInteger(req.body?.listOrder, 'listOrder')
+            });
+
+            publish(req, { upsert: { lists: [list] } });
+            res.status(201).json(list);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.put('/lists/reorder',
+        parseBatch(requireListReorder),
+        resolveBatchScope(ids => db.getWorkspaceScopeForLists(ids), 'columnID', ids => db.getWorkspaceScopeForColumns(ids)),
+        async (req, res, next) => {
+            try {
+                const { lists, columns, removed } = await db.reorderLists(req.batchUpdates);
+
+                publish(req, { upsert: { lists, columns }, remove: removed });
+                res.json({ lists, columns, removed });
+            } catch (error) {
+                next(error);
+            }
+        });
+
+    router.put('/lists/:id', authz.listEdit(), async (req, res, next) => {
+        try {
+            const changes = {
+                name: optionalText(req.body?.name, 'name', 80),
+                category: optionalText(req.body?.category, 'category', 80),
+                color: optionalColor(req.body?.color, 'color'),
+                listOrder: optionalInteger(req.body?.listOrder, 'listOrder')
+            };
+
+            const list = await db.updateList(req.params.id, changes);
+            if (!list) return res.status(404).json({ error: 'Not found' });
+
+            publish(req, { upsert: { lists: [list] } });
+            res.json(list);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.delete('/lists/:id', authz.listEdit(), async (req, res, next) => {
+        try {
+            const { removed, columns } = await db.deleteList(req.params.id);
+
+            publish(req, { upsert: { columns }, remove: removed });
+            res.json({ removed, columns });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    // task routes
+    router.post('/tasks', authz.listEdit('listID'), async (req, res, next) => {
+        try {
+            const task = await db.createTask(requireID(req.body?.listID, 'listID'), {
+                title: optionalText(req.body?.title, 'title', 200) ?? '',
+                description: optionalText(req.body?.description, 'description', 5000) ?? '',
+                category: optionalText(req.body?.category, 'category', 80),
+                color: optionalColor(req.body?.color, 'color')
+            });
+
+            publish(req, { upsert: { tasks: [task] } });
+            res.status(201).json(task);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.put('/tasks/reorder',
+        parseBatch(requireTaskReorder),
+        resolveBatchScope(ids => db.getWorkspaceScopeForTasks(ids), 'listID', ids => db.getWorkspaceScopeForLists(ids)),
+        async (req, res, next) => {
+            try {
+                const tasks = await db.reorderTasks(req.batchUpdates);
+
+                publish(req, { upsert: { tasks } });
+                res.json({ tasks });
+            } catch (error) {
+                next(error);
+            }
+        });
+
+    router.put('/tasks/:id', authz.taskEdit(), async (req, res, next) => {
+        try {
+            const changes = {
+                title: optionalText(req.body?.title, 'title', 200),
+                description: optionalText(req.body?.description, 'description', 5000),
+                isCompleted: optionalBoolean(req.body?.isCompleted, 'isCompleted'),
+                category: optionalText(req.body?.category, 'category', 80),
+                color: optionalColor(req.body?.color, 'color'),
+                deadline: optionalDate(req.body?.deadline, 'deadline'),
+                subtasks: optionalSubtasks(req.body?.subtasks, 'subtasks'),
+                assignedUsers: optionalIDList(req.body?.assignedUsers, 'assignedUsers')
+            };
+
+            const expectedUpdatedAt = typeof req.body?.updatedAt === 'string' ? req.body.updatedAt : undefined;
+            const result = await db.updateTask(req.params.id, changes, expectedUpdatedAt);
+
+            if (result.error) {
+                return res.status(result.status).json({ error: result.error, record: result.record });
             }
 
-            const target = await db.getUserByID(userID);
-            if (!target) return res.status(404).json({ error: 'Not found' });
-
-            if (target.role === 'admin' && await db.countAdmins() <= 1) {
-                return res.status(400).json({ error: 'Cannot delete the last remaining admin' });
-            }
-
-            const result = await db.deleteUser(userID);
-
-            await audit(req, {
-                action: 'user.deleted',
-                targetType: 'user',
-                targetID: userID,
-                detail: { username: target.username, workspaces: result.workspaces }
-            });
-
-            res.json({ deleted: userID, workspaces: result.workspaces });
+            publish(req, { upsert: { tasks: [result.record] } });
+            res.json(result.record);
         } catch (error) {
             next(error);
         }
     });
 
-    router.put('/users/:id/password', async (req, res, next) => {
+    router.delete('/tasks/:id', authz.taskEdit(), async (req, res, next) => {
         try {
-            const userID = requireID(req.params.id, 'id');
-            const password = requirePassword(req.body?.password);
+            const removed = await db.deleteTask(req.params.id);
 
-            const target = await db.getUserByID(userID);
-            if (!target) return res.status(404).json({ error: 'Not found' });
-
-            await db.setUserPassword(userID, password);
-            await db.deleteSessionsForUser(userID);
-
-            await audit(req, {
-                action: 'password.reset',
-                targetType: 'user',
-                targetID: userID,
-                detail: { username: target.username }
-            });
-
-            res.json({ reset: userID });
+            publish(req, { remove: removed });
+            res.json({ removed });
         } catch (error) {
             next(error);
         }
     });
 
-    router.post('/users/:id/restore', async (req, res, next) => {
+    // retrieval routes
+    router.get('/:workspaceID', authz.workspaceParam(), async (req, res, next) => {
         try {
-            const userID = requireID(req.params.id, 'id');
-            const result = await db.restoreUser(userID);
-
-            if (!result.restored) return res.status(404).json({ error: 'Not found' });
-
-            await audit(req, {
-                action: 'user.restored',
-                targetType: 'user',
-                targetID: userID,
-                detail: { workspaces: result.workspaces }
-            });
-
-            res.json({ restored: userID, workspaces: result.workspaces });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.delete('/users/:id/purge', async (req, res, next) => {
-        try {
-            const userID = requireID(req.params.id, 'id');
-            const purged = await db.purgeUser(userID);
-
-            if (!purged) return res.status(404).json({ error: 'Not found' });
-
-            await audit(req, { action: 'user.purged', targetType: 'user', targetID: userID });
-
-            res.json({ purged: userID });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    // workspace routes
-    router.get('/workspaces', async (req, res, next) => {
-        try {
-            const workspaces = await db.getAllWorkspaces({ includeDeleted: req.query.includeDeleted === 'true' });
-            res.json({ workspaces });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.post('/workspaces/:id/restore', async (req, res, next) => {
-        try {
-            const workspaceID = requireID(req.params.id, 'id');
-            const restored = await db.restoreWorkspace(workspaceID);
-
-            if (!restored) return res.status(404).json({ error: 'Not found' });
-
-            await audit(req, { action: 'workspace.restored', targetType: 'workspace', targetID: workspaceID });
-
-            res.json({ restored: workspaceID });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.delete('/workspaces/:id/purge', async (req, res, next) => {
-        try {
-            const workspaceID = requireID(req.params.id, 'id');
-            const purged = await db.purgeWorkspace(workspaceID);
-
-            if (!purged) return res.status(404).json({ error: 'Not found' });
-
-            await audit(req, { action: 'workspace.purged', targetType: 'workspace', targetID: workspaceID });
-
-            res.json({ purged: workspaceID });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    // audit routes
-    router.get('/audit', async (req, res, next) => {
-        try {
-            const entries = await db.getAuditLog({
-                limit: Number(req.query.limit) || 100,
-                action: req.query.action || null
-            });
-
-            res.json({ entries });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    // export routes
-    router.get('/export', async (req, res, next) => {
-        try {
-            const data = await db.exportAll();
-            const stamp = new Date().toISOString().slice(0, 10);
-
-            await audit(req, { action: 'data.exported' });
-
-            res.setHeader('Content-Disposition', `attachment; filename="nodelit-export-${stamp}.json"`);
-            res.json(data);
+            const board = await db.getWorkspaceData(req.workspaceID);
+            res.json({ ...board, memberRole: req.membership.role });
         } catch (error) {
             next(error);
         }
