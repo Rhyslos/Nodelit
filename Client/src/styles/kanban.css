@@ -1529,3 +1529,95 @@
     padding: 0;
     border-top: none;
 }
+
+/* list tag styles */
+.kanban-list-tag-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px;
+    border: none;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.kanban-list:hover .kanban-list-tag-btn {
+    opacity: 1;
+}
+
+.kanban-list-tag-btn:hover {
+    color: var(--accent);
+}
+
+.kanban-list-header {
+    position: relative;
+    flex-wrap: wrap;
+}
+
+/* unnamed tag styles */
+.tag-chip--blank {
+    min-width: 26px;
+    height: 14px;
+    padding: 0;
+}
+
+.tag-picker-name.is-unnamed {
+    color: var(--faint);
+    font-style: italic;
+}
+
+/* custom colour styles */
+.tag-manager-swatches {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.tag-manager-custom {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.tag-manager-custom input[type="color"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+}
+
+.tag-manager-custom span {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+    border: 2px solid var(--ink);
+    pointer-events: none;
+}
+
+.tag-manager-rename {
+    flex: 1;
+    min-width: 80px;
+    border: none;
+    border-bottom: 1px solid transparent;
+    background: none;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    outline: none;
+    padding: 2px 0;
+}
+
+.tag-manager-rename:focus {
+    border-bottom-color: var(--accent);
+}

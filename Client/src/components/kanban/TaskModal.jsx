@@ -121,7 +121,7 @@ export default function TaskModal({ task, tags = [], members = [], onSave, onSet
 
                     <div className="kanban-assignee-row">
                         {tags.filter(tag => (task?.tagIDs ?? []).includes(tag.id)).map(tag => (
-                            <span key={tag.id} className="tag-chip" style={{ background: tag.color }}>
+                            <span key={tag.id} className={`tag-chip ${tag.name ? '' : 'tag-chip--blank'}`} style={{ background: tag.color }} title={tag.name || 'Unnamed tag'}>
                                 {tag.name}
                             </span>
                         ))}

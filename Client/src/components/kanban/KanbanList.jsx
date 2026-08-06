@@ -1,7 +1,9 @@
 // component imports
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Tag as TagIcon } from 'lucide-react';
 import KanbanTask from './KanbanTask';
 import AnimatedRemoval from '../AnimatedRemoval';
+import TagPicker from './TagPicker';
 
 // component functions
 export default function KanbanList({
@@ -17,6 +19,7 @@ export default function KanbanList({
     isTaskRemoving,
     isListRemoving,
     onUpdate,
+    onSetTags,
     onAddTask,
     onUpdateTask,
     onSetTaskTags,
@@ -32,6 +35,10 @@ export default function KanbanList({
     // dom references
     const nameRef = useRef(null);
     const listRef = useRef(null);
+    const tagBtnRef = useRef(null);
+
+    // state variables
+    const [tagRect, setTagRect] = useState(null);
 
     // lifecycle functions
     useEffect(() => {
@@ -103,10 +110,39 @@ export default function KanbanList({
                     )}
 
                     {listTags.map(tag => (
-                        <span key={tag.id} className="tag-chip" style={{ background: tag.color }}>
+                        <span key={tag.id} className={`tag-chip ${tag.name ? '' : 'tag-chip--blank'}`} style={{ background: tag.color }} title={tag.name || 'Unnamed tag'}>
                             {tag.name}
                         </span>
                     ))}
+
+                    {canEdit && (
+                        <button
+                            ref={tagBtnRef}
+                            className="kanban-list-tag-btn"
+                            title="Tags"
+                            onClick={e => {
+                                e.stopPropagation();
+                                setTagRect(tagRect ? null : tagBtnRef.current.getBoundingClientRect());
+                            }}
+                        >
+                            <TagIcon size={13} strokeWidth={2} />
+                        </button>
+                    )}
+
+                    {tagRect && (
+                        <TagPicker
+                            anchorRect={tagRect}
+                            tags={tags}
+                            selected={list.tagIDs ?? []}
+                            onToggle={tagID => {
+                                const current = list.tagIDs ?? [];
+                                onSetTags(current.includes(tagID)
+                                    ? current.filter(id => id !== tagID)
+                                    : [...current, tagID]);
+                            }}
+                            onClose={() => setTagRect(null)}
+                        />
+                    )}
 
                     <span
                         ref={nameRef}

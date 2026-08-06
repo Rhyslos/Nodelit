@@ -167,12 +167,18 @@ END $$;
 CREATE TABLE IF NOT EXISTS tags (
     id           text PRIMARY KEY,
     workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    name         text NOT NULL,
+    name         text NOT NULL DEFAULT '',
     color        text NOT NULL DEFAULT '#c8502a'
 );
 
+ALTER TABLE tags ALTER COLUMN name SET DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS tags_workspace_id_idx ON tags (workspace_id);
-CREATE UNIQUE INDEX IF NOT EXISTS tags_workspace_name_key ON tags (workspace_id, lower(name));
+
+DROP INDEX IF EXISTS tags_workspace_name_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS tags_workspace_named_key
+    ON tags (workspace_id, lower(name)) WHERE name <> '';
 
 CREATE TABLE IF NOT EXISTS list_tags (
     list_id text NOT NULL REFERENCES lists(id) ON DELETE CASCADE,

@@ -41,11 +41,6 @@ export default function TagManager({ workspaceID, onClose }) {
     async function handleCreate(e) {
         e.preventDefault();
 
-        if (!name.trim()) {
-            setError('Give the tag a name');
-            return;
-        }
-
         setError('');
         setBusy(true);
 
@@ -79,8 +74,25 @@ export default function TagManager({ workspaceID, onClose }) {
         }
     }
 
+    async function handleRename(tag, nextName) {
+        if (nextName.trim() === tag.name) return;
+
+        try {
+            const updated = await api(`/api/kanban/tags/${tag.id}`, {
+                method: 'PUT',
+                body: { name: nextName.trim() }
+            });
+
+            setTags(prev => prev.map(t => t.id === updated.id ? updated : t));
+            announceChange();
+        } catch (err) {
+            setError(err.message);
+            load();
+        }
+    }
+
     async function handleDelete(tag) {
-        if (!window.confirm(`Delete the tag "${tag.name}"? It will be removed from every list and task.`)) return;
+        if (!window.confirm(`Delete this tag? It will be removed from every list and task.`)) return;
 
         try {
             await api(`/api/kanban/tags/${tag.id}`, { method: 'DELETE' });
@@ -102,23 +114,32 @@ export default function TagManager({ workspaceID, onClose }) {
                 <form className="tag-manager-form" onSubmit={handleCreate}>
                     <input
                         className="admin-input"
-                        placeholder="Tag name"
+                        placeholder="Tag name (optional)"
                         value={name}
                         onChange={e => setName(e.target.value)}
                         autoFocus
                     />
 
-                    <div className="modal-colors">
+                    <div className="tag-manager-swatches">
                         {PRESET_COLORS.map(preset => (
                             <button
                                 key={preset}
                                 type="button"
-                                className={`modal-color-dot ${color === preset ? 'selected' : ''}`}
+                                className={`tag-manager-dot ${color === preset ? 'selected' : ''}`}
                                 style={{ background: preset }}
                                 onClick={() => setColor(preset)}
                                 aria-label={`Use colour ${preset}`}
                             />
                         ))}
+
+                        <label className="tag-manager-custom" title="Custom colour">
+                            <input
+                                type="color"
+                                value={color}
+                                onChange={e => setColor(e.target.value)}
+                            />
+                            <span style={{ background: color }} />
+                        </label>
                     </div>
 
                     <button className="modal-submit" type="submit" disabled={busy}>
@@ -131,20 +152,29 @@ export default function TagManager({ workspaceID, onClose }) {
 
                     {tags.map(tag => (
                         <div className="tag-manager-row" key={tag.id}>
-                            <span className="tag-chip" style={{ background: tag.color }}>{tag.name}</span>
+                            <span
+                                className={`tag-chip ${tag.name ? '' : 'tag-chip--blank'}`}
+                                style={{ background: tag.color }}
+                            >
+                                {tag.name}
+                            </span>
 
-                            <div className="tag-manager-colors">
-                                {PRESET_COLORS.map(preset => (
-                                    <button
-                                        key={preset}
-                                        type="button"
-                                        className={`tag-manager-dot ${tag.color === preset ? 'selected' : ''}`}
-                                        style={{ background: preset }}
-                                        onClick={() => handleRecolor(tag, preset)}
-                                        aria-label={`Recolour ${tag.name}`}
-                                    />
-                                ))}
-                            </div>
+                            <input
+                                className="tag-manager-rename"
+                                value={tag.name}
+                                placeholder="No name"
+                                onChange={e => setTags(prev => prev.map(t => t.id === tag.id ? { ...t, name: e.target.value } : t))}
+                                onBlur={e => handleRename(tag, e.target.value)}
+                            />
+
+                            <label className="tag-manager-custom" title="Custom colour">
+                                <input
+                                    type="color"
+                                    value={tag.color}
+                                    onChange={e => handleRecolor(tag, e.target.value)}
+                                />
+                                <span style={{ background: tag.color }} />
+                            </label>
 
                             <button
                                 className="tag-manager-delete"

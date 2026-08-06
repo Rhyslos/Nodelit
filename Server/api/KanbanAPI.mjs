@@ -18,7 +18,7 @@ import {
 
 // utility functions
 function emptyCollections() {
-    return { tabs: [], columns: [], lists: [], tasks: [] };
+    return { tabs: [], columns: [], lists: [], tasks: [], tags: [] };
 }
 
 function buildDelta({ upsert = {}, remove = {} } = {}) {
@@ -306,7 +306,7 @@ export default function createKanbanRouter(authz) {
         try {
             const tag = await db.createTag(
                 req.workspaceID,
-                requireText(req.body?.name, 'name', 40),
+                optionalText(req.body?.name, 'name', 40) ?? '',
                 requireColor(req.body?.color, 'color')
             );
 
@@ -320,7 +320,7 @@ export default function createKanbanRouter(authz) {
     router.put('/tags/:id', authz.requireEditor(req => db.getWorkspaceIDForTag(req.params.id)), async (req, res, next) => {
         try {
             const tag = await db.updateTag(req.params.id, {
-                name: req.body?.name === undefined ? undefined : requireText(req.body.name, 'name', 40),
+                name: req.body?.name === undefined ? undefined : (optionalText(req.body.name, 'name', 40) ?? ''),
                 color: req.body?.color === undefined ? undefined : requireColor(req.body.color, 'color')
             });
 

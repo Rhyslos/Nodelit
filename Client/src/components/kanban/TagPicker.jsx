@@ -79,7 +79,7 @@ export default function TagPicker({ anchorRect, tags, selected = [], onToggle, o
                         onClick={() => onToggle(tag.id)}
                     >
                         <span className="tag-picker-swatch" style={{ background: tag.color }} />
-                        <span className="tag-picker-name">{tag.name}</span>
+                        <span className={`tag-picker-name ${tag.name ? '' : 'is-unnamed'}`}>{tag.name || 'Unnamed'}</span>
                         {selected.includes(tag.id) && <Check size={13} strokeWidth={2.5} />}
                     </button>
                 ))}

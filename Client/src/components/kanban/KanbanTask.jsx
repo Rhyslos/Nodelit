@@ -182,7 +182,7 @@ export default function KanbanTask({
                     {taskTags.length > 0 && (
                         <span className="kanban-task-tags">
                             {taskTags.map(tag => (
-                                <span key={tag.id} className="tag-chip" style={{ background: tag.color }}>
+                                <span key={tag.id} className={`tag-chip ${tag.name ? '' : 'tag-chip--blank'}`} style={{ background: tag.color }} title={tag.name || 'Unnamed tag'}>
                                     {tag.name}
                                 </span>
                             ))}
