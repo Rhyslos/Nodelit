@@ -12,6 +12,8 @@ const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/;
 const USER_ROLES = ['admin', 'member'];
 const MEMBER_ROLES = ['member', 'viewer'];
 const MAX_ASSIGNEES = 20;
+const THEME_MODES = ['default', 'dark', 'custom'];
+const THEME_KEYS = ['navbar', 'subbar', 'background', 'surface', 'accent', 'text'];
 
 // error classes
 export class ValidationError extends Error {
@@ -244,4 +246,25 @@ export function requireColor(value, field = 'color') {
     }
 
     return color;
+}
+
+export function optionalTheme(value, field = 'theme') {
+    if (value === undefined || value === null) return undefined;
+
+    if (typeof value !== 'object' || Array.isArray(value)) {
+        throw new ValidationError(`${field} must be an object`);
+    }
+
+    if (!THEME_MODES.includes(value.mode)) {
+        throw new ValidationError(`${field}.mode must be one of ${THEME_MODES.join(', ')}`);
+    }
+
+    const custom = {};
+
+    for (const key of THEME_KEYS) {
+        const entry = value.custom?.[key];
+        if (entry !== undefined) custom[key] = requireColor(entry, `${field}.custom.${key}`);
+    }
+
+    return { mode: value.mode, custom };
 }
