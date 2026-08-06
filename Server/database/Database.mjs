@@ -13,7 +13,7 @@ const KEY_LENGTH = 64;
 
 const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived'];
 const LIST_FIELDS = ['name', 'columnID', 'listOrder', 'category', 'color'];
-const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'category', 'color', 'deadline', 'subtasks'];
+const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'category', 'color', 'deadline', 'checklists'];
 const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor'];
 
 const FIELD_DEFINITIONS = {
@@ -30,7 +30,7 @@ const FIELD_DEFINITIONS = {
     description: { column: 'description' },
     isCompleted: { column: 'is_completed', transform: Boolean },
     deadline: { column: 'deadline', cast: '::date', transform: value => (value === '' || value === undefined ? null : value) },
-    subtasks: { column: 'subtasks', cast: '::jsonb', transform: value => JSON.stringify(value ?? []) }
+    checklists: { column: 'checklists', cast: '::jsonb', transform: value => JSON.stringify(value ?? []) }
 };
 
 // projection constants
@@ -100,7 +100,7 @@ const TASK_SELECT = `
     k.category,
     k.color,
     COALESCE(to_char(k.deadline, 'YYYY-MM-DD'), '') AS deadline,
-    k.subtasks,
+    k.checklists,
     k.updated_at AS "updatedAt",
     COALESCE((
         SELECT array_agg(a.user_id ORDER BY a.user_id)
@@ -1078,7 +1078,7 @@ class Database {
             `INSERT INTO tasks (id, list_id, title, description, task_order, category, color)
              VALUES (
                  $1, $2,
-                 COALESCE($3, ''),
+                 COALESCE($3, 'New Task'),
                  COALESCE($4, ''),
                  COALESCE($5, (SELECT COALESCE(MAX(task_order), -1) + 1 FROM tasks WHERE list_id = $2)),
                  $6, $7

@@ -16,22 +16,40 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
     const [category, setCategory] = useState(task?.category || '');
     const [color, setColor] = useState(task?.color || fallbackColor);
     const [deadline, setDeadline] = useState(task?.deadline || '');
-    const [subtasks, setSubtasks] = useState(task?.subtasks || []);
+    const [checklists, setChecklists] = useState(task?.checklists || []);
     const [assignedUsers, setAssignedUsers] = useState(task?.assignedUsers || []);
     const [assignRect, setAssignRect] = useState(null);
     const assignBtnRef = useRef(null);
 
     // mutation functions
-    function addSubtask() {
-        setSubtasks(prev => [...prev, { id: crypto.randomUUID(), text: '', done: false }]);
+    function addChecklist() {
+        setChecklists(prev => [...prev, { id: crypto.randomUUID(), name: 'Checklist', items: [] }]);
     }
 
-    function updateSubtaskAt(index, patch) {
-        setSubtasks(prev => prev.map((st, i) => i === index ? { ...st, ...patch } : st));
+    function updateChecklistAt(index, patch) {
+        setChecklists(prev => prev.map((list, i) => i === index ? { ...list, ...patch } : list));
     }
 
-    function removeSubtaskAt(index) {
-        setSubtasks(prev => prev.filter((_, i) => i !== index));
+    function removeChecklistAt(index) {
+        setChecklists(prev => prev.filter((_, i) => i !== index));
+    }
+
+    function addItem(listIndex) {
+        setChecklists(prev => prev.map((list, i) => i === listIndex
+            ? { ...list, items: [...list.items, { id: crypto.randomUUID(), text: '', done: false }] }
+            : list));
+    }
+
+    function updateItemAt(listIndex, itemIndex, patch) {
+        setChecklists(prev => prev.map((list, i) => i === listIndex
+            ? { ...list, items: list.items.map((item, j) => j === itemIndex ? { ...item, ...patch } : item) }
+            : list));
+    }
+
+    function removeItemAt(listIndex, itemIndex) {
+        setChecklists(prev => prev.map((list, i) => i === listIndex
+            ? { ...list, items: list.items.filter((_, j) => j !== itemIndex) }
+            : list));
     }
 
     function toggleAssignee(userID) {
@@ -49,7 +67,7 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
             category: category || null,
             color,
             deadline,
-            subtasks,
+            checklists,
             assignedUsers
         });
     }
@@ -173,43 +191,76 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
 
                 <div className="kanban-modal-group">
                     <div className="kanban-modal-group-head">
-                        <label>Checklist</label>
-                        <button type="button" className="kanban-subtask-add" onClick={addSubtask}>
-                            + Add item
+                        <label>Checklists</label>
+                        <button type="button" className="kanban-subtask-add" onClick={addChecklist}>
+                            + Add checklist
                         </button>
                     </div>
 
-                    <div className="kanban-subtask-list">
-                        {subtasks.map((st, i) => (
-                            <div key={st.id} className={`kanban-subtask-row ${st.done ? 'is-done' : ''}`}>
-                                <input
-                                    type="checkbox"
-                                    className="kanban-check"
-                                    checked={st.done}
-                                    onChange={e => updateSubtaskAt(i, { done: e.target.checked })}
-                                />
+                    {checklists.map((list, listIndex) => (
+                        <div key={list.id} className="kanban-checklist">
+                            <div className="kanban-checklist-head">
                                 <input
                                     type="text"
-                                    className="kanban-subtask-input"
-                                    placeholder="Checklist item"
-                                    value={st.text}
-                                    onChange={e => updateSubtaskAt(i, { text: e.target.value })}
+                                    className="kanban-checklist-name"
+                                    value={list.name}
+                                    placeholder="Checklist name"
+                                    onChange={e => updateChecklistAt(listIndex, { name: e.target.value })}
                                 />
+                                <span className="kanban-checklist-count">
+                                    {list.items.filter(item => item.done).length}/{list.items.length}
+                                </span>
                                 <button
                                     type="button"
                                     className="kanban-subtask-remove"
-                                    onClick={() => removeSubtaskAt(i)}
-                                    aria-label="Remove item"
+                                    onClick={() => removeChecklistAt(listIndex)}
+                                    aria-label="Remove checklist"
                                 >
                                     ✕
                                 </button>
                             </div>
-                        ))}
 
-                        {subtasks.length === 0 && (
-                            <p className="kanban-subtask-empty">Nothing on the checklist yet</p>
-                        )}
-                    </div>
+                            <div className="kanban-subtask-list">
+                                {list.items.map((item, itemIndex) => (
+                                    <div key={item.id} className={`kanban-subtask-row ${item.done ? 'is-done' : ''}`}>
+                                        <input
+                                            type="checkbox"
+                                            className="kanban-check"
+                                            checked={item.done}
+                                            onChange={e => updateItemAt(listIndex, itemIndex, { done: e.target.checked })}
+                                        />
+                                        <input
+                                            type="text"
+                                            className="kanban-subtask-input"
+                                            placeholder="Checklist item"
+                                            value={item.text}
+                                            onChange={e => updateItemAt(listIndex, itemIndex, { text: e.target.value })}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="kanban-subtask-remove"
+                                            onClick={() => removeItemAt(listIndex, itemIndex)}
+                                            aria-label="Remove item"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button
+                                type="button"
+                                className="kanban-subtask-add kanban-checklist-add-item"
+                                onClick={() => addItem(listIndex)}
+                            >
+                                + Add item
+                            </button>
+                        </div>
+                    ))}
+
+                    {checklists.length === 0 && (
+                        <p className="kanban-subtask-empty">No checklists yet</p>
+                    )}
                 </div>
 
                 <div className="kanban-modal-actions">

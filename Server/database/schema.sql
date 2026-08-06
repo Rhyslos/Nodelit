@@ -143,3 +143,22 @@ CREATE TABLE IF NOT EXISTS task_assignees (
 );
 
 CREATE INDEX IF NOT EXISTS task_assignees_user_id_idx ON task_assignees (user_id);
+
+-- checklist migration
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checklists jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'tasks' AND column_name = 'subtasks'
+    ) THEN
+        UPDATE tasks
+        SET checklists = jsonb_build_array(
+            jsonb_build_object('id', 'cl-legacy', 'name', 'Checklist', 'items', subtasks)
+        )
+        WHERE subtasks <> '[]'::jsonb AND checklists = '[]'::jsonb;
+
+        ALTER TABLE tasks DROP COLUMN subtasks;
+    END IF;
+END $$;

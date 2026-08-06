@@ -4,7 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
 
 // configuration constants
-const CONTENT_FIELDS = ['title', 'description', 'isCompleted', 'category', 'color', 'deadline', 'subtasks', 'assignedUsers'];
+const CONTENT_FIELDS = ['title', 'description', 'isCompleted', 'category', 'color', 'deadline', 'checklists', 'assignedUsers'];
 
 // hook functions
 export function useTasks(listIDs) {
@@ -27,7 +27,7 @@ export function useTasks(listIDs) {
         try {
             const task = await api('/api/kanban/tasks', {
                 method: 'POST',
-                body: { listID, title: '', category: listCategory ?? null, color: listColor ?? null }
+                body: { listID, category: listCategory ?? null, color: listColor ?? null }
             });
 
             setBoardData(prev => applyDelta(prev, { upsert: { tasks: [task] } }));

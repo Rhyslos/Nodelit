@@ -4,6 +4,7 @@ const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BATCH_SIZE = 200;
 const MAX_SUBTASKS = 50;
+const MAX_CHECKLISTS = 10;
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,32}$/;
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_LENGTH = 200;
@@ -87,22 +88,48 @@ export function optionalDate(value, field) {
     return value;
 }
 
-export function optionalSubtasks(value, field) {
-    if (value === undefined || value === null) return undefined;
+export function optionalChecklists(value, field) {
+    if (value === undefined) return undefined;
 
     if (!Array.isArray(value)) {
-        throw new ValidationError(`${field} must be a list`);
+        throw new ValidationError(`${field} must be an array`);
     }
 
-    if (value.length > MAX_SUBTASKS) {
-        throw new ValidationError(`${field} cannot contain more than ${MAX_SUBTASKS} entries`);
+    if (value.length > MAX_CHECKLISTS) {
+        throw new ValidationError(`${field} cannot contain more than ${MAX_CHECKLISTS} checklists`);
     }
 
-    return value.map(item => ({
-        id: requireID(item?.id, `${field}.id`),
-        text: optionalText(item?.text, `${field}.text`, 200) ?? '',
-        done: item?.done === true
-    }));
+    return value.map(entry => {
+        if (!entry || typeof entry !== 'object') {
+            throw new ValidationError(`${field} entries must be objects`);
+        }
+
+        const items = Array.isArray(entry.items) ? entry.items : [];
+
+        if (items.length > MAX_SUBTASKS) {
+            throw new ValidationError(`a checklist cannot contain more than ${MAX_SUBTASKS} items`);
+        }
+
+        const name = typeof entry.name === 'string' && entry.name.trim()
+            ? entry.name.trim().slice(0, 80)
+            : 'Checklist';
+
+        return {
+            id: requireID(entry.id, `${field}.id`),
+            name,
+            items: items.map(item => {
+                if (!item || typeof item !== 'object') {
+                    throw new ValidationError(`${field} items must be objects`);
+                }
+
+                return {
+                    id: requireID(item.id, `${field}.items.id`),
+                    text: typeof item.text === 'string' ? item.text.slice(0, 200) : '',
+                    done: Boolean(item.done)
+                };
+            })
+        };
+    });
 }
 
 export function requireInteger(value, field, { min = 0, max = 10000 } = {}) {
