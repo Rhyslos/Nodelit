@@ -240,7 +240,7 @@ async function main() {
     const config = validateEnvironment();
 
     await applySchema();
-    await db.seed();
+    await db.bootstrap();
 
     const server = new Server(config);
     server.start();

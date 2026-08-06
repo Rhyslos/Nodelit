@@ -1,5 +1,4 @@
 -- nodelit schema
--- every statement is idempotent so this can run on every boot
 
 -- user tables
 CREATE TABLE IF NOT EXISTS users (
@@ -10,14 +9,18 @@ CREATE TABLE IF NOT EXISTS users (
     cursor_color text NOT NULL DEFAULT '#c8502a',
     salt         text NOT NULL,
     hash         text NOT NULL,
-    created_at   timestamptz(3) NOT NULL DEFAULT now()
+    created_at   timestamptz(3) NOT NULL DEFAULT now(),
+    deleted_at   timestamptz(3)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_key ON users (lower(username));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at timestamptz(3);
+
+DROP INDEX IF EXISTS users_username_lower_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_active_key
+    ON users (lower(username)) WHERE deleted_at IS NULL;
 
 -- session tables
--- id holds the sha-256 of the cookie value, never the value itself,
--- so a leaked database dump cannot be replayed as a live session
 CREATE TABLE IF NOT EXISTS sessions (
     id         text PRIMARY KEY,
     user_id    text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -43,8 +46,11 @@ CREATE TABLE IF NOT EXISTS workspaces (
     name        text NOT NULL,
     owner_id    text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     category_id text REFERENCES categories(id) ON DELETE SET NULL,
-    created_at  timestamptz(3) NOT NULL DEFAULT now()
+    created_at  timestamptz(3) NOT NULL DEFAULT now(),
+    deleted_at  timestamptz(3)
 );
+
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS deleted_at timestamptz(3);
 
 CREATE INDEX IF NOT EXISTS workspaces_owner_id_idx ON workspaces (owner_id);
 CREATE INDEX IF NOT EXISTS workspaces_category_id_idx ON workspaces (category_id);
@@ -71,8 +77,6 @@ CREATE TABLE IF NOT EXISTS tabs (
 
 CREATE INDEX IF NOT EXISTS tabs_workspace_id_idx ON tabs (workspace_id);
 
--- named board_columns to avoid confusion with information_schema.columns.
--- workspace is reachable through tab_id, so it is not stored again here.
 CREATE TABLE IF NOT EXISTS board_columns (
     id           text PRIMARY KEY,
     tab_id       text NOT NULL REFERENCES tabs(id) ON DELETE CASCADE,
@@ -82,7 +86,6 @@ CREATE TABLE IF NOT EXISTS board_columns (
 CREATE INDEX IF NOT EXISTS board_columns_tab_id_idx ON board_columns (tab_id);
 CREATE UNIQUE INDEX IF NOT EXISTS board_columns_tab_index_key ON board_columns (tab_id, column_index);
 
--- tab and workspace are reachable through column_id, so they are not stored again here
 CREATE TABLE IF NOT EXISTS lists (
     id         text PRIMARY KEY,
     column_id  text NOT NULL REFERENCES board_columns(id) ON DELETE CASCADE,
@@ -110,3 +113,19 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 CREATE INDEX IF NOT EXISTS tasks_list_id_idx ON tasks (list_id);
+
+-- audit tables
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          bigserial PRIMARY KEY,
+    created_at  timestamptz(3) NOT NULL DEFAULT now(),
+    actor_id    text,
+    actor_name  text,
+    action      text NOT NULL,
+    target_type text,
+    target_id   text,
+    detail      jsonb NOT NULL DEFAULT '{}'::jsonb,
+    ip          text
+);
+
+CREATE INDEX IF NOT EXISTS audit_log_created_at_idx ON audit_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS audit_log_lockout_idx ON audit_log (action, created_at DESC);

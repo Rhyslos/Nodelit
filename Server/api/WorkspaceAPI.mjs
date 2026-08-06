@@ -71,6 +71,17 @@ export default function createWorkspaceRouter(authz) {
     router.delete('/:workspaceID', authz.workspaceOwnerParam(), async (req, res, next) => {
         try {
             await db.deleteWorkspace(req.workspaceID);
+
+            await db.recordAudit({
+                actorID: req.user.id,
+                actorName: req.user.username,
+                action: 'workspace.deleted',
+                targetType: 'workspace',
+                targetID: req.workspaceID,
+                detail: { name: req.workspace?.name },
+                ip: req.ip
+            });
+
             res.json({ success: true });
         } catch (error) {
             next(error);

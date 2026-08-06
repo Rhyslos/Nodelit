@@ -226,93 +226,31 @@ class Database {
         this.startSessionSweep();
     }
 
-    // seed functions
-    async seed() {
-        if (process.env.SEED_DEMO_DATA === 'false') return;
-
-        const existing = await queryOne('SELECT 1 AS present FROM users LIMIT 1');
+    // bootstrap functions
+    async bootstrap() {
+        const existing = await queryOne('SELECT 1 AS present FROM users WHERE deleted_at IS NULL LIMIT 1');
         if (existing) return;
 
-        const password = process.env.SEED_PASSWORD ?? 'k';
+        const username = process.env.ADMIN_USERNAME;
+        const password = process.env.ADMIN_PASSWORD;
 
-        if (process.env.NODE_ENV === 'production' && !process.env.SEED_PASSWORD) {
-            console.warn('WARNING: seeding demo users with the default development password');
+        if (!username || !password) {
+            console.warn('No active users exist and ADMIN_USERNAME / ADMIN_PASSWORD are unset. Nobody can sign in.');
+            return;
         }
 
-        await this.insertSeedUser({ id: 'user-1', username: 'test', password, displayName: 'Test User', role: 'admin', cursorColor: '#c8502a' });
-        await this.insertSeedUser({ id: 'user-2', username: 'demo', password, displayName: 'Demo User', role: 'member', cursorColor: '#4a90d9' });
+        if (password.length < 12) {
+            throw new Error('ADMIN_PASSWORD must be at least 12 characters');
+        }
 
-        await this.seedWorkspace();
-    }
-
-    async insertSeedUser({ id, username, password, displayName, role, cursorColor }) {
-        const { salt, hash } = await derivePassword(password);
-
-        await query(
-            `INSERT INTO users (id, username, display_name, role, cursor_color, salt, hash)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             ON CONFLICT (id) DO NOTHING`,
-            [id, username, displayName, role, cursorColor, salt, hash]
-        );
-    }
-
-    async seedWorkspace() {
-        await withTransaction(async client => {
-            await client.query(
-                `INSERT INTO categories (id, user_id, name, color) VALUES
-                 ('cat-1', 'user-1', 'Planning', '#4a90d9'),
-                 ('cat-2', 'user-1', 'Research', '#7ab648')
-                 ON CONFLICT (id) DO NOTHING`
-            );
-
-            await client.query(
-                `INSERT INTO workspaces (id, name, owner_id, category_id)
-                 VALUES ('workspace-1', 'Example Project', 'user-1', 'cat-1')
-                 ON CONFLICT (id) DO NOTHING`
-            );
-
-            await client.query(
-                `INSERT INTO memberships (workspace_id, user_id, role) VALUES
-                 ('workspace-1', 'user-1', 'owner'),
-                 ('workspace-1', 'user-2', 'member')
-                 ON CONFLICT (workspace_id, user_id) DO NOTHING`
-            );
-
-            await client.query(
-                `INSERT INTO tabs (id, workspace_id, name, color, tab_order) VALUES
-                 ('tab-1', 'workspace-1', 'Main Board', '#6c8ebf', 0),
-                 ('tab-2', 'workspace-1', 'Backlog', '#b8f0c8', 1)
-                 ON CONFLICT (id) DO NOTHING`
-            );
-
-            await client.query(
-                `INSERT INTO board_columns (id, tab_id, column_index) VALUES
-                 ('col-1', 'tab-1', 0),
-                 ('col-2', 'tab-1', 1),
-                 ('col-3', 'tab-2', 0)
-                 ON CONFLICT (id) DO NOTHING`
-            );
-
-            await client.query(
-                `INSERT INTO lists (id, column_id, name, list_order, category, color) VALUES
-                 ('list-1', 'col-1', 'To Do', 0, 'Planning', '#4a90d9'),
-                 ('list-2', 'col-1', 'Blocked', 1, NULL, '#e6a817'),
-                 ('list-3', 'col-2', 'In Progress', 0, 'Research', '#7ab648'),
-                 ('list-4', 'col-3', 'Someday', 0, NULL, '#9b59b6')
-                 ON CONFLICT (id) DO NOTHING`
-            );
-
-            await client.query(
-                `INSERT INTO tasks (id, list_id, title, description, is_completed, task_order, category, color, deadline, subtasks) VALUES
-                 ('task-1', 'list-1', 'Wire up the board', '', false, 0, 'Planning', '#4a90d9', NULL, '[]'::jsonb),
-                 ('task-2', 'list-1', 'Check drag and drop', 'Across columns too.', false, 1, 'Planning', '#4a90d9', NULL,
-                    '[{"id":"sub-1","text":"Within a list","done":true},{"id":"sub-2","text":"Between columns","done":false}]'::jsonb),
-                 ('task-3', 'list-2', 'Waiting on schema', '', false, 0, NULL, '#e6a817', '2026-09-01', '[]'::jsonb),
-                 ('task-4', 'list-3', 'Live sync over SSE', '', true, 0, 'Research', '#7ab648', NULL, '[]'::jsonb),
-                 ('task-5', 'list-4', 'Chat page', '', false, 0, NULL, '#9b59b6', NULL, '[]'::jsonb)
-                 ON CONFLICT (id) DO NOTHING`
-            );
+        const user = await this.createUser({
+            username,
+            password,
+            displayName: process.env.ADMIN_DISPLAY_NAME ?? username,
+            role: 'admin'
         });
+
+        console.log(`Bootstrapped admin account: ${user.username}`);
     }
 
     // session functions
@@ -353,7 +291,8 @@ class Database {
         return queryOne(
             `SELECT ${USER_SELECT}
              FROM users
-             WHERE id = (
+             WHERE deleted_at IS NULL
+               AND id = (
                  SELECT user_id FROM sessions
                  WHERE id = $1 AND expires_at > now()
              )`,
@@ -367,13 +306,13 @@ class Database {
             `SELECT id, username, display_name AS "displayName", role,
                     cursor_color AS "cursorColor", salt, hash
              FROM users
-             WHERE lower(username) = lower($1)`,
+             WHERE lower(username) = lower($1) AND deleted_at IS NULL`,
             [username]
         );
     }
 
     async getUserByID(userID) {
-        return queryOne(`SELECT ${USER_SELECT} FROM users WHERE id = $1`, [userID]);
+        return queryOne(`SELECT ${USER_SELECT} FROM users WHERE id = $1 AND deleted_at IS NULL`, [userID]);
     }
 
     toPublicUser(user) {
@@ -381,20 +320,37 @@ class Database {
     }
 
     // administration functions
-    async getAllUsers() {
+    async getAllUsers({ includeDeleted = false } = {}) {
         const { rows } = await query(
             `SELECT u.id, u.username, u.display_name AS "displayName", u.role,
                     u.cursor_color AS "cursorColor", u.created_at AS "createdAt",
-                    (SELECT COUNT(*)::int FROM workspaces w WHERE w.owner_id = u.id) AS "ownedWorkspaces",
+                    u.deleted_at AS "deletedAt",
+                    (SELECT COUNT(*)::int FROM workspaces w WHERE w.owner_id = u.id AND w.deleted_at IS NULL) AS "ownedWorkspaces",
                     (SELECT COUNT(*)::int FROM memberships m WHERE m.user_id = u.id) AS "memberships"
              FROM users u
-             ORDER BY u.created_at`
+             WHERE $1 OR u.deleted_at IS NULL
+             ORDER BY u.deleted_at NULLS FIRST, u.created_at`,
+            [includeDeleted]
+        );
+        return rows;
+    }
+
+    async getAllWorkspaces({ includeDeleted = false } = {}) {
+        const { rows } = await query(
+            `SELECT w.id, w.name, w.owner_id AS "ownerID", u.username AS "ownerName",
+                    w.created_at AS "createdAt", w.deleted_at AS "deletedAt",
+                    (SELECT COUNT(*)::int FROM memberships m WHERE m.workspace_id = w.id) AS "memberCount"
+             FROM workspaces w
+             LEFT JOIN users u ON u.id = w.owner_id
+             WHERE $1 OR w.deleted_at IS NULL
+             ORDER BY w.deleted_at NULLS FIRST, w.created_at DESC`,
+            [includeDeleted]
         );
         return rows;
     }
 
     async countAdmins() {
-        const row = await queryOne(`SELECT COUNT(*)::int AS total FROM users WHERE role = 'admin'`);
+        const row = await queryOne(`SELECT COUNT(*)::int AS total FROM users WHERE role = 'admin' AND deleted_at IS NULL`);
         return row?.total ?? 0;
     }
 
@@ -420,18 +376,139 @@ class Database {
     }
 
     async deleteUser(userID) {
-        const { rowCount } = await query('DELETE FROM users WHERE id = $1', [userID]);
+        return withTransaction(async client => {
+            const { rows } = await client.query(
+                `UPDATE users SET deleted_at = now()
+                 WHERE id = $1 AND deleted_at IS NULL
+                 RETURNING deleted_at`,
+                [userID]
+            );
+
+            if (rows.length === 0) return { deleted: false, workspaces: 0 };
+
+            const { rowCount: workspaces } = await client.query(
+                'UPDATE workspaces SET deleted_at = $2 WHERE owner_id = $1 AND deleted_at IS NULL',
+                [userID, rows[0].deleted_at]
+            );
+
+            await client.query('DELETE FROM sessions WHERE user_id = $1', [userID]);
+
+            return { deleted: true, workspaces };
+        });
+    }
+
+    async restoreUser(userID) {
+        return withTransaction(async client => {
+            const target = await client.query(
+                'SELECT deleted_at FROM users WHERE id = $1 AND deleted_at IS NOT NULL',
+                [userID]
+            );
+
+            if (target.rowCount === 0) return { restored: false, workspaces: 0 };
+
+            const previous = target.rows[0].deleted_at;
+
+            try {
+                await client.query('UPDATE users SET deleted_at = NULL WHERE id = $1', [userID]);
+            } catch (error) {
+                if (error.code === '23505') {
+                    const conflict = new Error('An active user already has that username');
+                    conflict.status = 409;
+                    throw conflict;
+                }
+                throw error;
+            }
+
+            const { rowCount: workspaces } = await client.query(
+                'UPDATE workspaces SET deleted_at = NULL WHERE owner_id = $1 AND deleted_at = $2',
+                [userID, previous]
+            );
+
+            return { restored: true, workspaces };
+        });
+    }
+
+    async purgeUser(userID) {
+        const { rowCount } = await query(
+            'DELETE FROM users WHERE id = $1 AND deleted_at IS NOT NULL',
+            [userID]
+        );
         return rowCount > 0;
+    }
+
+    async restoreWorkspace(workspaceID) {
+        const { rowCount } = await query(
+            'UPDATE workspaces SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL',
+            [workspaceID]
+        );
+        return rowCount > 0;
+    }
+
+    async purgeWorkspace(workspaceID) {
+        const { rowCount } = await query(
+            'DELETE FROM workspaces WHERE id = $1 AND deleted_at IS NOT NULL',
+            [workspaceID]
+        );
+        return rowCount > 0;
+    }
+
+    // audit functions
+    async recordAudit({ actorID, actorName, action, targetType, targetID, detail, ip }) {
+        try {
+            await query(
+                `INSERT INTO audit_log (actor_id, actor_name, action, target_type, target_id, detail, ip)
+                 VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+                [
+                    actorID ?? null,
+                    actorName ?? null,
+                    action,
+                    targetType ?? null,
+                    targetID ?? null,
+                    JSON.stringify(detail ?? {}),
+                    ip ?? null
+                ]
+            );
+        } catch (error) {
+            console.error('Audit write failed:', error.message);
+        }
+    }
+
+    async getAuditLog({ limit = 100, action = null } = {}) {
+        const { rows } = await query(
+            `SELECT id, created_at AS "createdAt", actor_id AS "actorID", actor_name AS "actorName",
+                    action, target_type AS "targetType", target_id AS "targetID", detail, ip
+             FROM audit_log
+             WHERE ($2::text IS NULL OR action = $2)
+             ORDER BY created_at DESC, id DESC
+             LIMIT $1`,
+            [Math.min(limit, 500), action]
+        );
+        return rows;
+    }
+
+    async countRecentLoginFailures({ username, ip, minutes = 15 }) {
+        const row = await queryOne(
+            `SELECT
+                 COUNT(*) FILTER (WHERE target_id = lower($1))::int AS "byUsername",
+                 COUNT(*) FILTER (WHERE ip = $2)::int AS "byIP"
+             FROM audit_log
+             WHERE action = 'login.failed'
+               AND created_at > now() - ($3::int * interval '1 minute')`,
+            [username, ip ?? '', minutes]
+        );
+
+        return { byUsername: row?.byUsername ?? 0, byIP: row?.byIP ?? 0 };
     }
 
     async exportAll() {
         const [users, categories, workspaces, memberships, tabs, columns, lists, tasks] = await Promise.all([
             query(`SELECT id, username, display_name AS "displayName", role,
-                          cursor_color AS "cursorColor", created_at AS "createdAt"
+                          cursor_color AS "cursorColor", created_at AS "createdAt",
+                          deleted_at AS "deletedAt"
                    FROM users ORDER BY created_at`),
             query('SELECT id, user_id AS "userID", name, color FROM categories ORDER BY id'),
             query(`SELECT id, name, owner_id AS "ownerID", category_id AS "categoryID",
-                          created_at AS "createdAt"
+                          created_at AS "createdAt", deleted_at AS "deletedAt"
                    FROM workspaces ORDER BY created_at`),
             query('SELECT workspace_id AS "workspaceID", user_id AS "userID", role FROM memberships ORDER BY workspace_id'),
             query(`SELECT ${TAB_SELECT} FROM tabs t ORDER BY t.workspace_id, t.tab_order`),
@@ -491,7 +568,7 @@ class Database {
              FROM workspaces w
              JOIN memberships m ON m.workspace_id = w.id
              LEFT JOIN categories cat ON cat.id = w.category_id
-             WHERE m.user_id = $1
+             WHERE m.user_id = $1 AND w.deleted_at IS NULL
              ORDER BY w.created_at DESC`,
             [userID]
         );
@@ -499,7 +576,7 @@ class Database {
     }
 
     async getWorkspace(workspaceID) {
-        return queryOne(`SELECT ${WORKSPACE_SELECT} FROM workspaces w WHERE w.id = $1`, [workspaceID]);
+        return queryOne(`SELECT ${WORKSPACE_SELECT} FROM workspaces w WHERE w.id = $1 AND w.deleted_at IS NULL`, [workspaceID]);
     }
 
     async createWorkspace(userID, name, categoryID) {
@@ -546,7 +623,10 @@ class Database {
     }
 
     async deleteWorkspace(workspaceID) {
-        const { rowCount } = await query('DELETE FROM workspaces WHERE id = $1', [workspaceID]);
+        const { rowCount } = await query(
+            'UPDATE workspaces SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL',
+            [workspaceID]
+        );
         return rowCount > 0;
     }
 
@@ -573,7 +653,7 @@ class Database {
                     u.cursor_color AS "cursorColor", m.role AS "memberRole"
              FROM memberships m
              JOIN users u ON u.id = m.user_id
-             WHERE m.workspace_id = $1
+             WHERE m.workspace_id = $1 AND u.deleted_at IS NULL
              ORDER BY m.role = 'owner' DESC, u.display_name`,
             [workspaceID]
         );

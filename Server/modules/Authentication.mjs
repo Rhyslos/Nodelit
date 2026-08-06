@@ -1,11 +1,20 @@
 // authentication imports
 import crypto from 'crypto';
+import { promisify } from 'node:util';
 import db from '../database/Database.mjs';
+
+const scrypt = promisify(crypto.scrypt);
 
 // configuration constants
 const SESSION_COOKIE = 'session_id';
 const KEY_LENGTH = 64;
+const SALT_BYTES = 16;
 const MAX_CREDENTIAL_LENGTH = 200;
+const SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+
+const LOCKOUT_WINDOW_MINUTES = 15;
+const MAX_FAILURES_PER_USERNAME = 10;
+const MAX_FAILURES_PER_IP = 40;
 
 const COOKIE_OPTIONS = {
     httpOnly: true,
@@ -17,23 +26,30 @@ const COOKIE_OPTIONS = {
 
 // authentication classes
 class Authentication {
-
-    // cryptographic functions
-    hashPassword(password) {
-        const salt = crypto.randomBytes(16).toString('hex');
-        const hash = crypto.scryptSync(password, salt, KEY_LENGTH).toString('hex');
-        return { salt, hash };
+    constructor() {
+        this.decoyReady = this.buildDecoy();
+        this.decoyReady.catch(() => {});
     }
 
-    verifyPassword(password, salt, storedHash) {
-        const hash = crypto.scryptSync(password, salt, KEY_LENGTH).toString('hex');
+    // cryptographic functions
+    async buildDecoy() {
+        const password = crypto.randomBytes(32).toString('hex');
+        return this.hashPassword(password);
+    }
 
-        const hashBuffer = Buffer.from(hash, 'hex');
+    async hashPassword(password) {
+        const salt = crypto.randomBytes(SALT_BYTES).toString('hex');
+        const derived = await scrypt(password, salt, KEY_LENGTH, SCRYPT_OPTIONS);
+        return { salt, hash: derived.toString('hex') };
+    }
+
+    async verifyPassword(password, salt, storedHash) {
+        const derived = await scrypt(password, salt, KEY_LENGTH, SCRYPT_OPTIONS);
         const storedBuffer = Buffer.from(storedHash, 'hex');
 
-        if (hashBuffer.length !== storedBuffer.length) return false;
+        if (derived.length !== storedBuffer.length) return false;
 
-        return crypto.timingSafeEqual(hashBuffer, storedBuffer);
+        return crypto.timingSafeEqual(derived, storedBuffer);
     }
 
     // validation functions
@@ -47,23 +63,44 @@ class Authentication {
     login = async (req, res, next) => {
         try {
             const { username, password } = req.body ?? {};
+            const ip = req.ip;
 
             if (!this.isUsableCredential(username) || !this.isUsableCredential(password)) {
                 return res.status(401).json({ error: 'Invalid credentials' });
             }
 
-            const user = await db.getUserByUsername(username);
+            const failures = await db.countRecentLoginFailures({
+                username,
+                ip,
+                minutes: LOCKOUT_WINDOW_MINUTES
+            });
 
-            let isValid = false;
+            if (failures.byUsername >= MAX_FAILURES_PER_USERNAME || failures.byIP >= MAX_FAILURES_PER_IP) {
+                await db.recordAudit({
+                    action: 'login.blocked',
+                    targetType: 'username',
+                    targetID: username.toLowerCase(),
+                    detail: failures,
+                    ip
+                });
 
-            if (user) {
-                isValid = this.verifyPassword(password, user.salt, user.hash);
-            } else {
-                const decoy = this.hashPassword('decoy_password');
-                this.verifyPassword(password, decoy.salt, decoy.hash);
+                return res.status(429).json({
+                    error: 'Too many failed attempts. Please try again in a few minutes.'
+                });
             }
 
-            if (!isValid || !user) {
+            const user = await db.getUserByUsername(username);
+            const credential = user ?? await this.decoyReady;
+            const isValid = await this.verifyPassword(password, credential.salt, credential.hash);
+
+            if (!user || !isValid) {
+                await db.recordAudit({
+                    action: 'login.failed',
+                    targetType: 'username',
+                    targetID: username.toLowerCase(),
+                    ip
+                });
+
                 return res.status(401).json({ error: 'Invalid credentials' });
             }
 
@@ -72,6 +109,15 @@ class Authentication {
 
             const sessionID = await db.createSession(user.id);
             res.cookie(SESSION_COOKIE, sessionID, COOKIE_OPTIONS);
+
+            await db.recordAudit({
+                actorID: user.id,
+                actorName: user.username,
+                action: 'login.success',
+                targetType: 'user',
+                targetID: user.id,
+                ip
+            });
 
             res.json(db.toPublicUser(user));
         } catch (error) {
@@ -85,6 +131,14 @@ class Authentication {
             if (sessionID) await db.deleteSession(sessionID);
 
             res.clearCookie(SESSION_COOKIE, { ...COOKIE_OPTIONS, maxAge: undefined });
+
+            await db.recordAudit({
+                actorID: req.user?.id,
+                actorName: req.user?.username,
+                action: 'logout',
+                ip: req.ip
+            });
+
             res.json({ success: true });
         } catch (error) {
             next(error);

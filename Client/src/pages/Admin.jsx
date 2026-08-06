@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 // configuration constants
 const EMPTY_FORM = { username: '', displayName: '', password: '', role: 'member' };
+const TABS = ['users', 'deleted', 'audit'];
 
 // component functions
 export default function Admin() {
@@ -17,12 +18,22 @@ export default function Admin() {
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [busy, setBusy] = useState(false);
+    const [tab, setTab] = useState('users');
+    const [workspaces, setWorkspaces] = useState([]);
+    const [entries, setEntries] = useState([]);
 
     // data fetching
     const load = useCallback(async () => {
         try {
-            const data = await api('/api/admin/users');
-            setUsers(data.users);
+            const [userData, workspaceData, auditData] = await Promise.all([
+                api('/api/admin/users?includeDeleted=true'),
+                api('/api/admin/workspaces?includeDeleted=true'),
+                api('/api/admin/audit?limit=100')
+            ]);
+
+            setUsers(userData.users);
+            setWorkspaces(workspaceData.workspaces);
+            setEntries(auditData.entries);
             setError('');
         } catch (err) {
             setError(err.message);
@@ -32,6 +43,11 @@ export default function Admin() {
     }, []);
 
     useEffect(() => { load(); }, [load]);
+
+    // derived variables
+    const activeUsers = users.filter(u => !u.deletedAt);
+    const deletedUsers = users.filter(u => u.deletedAt);
+    const deletedWorkspaces = workspaces.filter(w => w.deletedAt);
 
     // event handlers
     function updateField(field, value) {
@@ -56,23 +72,52 @@ export default function Admin() {
         }
     }
 
-    async function handleDelete(target) {
-        const message = target.ownedWorkspaces > 0
-            ? `Delete ${target.username}? This also permanently deletes ${target.ownedWorkspaces} workspace(s) they own, including all boards and tasks.`
-            : `Delete ${target.username}?`;
-
-        if (!window.confirm(message)) return;
-
+    async function run(label, request) {
         setError('');
         setNotice('');
 
         try {
-            await api(`/api/admin/users/${target.id}`, { method: 'DELETE' });
-            setNotice(`Deleted ${target.username}`);
+            await request();
+            setNotice(label);
             await load();
         } catch (err) {
             setError(err.message);
         }
+    }
+
+    function handleDelete(target) {
+        const message = target.ownedWorkspaces > 0
+            ? `Delete ${target.username}? This also hides ${target.ownedWorkspaces} workspace(s) they own. Both can be restored from the Deleted tab.`
+            : `Delete ${target.username}? This can be undone from the Deleted tab.`;
+
+        if (!window.confirm(message)) return;
+
+        run(`Deleted ${target.username}`, () =>
+            api(`/api/admin/users/${target.id}`, { method: 'DELETE' }));
+    }
+
+    function handleRestoreUser(target) {
+        run(`Restored ${target.username}`, () =>
+            api(`/api/admin/users/${target.id}/restore`, { method: 'POST' }));
+    }
+
+    function handlePurgeUser(target) {
+        if (!window.confirm(`Permanently erase ${target.username} and all their data? This cannot be undone.`)) return;
+
+        run(`Purged ${target.username}`, () =>
+            api(`/api/admin/users/${target.id}/purge`, { method: 'DELETE' }));
+    }
+
+    function handleRestoreWorkspace(target) {
+        run(`Restored ${target.name}`, () =>
+            api(`/api/admin/workspaces/${target.id}/restore`, { method: 'POST' }));
+    }
+
+    function handlePurgeWorkspace(target) {
+        if (!window.confirm(`Permanently erase ${target.name} and all its boards? This cannot be undone.`)) return;
+
+        run(`Purged ${target.name}`, () =>
+            api(`/api/admin/workspaces/${target.id}/purge`, { method: 'DELETE' }));
     }
 
     async function handleExport() {
@@ -146,49 +191,128 @@ export default function Admin() {
                 </form>
             </section>
 
-            <section className="admin-section">
-                <h2 className="admin-subtitle">Users ({users.length})</h2>
+            <div className="admin-tabs">
+                {TABS.map(name => (
+                    <button
+                        key={name}
+                        className={`admin-tab ${tab === name ? 'active' : ''}`}
+                        onClick={() => setTab(name)}
+                    >
+                        {name}
+                    </button>
+                ))}
+            </div>
 
-                {loading ? (
-                    <p className="admin-empty">Loading…</p>
-                ) : (
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Display name</th>
-                                <th>Role</th>
-                                <th>Owns</th>
-                                <th>Member of</th>
-                                <th>Created</th>
-                                <th />
+            {loading && <p className="admin-empty">Loading…</p>}
+
+            {!loading && tab === 'users' && (
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Display name</th>
+                            <th>Role</th>
+                            <th>Owns</th>
+                            <th>Member of</th>
+                            <th>Created</th>
+                            <th />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {activeUsers.map(row => (
+                            <tr key={row.id}>
+                                <td>{row.username}</td>
+                                <td>{row.displayName}</td>
+                                <td>{row.role}</td>
+                                <td>{row.ownedWorkspaces}</td>
+                                <td>{row.memberships}</td>
+                                <td>{new Date(row.createdAt).toLocaleDateString()}</td>
+                                <td>
+                                    {row.id !== user?.id && (
+                                        <button className="admin-btn admin-btn--danger" onClick={() => handleDelete(row)}>
+                                            Delete
+                                        </button>
+                                    )}
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {users.map(row => (
-                                <tr key={row.id}>
-                                    <td>{row.username}</td>
-                                    <td>{row.displayName}</td>
-                                    <td>{row.role}</td>
-                                    <td>{row.ownedWorkspaces}</td>
-                                    <td>{row.memberships}</td>
-                                    <td>{new Date(row.createdAt).toLocaleDateString()}</td>
-                                    <td>
-                                        {row.id !== user?.id && (
-                                            <button
-                                                className="admin-btn admin-btn--danger"
-                                                onClick={() => handleDelete(row)}
-                                            >
-                                                Delete
-                                            </button>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
-            </section>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+
+            {!loading && tab === 'deleted' && (
+                <>
+                    <h2 className="admin-subtitle">Deleted users ({deletedUsers.length})</h2>
+
+                    {deletedUsers.length === 0 ? (
+                        <p className="admin-empty">Nothing deleted.</p>
+                    ) : (
+                        <table className="admin-table">
+                            <thead>
+                                <tr><th>Username</th><th>Role</th><th>Deleted</th><th /></tr>
+                            </thead>
+                            <tbody>
+                                {deletedUsers.map(row => (
+                                    <tr key={row.id}>
+                                        <td>{row.username}</td>
+                                        <td>{row.role}</td>
+                                        <td>{new Date(row.deletedAt).toLocaleString()}</td>
+                                        <td className="admin-actions">
+                                            <button className="admin-btn" onClick={() => handleRestoreUser(row)}>Restore</button>
+                                            <button className="admin-btn admin-btn--danger" onClick={() => handlePurgeUser(row)}>Purge</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+
+                    <h2 className="admin-subtitle admin-spaced">Deleted workspaces ({deletedWorkspaces.length})</h2>
+
+                    {deletedWorkspaces.length === 0 ? (
+                        <p className="admin-empty">Nothing deleted.</p>
+                    ) : (
+                        <table className="admin-table">
+                            <thead>
+                                <tr><th>Name</th><th>Owner</th><th>Members</th><th>Deleted</th><th /></tr>
+                            </thead>
+                            <tbody>
+                                {deletedWorkspaces.map(row => (
+                                    <tr key={row.id}>
+                                        <td>{row.name}</td>
+                                        <td>{row.ownerName ?? '—'}</td>
+                                        <td>{row.memberCount}</td>
+                                        <td>{new Date(row.deletedAt).toLocaleString()}</td>
+                                        <td className="admin-actions">
+                                            <button className="admin-btn" onClick={() => handleRestoreWorkspace(row)}>Restore</button>
+                                            <button className="admin-btn admin-btn--danger" onClick={() => handlePurgeWorkspace(row)}>Purge</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </>
+            )}
+
+            {!loading && tab === 'audit' && (
+                <table className="admin-table">
+                    <thead>
+                        <tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>IP</th></tr>
+                    </thead>
+                    <tbody>
+                        {entries.map(row => (
+                            <tr key={row.id}>
+                                <td>{new Date(row.createdAt).toLocaleString()}</td>
+                                <td>{row.actorName ?? '—'}</td>
+                                <td>{row.action}</td>
+                                <td>{row.targetID ?? '—'}</td>
+                                <td>{row.ip ?? '—'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
         </div>
     );
 }

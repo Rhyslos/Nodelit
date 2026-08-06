@@ -129,3 +129,39 @@
     background: var(--panel);
     border: 1px solid var(--border);
 }
+
+/* tab styles */
+.admin-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.admin-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 14px;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    text-transform: capitalize;
+}
+
+.admin-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+/* action styles */
+.admin-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.admin-spaced {
+    margin-top: 32px;
+}
