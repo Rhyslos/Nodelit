@@ -9,7 +9,7 @@ import {
     optionalInteger,
     optionalBoolean,
     optionalDate,
-    optionalSubtasks,
+    optionalChecklists,
     optionalIDList,
     requireInteger,
     requireTaskReorder,
@@ -274,7 +274,7 @@ export default function createKanbanRouter(authz) {
                 category: optionalText(req.body?.category, 'category', 80),
                 color: optionalColor(req.body?.color, 'color'),
                 deadline: optionalDate(req.body?.deadline, 'deadline'),
-                subtasks: optionalSubtasks(req.body?.subtasks, 'subtasks'),
+                checklists: optionalChecklists(req.body?.checklists, 'checklists'),
                 assignedUsers: optionalIDList(req.body?.assignedUsers, 'assignedUsers')
             };
 

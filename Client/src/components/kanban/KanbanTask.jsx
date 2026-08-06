@@ -43,8 +43,9 @@ export default function KanbanTask({
     // derived variables
     const categoryData = categories.find(c => c.name === task.category);
     const bannerColor = task.color || categoryData?.color || 'var(--border)';
-    const totalSubtasks = task.subtasks?.length || 0;
-    const completedSubtasks = task.subtasks?.filter(st => st.done).length || 0;
+    const checklists = task.checklists ?? [];
+    const totalSubtasks = checklists.reduce((sum, list) => sum + list.items.length, 0);
+    const completedSubtasks = checklists.reduce((sum, list) => sum + list.items.filter(item => item.done).length, 0);
     const assignees = members.filter(m => task.assignedUsers?.includes(m.id));
 
     // event handlers
@@ -152,17 +153,27 @@ export default function KanbanTask({
                 </div>
 
                 {showChecklist && totalSubtasks > 0 && (
-                    <ul className="kanban-task-checklist">
-                        {task.subtasks.map(item => (
-                            <li
-                                key={item.id}
-                                className={`kanban-task-checklist-item ${item.done ? 'is-done' : ''}`}
-                            >
-                                <span className="kanban-task-checklist-mark">{item.done ? '☑' : '☐'}</span>
-                                {item.text || 'Untitled item'}
-                            </li>
+                    <div className="kanban-task-checklists">
+                        {checklists.filter(list => list.items.length > 0).map(list => (
+                            <div key={list.id} className="kanban-task-checklist-group">
+                                <span className="kanban-task-checklist-title">
+                                    {list.name} · {list.items.filter(item => item.done).length}/{list.items.length}
+                                </span>
+
+                                <ul className="kanban-task-checklist">
+                                    {list.items.map(item => (
+                                        <li
+                                            key={item.id}
+                                            className={`kanban-task-checklist-item ${item.done ? 'is-done' : ''}`}
+                                        >
+                                            <span className="kanban-task-checklist-mark">{item.done ? '☑' : '☐'}</span>
+                                            {item.text || 'Untitled item'}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
                         ))}
-                    </ul>
+                    </div>
                 )}
 
                 <div className="kanban-task-cat-row">

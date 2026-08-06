@@ -305,7 +305,7 @@
 }
 
 .navbar-avatar.offline {
-    color: #999999;
+    color: #d6d6d6;
     opacity: 0.6;
     border: 2px solid transparent;
 }

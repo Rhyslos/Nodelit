@@ -314,7 +314,7 @@
     transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.catfilter-workspace-search::placeholder { color: #bbb; }
+.catfilter-workspace-search::placeholder { color: var(--faint); }
 
 .catfilter-workspace-search:focus {
     border-color: var(--accent);
