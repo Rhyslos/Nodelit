@@ -1,216 +1,303 @@
 // import modules
-import { Router } from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
+import pool, { applySchema, closePool } from './database/Pool.mjs';
 import db from './database/Database.mjs';
-import {
-    requireID,
-    requireText,
-    requireUsername,
-    requirePassword,
-    requireRole,
-    optionalColor
-} from './modules/Validation.mjs';
+import Authentication from './modules/Authentication.mjs';
+import Authorization from './modules/Authorization.mjs';
+import createNetworkingRouter from './modules/Networking.mjs';
+import createKanbanRouter from './api/KanbanAPI.mjs';
+import createWorkspaceRouter from './api/WorkspaceAPI.mjs';
+import createAdminRouter from './api/AdminAPI.mjs';
 
-// audit functions
-function audit(req, entry) {
-    return db.recordAudit({
-        actorID: req.user?.id,
-        actorName: req.user?.username,
-        ip: req.ip,
-        ...entry
-    });
+// configuration constants
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const SHUTDOWN_GRACE_MS = 10000;
+const HEALTH_CACHE_MS = 5000;
+const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+const CLIENT_DIST = process.env.CLIENT_DIST
+    ? path.resolve(process.env.CLIENT_DIST)
+    : path.resolve(SERVER_DIR, '../Client/dist');
+
+// environment functions
+function readOrigins() {
+    const raw = process.env.CLIENT_ORIGIN ?? '';
+    const origins = raw.split(',').map(value => value.trim()).filter(Boolean);
+
+    if (origins.length === 0) {
+        if (IS_PRODUCTION) {
+            throw new Error('CLIENT_ORIGIN must be set in production (comma separated list of allowed origins)');
+        }
+        return ['http://localhost:5173'];
+    }
+
+    return origins;
 }
 
-// router configuration
-export default function createAdminRouter(authz) {
-    const router = Router();
-
-    router.use(authz.requireAdmin());
-
-    // user routes
-    router.get('/users', async (req, res, next) => {
-        try {
-            const users = await db.getAllUsers({ includeDeleted: req.query.includeDeleted === 'true' });
-            res.json({ users });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.post('/users', async (req, res, next) => {
-        try {
-            const user = await db.createUser({
-                username: requireUsername(req.body?.username),
-                password: requirePassword(req.body?.password),
-                displayName: requireText(req.body?.displayName, 'displayName', 80),
-                role: requireRole(req.body?.role ?? 'member'),
-                cursorColor: optionalColor(req.body?.cursorColor, 'cursorColor') ?? '#c8502a'
-            });
-
-            await audit(req, { action: 'user.created', targetType: 'user', targetID: user.id, detail: { username: user.username, role: user.role } });
-
-            res.status(201).json(user);
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.delete('/users/:id', async (req, res, next) => {
-        try {
-            const userID = requireID(req.params.id, 'id');
-
-            if (userID === req.user.id) {
-                return res.status(400).json({ error: 'You cannot delete your own account' });
-            }
-
-            const target = await db.getUserByID(userID);
-            if (!target) return res.status(404).json({ error: 'Not found' });
-
-            if (target.role === 'admin' && await db.countAdmins() <= 1) {
-                return res.status(400).json({ error: 'Cannot delete the last remaining admin' });
-            }
-
-            const result = await db.deleteUser(userID);
-
-            await audit(req, {
-                action: 'user.deleted',
-                targetType: 'user',
-                targetID: userID,
-                detail: { username: target.username, workspaces: result.workspaces }
-            });
-
-            res.json({ deleted: userID, workspaces: result.workspaces });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.put('/users/:id/password', async (req, res, next) => {
-        try {
-            const userID = requireID(req.params.id, 'id');
-            const password = requirePassword(req.body?.password);
-
-            const target = await db.getUserByID(userID);
-            if (!target) return res.status(404).json({ error: 'Not found' });
-
-            await db.setUserPassword(userID, password);
-            await db.deleteSessionsForUser(userID);
-
-            await audit(req, {
-                action: 'password.reset',
-                targetType: 'user',
-                targetID: userID,
-                detail: { username: target.username }
-            });
-
-            res.json({ reset: userID });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.post('/users/:id/restore', async (req, res, next) => {
-        try {
-            const userID = requireID(req.params.id, 'id');
-            const result = await db.restoreUser(userID);
-
-            if (!result.restored) return res.status(404).json({ error: 'Not found' });
-
-            await audit(req, {
-                action: 'user.restored',
-                targetType: 'user',
-                targetID: userID,
-                detail: { workspaces: result.workspaces }
-            });
-
-            res.json({ restored: userID, workspaces: result.workspaces });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.delete('/users/:id/purge', async (req, res, next) => {
-        try {
-            const userID = requireID(req.params.id, 'id');
-            const purged = await db.purgeUser(userID);
-
-            if (!purged) return res.status(404).json({ error: 'Not found' });
-
-            await audit(req, { action: 'user.purged', targetType: 'user', targetID: userID });
-
-            res.json({ purged: userID });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    // workspace routes
-    router.get('/workspaces', async (req, res, next) => {
-        try {
-            const workspaces = await db.getAllWorkspaces({ includeDeleted: req.query.includeDeleted === 'true' });
-            res.json({ workspaces });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.post('/workspaces/:id/restore', async (req, res, next) => {
-        try {
-            const workspaceID = requireID(req.params.id, 'id');
-            const restored = await db.restoreWorkspace(workspaceID);
-
-            if (!restored) return res.status(404).json({ error: 'Not found' });
-
-            await audit(req, { action: 'workspace.restored', targetType: 'workspace', targetID: workspaceID });
-
-            res.json({ restored: workspaceID });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.delete('/workspaces/:id/purge', async (req, res, next) => {
-        try {
-            const workspaceID = requireID(req.params.id, 'id');
-            const purged = await db.purgeWorkspace(workspaceID);
-
-            if (!purged) return res.status(404).json({ error: 'Not found' });
-
-            await audit(req, { action: 'workspace.purged', targetType: 'workspace', targetID: workspaceID });
-
-            res.json({ purged: workspaceID });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    // audit routes
-    router.get('/audit', async (req, res, next) => {
-        try {
-            const entries = await db.getAuditLog({
-                limit: Number(req.query.limit) || 100,
-                action: req.query.action || null
-            });
-
-            res.json({ entries });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    // export routes
-    router.get('/export', async (req, res, next) => {
-        try {
-            const data = await db.exportAll();
-            const stamp = new Date().toISOString().slice(0, 10);
-
-            await audit(req, { action: 'data.exported' });
-
-            res.setHeader('Content-Disposition', `attachment; filename="nodelit-export-${stamp}.json"`);
-            res.json(data);
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    return router;
+function validateEnvironment() {
+    if (!process.env.DATABASE_URL) {
+        throw new Error('DATABASE_URL is not set');
+    }
+    return { origins: readOrigins() };
 }
+
+// server classes
+class Server {
+    constructor({ origins }) {
+        this.app = express();
+        this.origins = origins;
+        this.port = Number(process.env.PORT ?? 3000);
+        this.authn = new Authentication();
+        this.authz = new Authorization();
+        this.httpServer = null;
+        this.healthy = true;
+        this.healthCheckedAt = 0;
+
+        this.setupMiddleware();
+        this.setupRoutes();
+        this.setupErrorHandling();
+    }
+
+    // middleware configuration
+    setupMiddleware() {
+        this.app.set('trust proxy', 1);
+        this.app.disable('x-powered-by');
+
+        this.app.use(helmet({
+            crossOriginResourcePolicy: { policy: 'same-origin' },
+            referrerPolicy: { policy: 'no-referrer' }
+        }));
+
+        this.app.use(cors({
+            origin: (origin, callback) => {
+                if (!origin) return callback(null, true);
+                if (this.origins.includes(origin)) return callback(null, true);
+                return callback(null, false);
+            },
+            credentials: true,
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'X-Requested-With', 'X-Client-Id'],
+            maxAge: 86400
+        }));
+
+        this.app.use(rateLimit({
+            windowMs: 60 * 1000,
+            limit: 600,
+            standardHeaders: true,
+            legacyHeaders: false,
+            skip: req => req.path === '/healthz',
+            message: { error: 'Too many requests. Please slow down.' }
+        }));
+
+        this.app.use(express.static(CLIENT_DIST, {
+            index: false,
+            maxAge: '1y',
+            setHeaders: (res, filePath) => {
+                if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+            }
+        }));
+
+        this.app.use(express.json({ limit: '64kb' }));
+        this.app.use(cookieParser());
+        this.app.use(this.csrfGuard());
+    }
+
+    // csrf configuration
+    csrfGuard() {
+        const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+        return (req, res, next) => {
+            if (safeMethods.has(req.method)) return next();
+
+            if (req.headers['x-requested-with'] !== 'XMLHttpRequest') {
+                return res.status(403).json({ error: 'CSRF validation failed' });
+            }
+
+            const origin = req.headers.origin;
+            if (origin && !this.origins.includes(origin)) {
+                return res.status(403).json({ error: 'CSRF validation failed' });
+            }
+
+            next();
+        };
+    }
+
+    // route configuration
+    setupRoutes() {
+        const loginLimiter = rateLimit({
+            windowMs: 15 * 60 * 1000,
+            limit: 10,
+            standardHeaders: true,
+            legacyHeaders: false,
+            skipSuccessfulRequests: true,
+            message: { error: 'Too many login attempts. Please try again later.' }
+        });
+
+        const passwordLimiter = rateLimit({
+            windowMs: 15 * 60 * 1000,
+            limit: 5,
+            standardHeaders: true,
+            legacyHeaders: false,
+            skipSuccessfulRequests: true,
+            message: { error: 'Too many attempts. Please try again later.' }
+        });
+
+        this.app.get('/healthz', async (req, res) => {
+            if (Date.now() - this.healthCheckedAt < HEALTH_CACHE_MS) {
+                return res
+                    .status(this.healthy ? 200 : 503)
+                    .json({ status: this.healthy ? 'ok' : 'degraded' });
+            }
+
+            try {
+                await pool.query('SELECT 1');
+                this.healthy = true;
+            } catch {
+                this.healthy = false;
+            }
+
+            this.healthCheckedAt = Date.now();
+
+            res.status(this.healthy ? 200 : 503)
+               .json({ status: this.healthy ? 'ok' : 'degraded' });
+        });
+
+        // authentication routes
+        this.app.post('/api/auth/login', loginLimiter, this.authn.login);
+        this.app.post('/api/auth/logout', this.authn.logout);
+        this.app.get('/api/auth/session', this.authn.authenticate, this.authn.session);
+        this.app.put('/api/auth/password', passwordLimiter, this.authn.authenticate, this.authn.changePassword);
+
+        // application routes
+        this.app.use('/api/network', this.authn.authenticate, createNetworkingRouter(this.authz));
+        this.app.use('/api/kanban', this.authn.authenticate, createKanbanRouter(this.authz));
+        this.app.use('/api/workspaces', this.authn.authenticate, createWorkspaceRouter(this.authz));
+        this.app.use('/api/admin', this.authn.authenticate, createAdminRouter(this.authz));
+
+        this.setupClientRoutes();
+    }
+
+    // client configuration
+    setupClientRoutes() {
+        this.app.use((req, res, next) => {
+            if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+            if (req.path.startsWith('/api')) return next();
+
+            res.sendFile(path.join(CLIENT_DIST, 'index.html'), {
+                headers: { 'Cache-Control': 'no-cache' }
+            }, error => {
+                if (error) next();
+            });
+        });
+
+        this.app.use((req, res) => {
+            res.status(404).json({ error: 'Not found' });
+        });
+    }
+
+    // error handling configuration
+    setupErrorHandling() {
+        this.app.use((err, req, res, next) => {
+            if (res.headersSent) return next(err);
+
+            if (err.type === 'entity.parse.failed') {
+                return res.status(400).json({ error: 'Malformed JSON body' });
+            }
+
+            if (err.type === 'entity.too.large') {
+                return res.status(413).json({ error: 'Request body too large' });
+            }
+
+            const status = Number.isInteger(err.status) ? err.status : 500;
+
+            if (status >= 500) {
+                console.error('Unhandled server error:', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+
+            res.status(status).json({ error: err.message });
+        });
+    }
+
+    // server initialization
+    start() {
+        this.httpServer = this.app.listen(this.port, '0.0.0.0', () => {
+            console.log(`Server listening on port ${this.port}`);
+            console.log(`Serving client from ${CLIENT_DIST}`);
+        });
+
+        this.httpServer.headersTimeout = 65000;
+        this.httpServer.keepAliveTimeout = 61000;
+
+        return this.httpServer;
+    }
+
+    // shutdown functions
+    async stop(signal) {
+        console.log(`Received ${signal}, shutting down`);
+
+        const forceExit = setTimeout(() => {
+            console.error('Shutdown timed out, exiting');
+            process.exit(1);
+        }, SHUTDOWN_GRACE_MS);
+
+        forceExit.unref?.();
+
+        await new Promise(resolve => this.httpServer?.close(resolve));
+
+        this.httpServer?.closeAllConnections?.();
+
+        await closePool();
+        clearTimeout(forceExit);
+        process.exit(0);
+    }
+}
+
+// diagnostic handlers
+process.on('unhandledRejection', reason => {
+    console.error('Unhandled rejection:', reason);
+    process.exit(1);
+});
+
+process.on('uncaughtException', error => {
+    console.error('Uncaught exception:', error);
+    process.exit(1);
+});
+
+process.on('exit', code => {
+    console.log(`Process exiting with code ${code}`);
+});
+
+// application startup
+async function main() {
+    console.log(`Boot: node ${process.version}, NODE_ENV=${process.env.NODE_ENV}`);
+
+    const config = validateEnvironment();
+    console.log(`Boot: environment valid, origins=${config.origins.join(', ')}`);
+
+    await applySchema();
+    console.log('Boot: schema applied');
+
+    await db.bootstrap();
+    console.log('Boot: bootstrap complete');
+
+    const server = new Server(config);
+    console.log('Boot: routes registered');
+
+    server.start();
+
+    for (const signal of ['SIGTERM', 'SIGINT']) {
+        process.on(signal, () => server.stop(signal));
+    }
+}
+
+main().catch(error => {
+    console.error('Startup failed:', error);
+    process.exit(1);
+});
