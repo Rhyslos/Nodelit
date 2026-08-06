@@ -10,8 +10,17 @@ const KanbanContext = createContext(null);
 const EMPTY_BOARD = { tabs: [], columns: [], lists: [], tasks: [] };
 const EDIT_ROLES = new Set(['owner', 'member']);
 const COLLECTIONS = ['tabs', 'columns', 'lists', 'tasks'];
+const CHECKLIST_STORAGE_PREFIX = 'nodelit:checklists:';
 
 // utility functions
+function persistChecklists(workspaceID, taskIDs) {
+    try {
+        localStorage.setItem(`${CHECKLIST_STORAGE_PREFIX}${workspaceID}`, JSON.stringify([...taskIDs]));
+    } catch {
+        return;
+    }
+}
+
 function applyDelta(board, delta) {
     const next = { ...board };
 
@@ -42,6 +51,7 @@ export function KanbanProvider({ children }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [memberRole, setMemberRole] = useState(null);
+    const [expandedChecklists, setExpandedChecklists] = useState(() => new Set());
 
     const workspaceRef = useRef(workspaceID);
     workspaceRef.current = workspaceID;
@@ -71,6 +81,34 @@ export function KanbanProvider({ children }) {
         refresh();
     }, [refresh]);
 
+    // checklist preferences
+    useEffect(() => {
+        if (!workspaceID) {
+            setExpandedChecklists(new Set());
+            return;
+        }
+
+        try {
+            const stored = localStorage.getItem(`${CHECKLIST_STORAGE_PREFIX}${workspaceID}`);
+            setExpandedChecklists(new Set(stored ? JSON.parse(stored) : []));
+        } catch {
+            setExpandedChecklists(new Set());
+        }
+    }, [workspaceID]);
+
+    const toggleChecklist = useCallback(taskID => {
+        setExpandedChecklists(previous => {
+            const next = new Set(previous);
+
+            if (next.has(taskID)) next.delete(taskID);
+            else next.add(taskID);
+
+            persistChecklists(workspaceRef.current, next);
+
+            return next;
+        });
+    }, []);
+
     // stream subscription
     useEffect(() => {
         setWorkspace(workspaceID ?? null);
@@ -91,7 +129,7 @@ export function KanbanProvider({ children }) {
     }, [subscribe, refresh]);
 
     return (
-        <KanbanContext.Provider value={{ boardData, setBoardData, applyDelta, workspaceID, loading, error, refresh, memberRole, canEdit: EDIT_ROLES.has(memberRole) }}>
+        <KanbanContext.Provider value={{ boardData, setBoardData, applyDelta, workspaceID, loading, error, refresh, memberRole, canEdit: EDIT_ROLES.has(memberRole), expandedChecklists, toggleChecklist }}>
             {children}
         </KanbanContext.Provider>
     );

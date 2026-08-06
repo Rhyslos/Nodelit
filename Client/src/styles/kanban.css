@@ -1147,44 +1147,6 @@
     flex-shrink: 0;
 }
 
-.kanban-assignee-picker {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 6px;
-}
-
-.kanban-assignee-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    border: 1.5px solid var(--border);
-    border-radius: 20px;
-    background: white;
-    font-family: 'Noto Sans', sans-serif;
-    font-size: 13px;
-    color: var(--ink);
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-}
-
-.kanban-assignee-chip:hover {
-    border-color: var(--accent);
-}
-
-.kanban-assignee-chip.is-selected {
-    border-color: var(--accent);
-    background: var(--accent-lt);
-}
-
-.kanban-assignee-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
 /* checklist preview styles */
 .kanban-task-eye-btn {
     background: none;
@@ -1229,4 +1191,114 @@
 .kanban-task-checklist-mark {
     flex-shrink: 0;
     color: var(--muted);
+}
+
+/* assign control styles */
+.kanban-assignee-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+    position: relative;
+}
+
+.kanban-assign-btn,
+.kanban-task-assign-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1.5px dashed var(--border);
+    border-radius: 20px;
+    background: none;
+    color: var(--muted);
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.kanban-assign-btn {
+    padding: 5px 12px;
+}
+
+.kanban-task-assign-btn {
+    padding: 3px 6px;
+    border-radius: 50%;
+    border-style: solid;
+}
+
+.kanban-assign-btn:hover,
+.kanban-task-assign-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* assignee dropdown styles */
+.assignee-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 200px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px var(--shadow);
+    padding: 6px;
+    z-index: 140;
+}
+
+.assignee-dropdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.assignee-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 9px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.assignee-dropdown-item:hover {
+    background: var(--accent-lt);
+}
+
+.assignee-dropdown-item.active {
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.assignee-dropdown-name {
+    flex: 1;
+}
+
+.assignee-dropdown-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.assignee-dropdown-empty {
+    padding: 10px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.kanban-task-cat-row {
+    position: relative;
 }

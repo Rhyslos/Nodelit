@@ -4,7 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
 
 // configuration constants
-const CONTENT_FIELDS = ['title', 'description', 'isCompleted', 'category', 'color', 'deadline', 'subtasks'];
+const CONTENT_FIELDS = ['title', 'description', 'isCompleted', 'category', 'color', 'deadline', 'subtasks', 'assignedUsers'];
 
 // hook functions
 export function useTasks(listIDs) {

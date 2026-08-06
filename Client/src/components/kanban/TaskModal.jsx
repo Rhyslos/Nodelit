@@ -1,6 +1,8 @@
 // component imports
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { UserPlus } from 'lucide-react';
+import AssigneeDropdown from './AssigneeDropdown';
 
 // component functions
 export default function TaskModal({ task, categories = [], members = [], onSave, onClose }) {
@@ -16,6 +18,7 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
     const [deadline, setDeadline] = useState(task?.deadline || '');
     const [subtasks, setSubtasks] = useState(task?.subtasks || []);
     const [assignedUsers, setAssignedUsers] = useState(task?.assignedUsers || []);
+    const [showAssignees, setShowAssignees] = useState(false);
 
     // mutation functions
     function addSubtask() {
@@ -128,24 +131,39 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
                 <div className="kanban-modal-group">
                     <label>Assigned to</label>
 
-                    <div className="kanban-assignee-picker">
-                        {members.map(member => (
-                            <button
-                                key={member.id}
-                                type="button"
-                                className={`kanban-assignee-chip ${assignedUsers.includes(member.id) ? 'is-selected' : ''}`}
-                                onClick={() => toggleAssignee(member.id)}
-                            >
-                                <span
-                                    className="kanban-assignee-dot"
-                                    style={{ background: member.cursorColor }}
-                                />
-                                {member.displayName}
-                            </button>
-                        ))}
+                    <div className="kanban-assignee-row">
+                        {assignedUsers.map(id => {
+                            const member = members.find(m => m.id === id);
+                            if (!member) return null;
 
-                        {members.length === 0 && (
-                            <p className="kanban-subtask-empty">No other members yet.</p>
+                            return (
+                                <span
+                                    key={id}
+                                    className="kanban-task-avatar"
+                                    style={{ background: member.cursorColor }}
+                                    title={member.displayName}
+                                >
+                                    {member.displayName.charAt(0).toUpperCase()}
+                                </span>
+                            );
+                        })}
+
+                        <button
+                            type="button"
+                            className="kanban-assign-btn"
+                            onClick={() => setShowAssignees(open => !open)}
+                        >
+                            <UserPlus size={13} strokeWidth={2} />
+                            Assign
+                        </button>
+
+                        {showAssignees && (
+                            <AssigneeDropdown
+                                members={members}
+                                assigned={assignedUsers}
+                                onToggle={toggleAssignee}
+                                onClose={() => setShowAssignees(false)}
+                            />
                         )}
                     </div>
                 </div>

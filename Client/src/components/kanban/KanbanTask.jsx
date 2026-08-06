@@ -1,7 +1,9 @@
 // component imports
 import { useState, useRef, useEffect } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, UserPlus } from 'lucide-react';
 import CategoryDropdown from './CategoryDropdown';
+import AssigneeDropdown from './AssigneeDropdown';
+import { useKanban } from '../../contexts/KanbanContext';
 
 // component functions
 export default function KanbanTask({
@@ -19,7 +21,9 @@ export default function KanbanTask({
 }) {
     // state variables
     const [showCatDropdown, setShowCatDropdown] = useState(false);
-    const [showChecklist, setShowChecklist] = useState(false);
+    const [showAssignees, setShowAssignees] = useState(false);
+    const { expandedChecklists, toggleChecklist } = useKanban();
+    const showChecklist = expandedChecklists.has(task.id);
     const titleRef = useRef(null);
     const taskRef = useRef(null);
 
@@ -49,6 +53,8 @@ export default function KanbanTask({
             e.target.closest('.kanban-task-checkbox') ||
             e.target.closest('.kanban-task-cat-btn') ||
             e.target.closest('.kanban-task-eye-btn') ||
+            e.target.closest('.kanban-task-assign-btn') ||
+            e.target.closest('.assignee-dropdown') ||
             e.target.closest('.cat-dropdown') ||
             e.target.closest('.kanban-task-drag-handle')
         ) return;
@@ -136,27 +142,13 @@ export default function KanbanTask({
                                 className="kanban-task-eye-btn"
                                 title={showChecklist ? 'Hide checklist' : 'Show checklist'}
                                 aria-label={showChecklist ? 'Hide checklist' : 'Show checklist'}
-                                onClick={e => { e.stopPropagation(); setShowChecklist(open => !open); }}
+                                onClick={e => { e.stopPropagation(); toggleChecklist(task.id); }}
                             >
                                 {showChecklist ? <EyeOff size={13} strokeWidth={2} /> : <Eye size={13} strokeWidth={2} />}
                             </button>
                         </span>
                     )}
 
-                    {assignees.length > 0 && (
-                        <span className="kanban-task-assignees">
-                            {assignees.map(member => (
-                                <span
-                                    key={member.id}
-                                    className="kanban-task-avatar"
-                                    style={{ background: member.cursorColor }}
-                                    title={member.displayName}
-                                >
-                                    {member.displayName.charAt(0).toUpperCase()}
-                                </span>
-                            ))}
-                        </span>
-                    )}
                 </div>
 
                 {showChecklist && totalSubtasks > 0 && (
@@ -174,6 +166,46 @@ export default function KanbanTask({
                 )}
 
                 <div className="kanban-task-cat-row">
+                    {assignees.length > 0 && (
+                        <span className="kanban-task-assignees">
+                            {assignees.map(member => (
+                                <span
+                                    key={member.id}
+                                    className="kanban-task-avatar"
+                                    style={{ background: member.cursorColor }}
+                                    title={member.displayName}
+                                >
+                                    {member.displayName.charAt(0).toUpperCase()}
+                                </span>
+                            ))}
+                        </span>
+                    )}
+
+                    {canEdit && !isClone && (
+                        <button
+                            className="kanban-task-assign-btn"
+                            title="Assign members"
+                            onClick={e => { e.stopPropagation(); setShowAssignees(open => !open); }}
+                        >
+                            <UserPlus size={13} strokeWidth={2} />
+                        </button>
+                    )}
+
+                    {showAssignees && (
+                        <AssigneeDropdown
+                            members={members}
+                            assigned={task.assignedUsers ?? []}
+                            onToggle={userID => {
+                                const current = task.assignedUsers ?? [];
+                                const next = current.includes(userID)
+                                    ? current.filter(id => id !== userID)
+                                    : [...current, userID];
+                                onUpdate({ assignedUsers: next });
+                            }}
+                            onClose={() => setShowAssignees(false)}
+                        />
+                    )}
+
                     <span className="kanban-task-cat-label">
                         {task.category || 'No category'}
                     </span>
