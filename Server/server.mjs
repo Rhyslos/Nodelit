@@ -18,6 +18,7 @@ import createAdminRouter from './api/AdminAPI.mjs';
 // configuration constants
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const SHUTDOWN_GRACE_MS = 10000;
+const HEALTH_CACHE_MS = 5000;
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const CLIENT_DIST = process.env.CLIENT_DIST
@@ -55,6 +56,8 @@ class Server {
         this.authn = new Authentication();
         this.authz = new Authorization();
         this.httpServer = null;
+        this.healthy = true;
+        this.healthCheckedAt = 0;
 
         this.setupMiddleware();
         this.setupRoutes();
@@ -137,12 +140,23 @@ class Server {
         });
 
         this.app.get('/healthz', async (req, res) => {
+            if (Date.now() - this.healthCheckedAt < HEALTH_CACHE_MS) {
+                return res
+                    .status(this.healthy ? 200 : 503)
+                    .json({ status: this.healthy ? 'ok' : 'degraded' });
+            }
+
             try {
                 await pool.query('SELECT 1');
-                res.json({ status: 'ok' });
+                this.healthy = true;
             } catch {
-                res.status(503).json({ status: 'degraded' });
+                this.healthy = false;
             }
+
+            this.healthCheckedAt = Date.now();
+
+            res.status(this.healthy ? 200 : 503)
+               .json({ status: this.healthy ? 'ok' : 'degraded' });
         });
 
         // authentication routes

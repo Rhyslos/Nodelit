@@ -703,6 +703,47 @@ class Database {
     }
 
     // resolution functions
+    async getWorkspaceScopeForLists(ids) {
+        return this.resolveScope(
+            `SELECT COALESCE(array_agg(DISTINCT t.workspace_id), '{}') AS workspaces,
+                    COUNT(DISTINCT l.id)::int AS found
+             FROM lists l
+             JOIN board_columns c ON c.id = l.column_id
+             JOIN tabs t ON t.id = c.tab_id
+             WHERE l.id = ANY($1::text[])`,
+            ids
+        );
+    }
+
+    async getWorkspaceScopeForColumns(ids) {
+        return this.resolveScope(
+            `SELECT COALESCE(array_agg(DISTINCT t.workspace_id), '{}') AS workspaces,
+                    COUNT(DISTINCT c.id)::int AS found
+             FROM board_columns c
+             JOIN tabs t ON t.id = c.tab_id
+             WHERE c.id = ANY($1::text[])`,
+            ids
+        );
+    }
+
+    async getWorkspaceScopeForTasks(ids) {
+        return this.resolveScope(
+            `SELECT COALESCE(array_agg(DISTINCT t.workspace_id), '{}') AS workspaces,
+                    COUNT(DISTINCT k.id)::int AS found
+             FROM tasks k
+             JOIN lists l ON l.id = k.list_id
+             JOIN board_columns c ON c.id = l.column_id
+             JOIN tabs t ON t.id = c.tab_id
+             WHERE k.id = ANY($1::text[])`,
+            ids
+        );
+    }
+
+    async resolveScope(sql, ids) {
+        const row = await queryOne(sql, [ids]);
+        return { workspaceIDs: row?.workspaces ?? [], found: row?.found ?? 0 };
+    }
+
     async getWorkspaceIDForTab(tabID) {
         const row = await queryOne('SELECT workspace_id AS "workspaceID" FROM tabs WHERE id = $1', [tabID]);
         return row?.workspaceID ?? null;

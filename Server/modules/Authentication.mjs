@@ -143,17 +143,21 @@ class Authentication {
     logout = async (req, res, next) => {
         try {
             const sessionID = req.cookies?.[SESSION_COOKIE];
-            if (sessionID) await db.deleteSession(sessionID);
+
+            if (typeof sessionID === 'string' && sessionID.length === 64) {
+                const removed = await db.deleteSession(sessionID);
+
+                if (removed) {
+                    await db.recordAudit({
+                        actorID: req.user?.id,
+                        actorName: req.user?.username,
+                        action: 'logout',
+                        ip: req.ip
+                    });
+                }
+            }
 
             res.clearCookie(SESSION_COOKIE, { ...COOKIE_OPTIONS, maxAge: undefined });
-
-            await db.recordAudit({
-                actorID: req.user?.id,
-                actorName: req.user?.username,
-                action: 'logout',
-                ip: req.ip
-            });
-
             res.json({ success: true });
         } catch (error) {
             next(error);
