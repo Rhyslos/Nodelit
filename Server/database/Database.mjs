@@ -12,14 +12,12 @@ const AUDIT_RETENTION_DAYS = 90;
 const KEY_LENGTH = 64;
 
 const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived'];
-const LIST_FIELDS = ['name', 'columnID', 'listOrder', 'category', 'color'];
-const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'category', 'color', 'deadline', 'checklists'];
+const LIST_FIELDS = ['name', 'columnID', 'listOrder'];
+const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'deadline', 'checklists'];
 const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor'];
 
 const FIELD_DEFINITIONS = {
     name: { column: 'name' },
-    color: { column: 'color' },
-    category: { column: 'category' },
     tabOrder: { column: 'tab_order' },
     isArchived: { column: 'is_archived', transform: Boolean },
     columnID: { column: 'column_id' },
@@ -79,9 +77,11 @@ const LIST_SELECT = `
     t.workspace_id AS "workspaceID",
     l.name,
     l.list_order AS "listOrder",
-    l.category,
-    l.color,
-    l.updated_at AS "updatedAt"
+    l.updated_at AS "updatedAt",
+    COALESCE((
+        SELECT array_agg(lt.tag_id ORDER BY lt.tag_id)
+        FROM list_tags lt WHERE lt.list_id = l.id
+    ), '{}') AS "tagIDs"
 `;
 
 const LIST_FROM = `
@@ -97,15 +97,17 @@ const TASK_SELECT = `
     k.description,
     k.is_completed AS "isCompleted",
     k.task_order AS "taskOrder",
-    k.category,
-    k.color,
     COALESCE(to_char(k.deadline, 'YYYY-MM-DD'), '') AS deadline,
     k.checklists,
     k.updated_at AS "updatedAt",
     COALESCE((
         SELECT array_agg(a.user_id ORDER BY a.user_id)
         FROM task_assignees a WHERE a.task_id = k.id
-    ), '{}') AS "assignedUsers"
+    ), '{}') AS "assignedUsers",
+    COALESCE((
+        SELECT array_agg(tt.tag_id ORDER BY tt.tag_id)
+        FROM task_tags tt WHERE tt.task_id = k.id
+    ), '{}') AS "tagIDs"
 `;
 
 const TASK_FROM = `
@@ -133,7 +135,7 @@ function pickFields(source, allowed) {
 }
 
 function emptyChangeSet() {
-    return { tabs: [], columns: [], lists: [], tasks: [] };
+    return { tabs: [], columns: [], lists: [], tasks: [], tags: [] };
 }
 
 function badRequest(message) {
@@ -554,7 +556,8 @@ class Database {
             tabs: tabs.rows,
             columns: columns.rows,
             lists: lists.rows,
-            tasks: tasks.rows
+            tasks: tasks.rows,
+            tags: tags.rows
         };
     }
 
@@ -737,18 +740,20 @@ class Database {
 
     // board retrieval functions
     async getWorkspaceData(workspaceID) {
-        const [tabs, columns, lists, tasks] = await Promise.all([
+        const [tabs, columns, lists, tasks, tags] = await Promise.all([
             query(`SELECT ${TAB_SELECT} FROM tabs t WHERE t.workspace_id = $1 ORDER BY t.tab_order`, [workspaceID]),
             query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE t.workspace_id = $1 ORDER BY c.column_index`, [workspaceID]),
             query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE t.workspace_id = $1 ORDER BY l.list_order`, [workspaceID]),
-            query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE t.workspace_id = $1 ORDER BY k.task_order`, [workspaceID])
+            query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE t.workspace_id = $1 ORDER BY k.task_order`, [workspaceID]),
+            query('SELECT id, workspace_id AS "workspaceID", name, color FROM tags WHERE workspace_id = $1 ORDER BY name', [workspaceID])
         ]);
 
         return {
             tabs: tabs.rows,
             columns: columns.rows,
             lists: lists.rows,
-            tasks: tasks.rows
+            tasks: tasks.rows,
+            tags: tags.rows
         };
     }
 
@@ -832,6 +837,178 @@ class Database {
             [taskID]
         );
         return row?.workspaceID ?? null;
+    }
+
+    // tag functions
+    async getTags(workspaceID) {
+        const { rows } = await query(
+            'SELECT id, workspace_id AS "workspaceID", name, color FROM tags WHERE workspace_id = $1 ORDER BY name',
+            [workspaceID]
+        );
+        return rows;
+    }
+
+    async getWorkspaceIDForTag(tagID) {
+        const row = await queryOne('SELECT workspace_id AS "workspaceID" FROM tags WHERE id = $1', [tagID]);
+        return row?.workspaceID ?? null;
+    }
+
+    async createTag(workspaceID, name, color) {
+        try {
+            return await queryOne(
+                `INSERT INTO tags (id, workspace_id, name, color)
+                 VALUES ($1, $2, $3, $4)
+                 RETURNING id, workspace_id AS "workspaceID", name, color`,
+                [newID('tag'), workspaceID, name, color]
+            );
+        } catch (error) {
+            if (error.code === '23505') {
+                const conflict = new Error('A tag with that name already exists');
+                conflict.status = 409;
+                throw conflict;
+            }
+            throw error;
+        }
+    }
+
+    async updateTag(tagID, changes) {
+        const assignments = [];
+        const values = [];
+
+        if (changes.name !== undefined) {
+            assignments.push(`name = $${assignments.length + 1}`);
+            values.push(changes.name);
+        }
+
+        if (changes.color !== undefined) {
+            assignments.push(`color = $${assignments.length + 1}`);
+            values.push(changes.color);
+        }
+
+        if (assignments.length === 0) {
+            return queryOne('SELECT id, workspace_id AS "workspaceID", name, color FROM tags WHERE id = $1', [tagID]);
+        }
+
+        try {
+            return await queryOne(
+                `UPDATE tags SET ${assignments.join(', ')}
+                 WHERE id = $${values.length + 1}
+                 RETURNING id, workspace_id AS "workspaceID", name, color`,
+                [...values, tagID]
+            );
+        } catch (error) {
+            if (error.code === '23505') {
+                const conflict = new Error('A tag with that name already exists');
+                conflict.status = 409;
+                throw conflict;
+            }
+            throw error;
+        }
+    }
+
+    async deleteTag(tagID) {
+        return withTransaction(async client => {
+            const removed = emptyChangeSet();
+
+            const lists = await client.query('SELECT list_id FROM list_tags WHERE tag_id = $1', [tagID]);
+            const tasks = await client.query('SELECT task_id FROM task_tags WHERE tag_id = $1', [tagID]);
+
+            const { rowCount } = await client.query('DELETE FROM tags WHERE id = $1', [tagID]);
+            if (rowCount === 0) return { removed, lists: [], tasks: [] };
+
+            removed.tags.push(tagID);
+
+            const listIDs = lists.rows.map(row => row.list_id);
+            const taskIDs = tasks.rows.map(row => row.task_id);
+
+            const touchedLists = listIDs.length > 0
+                ? (await client.query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = ANY($1::text[])`, [listIDs])).rows
+                : [];
+
+            const touchedTasks = taskIDs.length > 0
+                ? (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = ANY($1::text[])`, [taskIDs])).rows
+                : [];
+
+            return { removed, lists: touchedLists, tasks: touchedTasks };
+        });
+    }
+
+    async setListTags(listID, tagIDs) {
+        return withTransaction(async client => {
+            await client.query('DELETE FROM list_tags WHERE list_id = $1', [listID]);
+
+            if (tagIDs.length > 0) {
+                await client.query(
+                    `INSERT INTO list_tags (list_id, tag_id)
+                     SELECT $1, t.id FROM tags t
+                     WHERE t.id = ANY($2::text[])
+                       AND t.workspace_id = (
+                           SELECT tb.workspace_id FROM lists l
+                           JOIN board_columns c ON c.id = l.column_id
+                           JOIN tabs tb ON tb.id = c.tab_id
+                           WHERE l.id = $1
+                       )
+                     ON CONFLICT DO NOTHING`,
+                    [listID, tagIDs]
+                );
+            }
+
+            await client.query('UPDATE lists SET updated_at = now() WHERE id = $1', [listID]);
+
+            const { rows: taskIDs } = await client.query('SELECT id FROM tasks WHERE list_id = $1', [listID]);
+
+            if (taskIDs.length > 0) {
+                await client.query('DELETE FROM task_tags WHERE task_id = ANY($1::text[])', [taskIDs.map(r => r.id)]);
+
+                if (tagIDs.length > 0) {
+                    await client.query(
+                        `INSERT INTO task_tags (task_id, tag_id)
+                         SELECT k.id, lt.tag_id
+                         FROM tasks k
+                         JOIN list_tags lt ON lt.list_id = k.list_id
+                         WHERE k.list_id = $1
+                         ON CONFLICT DO NOTHING`,
+                        [listID]
+                    );
+                }
+
+                await client.query('UPDATE tasks SET updated_at = now() WHERE list_id = $1', [listID]);
+            }
+
+            const list = (await client.query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = $1`, [listID])).rows[0] ?? null;
+            const tasks = taskIDs.length > 0
+                ? (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.list_id = $1 ORDER BY k.task_order`, [listID])).rows
+                : [];
+
+            return { list, tasks };
+        });
+    }
+
+    async setTaskTags(taskID, tagIDs) {
+        return withTransaction(async client => {
+            await client.query('DELETE FROM task_tags WHERE task_id = $1', [taskID]);
+
+            if (tagIDs.length > 0) {
+                await client.query(
+                    `INSERT INTO task_tags (task_id, tag_id)
+                     SELECT $1, t.id FROM tags t
+                     WHERE t.id = ANY($2::text[])
+                       AND t.workspace_id = (
+                           SELECT tb.workspace_id FROM tasks k
+                           JOIN lists l ON l.id = k.list_id
+                           JOIN board_columns c ON c.id = l.column_id
+                           JOIN tabs tb ON tb.id = c.tab_id
+                           WHERE k.id = $1
+                       )
+                     ON CONFLICT DO NOTHING`,
+                    [taskID, tagIDs]
+                );
+            }
+
+            await client.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [taskID]);
+
+            return this.fetchTask(client, taskID);
+        });
     }
 
     // tab functions
@@ -967,15 +1144,14 @@ class Database {
 
     async createList(columnID, fields = {}) {
         const created = await queryOne(
-            `INSERT INTO lists (id, column_id, name, list_order, category, color)
+            `INSERT INTO lists (id, column_id, name, list_order)
              VALUES (
                  $1, $2,
                  COALESCE($3, 'New list'),
-                 COALESCE($4, (SELECT COALESCE(MAX(list_order), -1) + 1 FROM lists WHERE column_id = $2)),
-                 $5, $6
+                 COALESCE($4, (SELECT COALESCE(MAX(list_order), -1) + 1 FROM lists WHERE column_id = $2))
              )
              RETURNING id`,
-            [newID('list'), columnID, fields.name ?? null, fields.listOrder ?? null, fields.category ?? null, fields.color ?? null]
+            [newID('list'), columnID, fields.name ?? null, fields.listOrder ?? null]
         );
 
         return created ? this.getList(created.id) : null;
@@ -1074,21 +1250,30 @@ class Database {
     }
 
     async createTask(listID, fields = {}) {
-        const created = await queryOne(
-            `INSERT INTO tasks (id, list_id, title, description, task_order, category, color)
-             VALUES (
-                 $1, $2,
-                 COALESCE($3, 'New Task'),
-                 COALESCE($4, ''),
-                 COALESCE($5, (SELECT COALESCE(MAX(task_order), -1) + 1 FROM tasks WHERE list_id = $2)),
-                 $6, $7
-             )
-             RETURNING id`,
-            [newID('task'), listID, fields.title ?? null, fields.description ?? null,
-             fields.taskOrder ?? null, fields.category ?? null, fields.color ?? null]
-        );
+        return withTransaction(async client => {
+            const { rows } = await client.query(
+                `INSERT INTO tasks (id, list_id, title, description, task_order)
+                 VALUES (
+                     $1, $2,
+                     COALESCE($3, 'New Task'),
+                     COALESCE($4, ''),
+                     COALESCE($5, (SELECT COALESCE(MAX(task_order), -1) + 1 FROM tasks WHERE list_id = $2))
+                 )
+                 RETURNING id`,
+                [newID('task'), listID, fields.title ?? null, fields.description ?? null, fields.taskOrder ?? null]
+            );
 
-        return created ? this.getTask(created.id) : null;
+            if (rows.length === 0) return null;
+
+            await client.query(
+                `INSERT INTO task_tags (task_id, tag_id)
+                 SELECT $1, lt.tag_id FROM list_tags lt WHERE lt.list_id = $2
+                 ON CONFLICT DO NOTHING`,
+                [rows[0].id, listID]
+            );
+
+            return this.fetchTask(client, rows[0].id);
+        });
     }
 
     async updateTask(taskID, changes, expectedUpdatedAt) {

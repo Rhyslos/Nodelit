@@ -1235,6 +1235,162 @@
 }
 
 /* assignee dropdown styles */
+.tag-picker {
+    position: fixed;
+    min-width: 200px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px var(--shadow);
+    padding: 6px;
+    z-index: 10000;
+}
+
+.tag-picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.tag-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 9px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+}
+
+.tag-picker-item:hover {
+    background: var(--accent-lt);
+}
+
+.tag-picker-item.active {
+    font-weight: 500;
+}
+
+.tag-picker-name {
+    flex: 1;
+}
+
+.tag-picker-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.tag-picker-empty {
+    padding: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+/* tag chip styles */
+.tag-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    white-space: nowrap;
+}
+
+.kanban-task-tags {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.kanban-task-tag-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 6px;
+    border: 1.5px solid var(--border);
+    border-radius: 50%;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.kanban-task-tag-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* tag manager styles */
+.tag-manager {
+    max-width: 520px;
+}
+
+.tag-manager-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.tag-manager-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-top: 14px;
+}
+
+.tag-manager-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+}
+
+.tag-manager-colors {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.tag-manager-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.tag-manager-dot.selected {
+    border-color: var(--ink);
+}
+
+.tag-manager-delete {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    padding: 4px;
+}
+
+.tag-manager-delete:hover {
+    color: var(--accent);
+}
+
 .assignee-dropdown {
     position: fixed;
     min-width: 200px;

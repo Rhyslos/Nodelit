@@ -7,10 +7,11 @@ import { useStream } from './StreamContext';
 // context initialization
 const KanbanContext = createContext(null);
 
-const EMPTY_BOARD = { tabs: [], columns: [], lists: [], tasks: [] };
+const EMPTY_BOARD = { tabs: [], columns: [], lists: [], tasks: [], tags: [] };
 const EDIT_ROLES = new Set(['owner', 'member']);
-const COLLECTIONS = ['tabs', 'columns', 'lists', 'tasks'];
+const COLLECTIONS = ['tabs', 'columns', 'lists', 'tasks', 'tags'];
 const CHECKLIST_STORAGE_PREFIX = 'nodelit:checklists:';
+const BOARD_REFRESH_EVENT = 'nodelit:board-refresh';
 
 // utility functions
 function persistChecklists(workspaceID, taskIDs) {
@@ -108,6 +109,13 @@ export function KanbanProvider({ children }) {
             return next;
         });
     }, []);
+
+    useEffect(() => {
+        function handleRefresh() { refresh(); }
+
+        window.addEventListener(BOARD_REFRESH_EVENT, handleRefresh);
+        return () => window.removeEventListener(BOARD_REFRESH_EVENT, handleRefresh);
+    }, [refresh]);
 
     // stream subscription
     useEffect(() => {

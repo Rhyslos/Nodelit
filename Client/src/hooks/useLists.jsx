@@ -101,5 +101,20 @@ export function useLists(columnIDs) {
         }
     }
 
-    return { lists, addList, updateList, deleteList, reorderLists };
+    async function setListTags(listID, tagIDs) {
+        setBoardData(prev => ({
+            ...prev,
+            lists: prev.lists.map(l => l.id === listID ? { ...l, tagIDs } : l)
+        }));
+
+        try {
+            const result = await api(`/api/kanban/lists/${listID}/tags`, { method: 'PUT', body: { tagIDs } });
+            setBoardData(prev => applyDelta(prev, { upsert: { lists: [result.list], tasks: result.tasks } }));
+        } catch (error) {
+            console.error('setListTags failed:', error);
+            refresh();
+        }
+    }
+
+    return { lists, addList, updateList, deleteList, reorderLists, setListTags };
 }

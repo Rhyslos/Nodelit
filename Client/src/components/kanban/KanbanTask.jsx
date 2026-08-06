@@ -1,26 +1,28 @@
 // component imports
 import { useState, useRef, useEffect } from 'react';
-import { Eye, EyeOff, UserPlus } from 'lucide-react';
-import CategoryDropdown from './CategoryDropdown';
+import { Eye, EyeOff, UserPlus, Tag as TagIcon } from 'lucide-react';
+import TagPicker from './TagPicker';
 import AssigneeDropdown from './AssigneeDropdown';
 import { useKanban } from '../../contexts/KanbanContext';
 
 // component functions
 export default function KanbanTask({
     task,
-    categories,
+    tags = [],
     members = [],
     isDragging,
     isClone,
     canEdit = true,
     onUpdate,
+    onSetTags,
     onStartDrag,
     onOpen,
     registerTask,
     registerElement,
 }) {
     // state variables
-    const [showCatDropdown, setShowCatDropdown] = useState(false);
+    const [tagRect, setTagRect] = useState(null);
+    const tagBtnRef = useRef(null);
     const [assignRect, setAssignRect] = useState(null);
     const assignBtnRef = useRef(null);
     const { expandedChecklists, toggleChecklist } = useKanban();
@@ -41,8 +43,8 @@ export default function KanbanTask({
     }, [task.id, registerTask, registerElement, isClone]);
 
     // derived variables
-    const categoryData = categories.find(c => c.name === task.category);
-    const bannerColor = task.color || categoryData?.color || 'var(--border)';
+    const taskTags = tags.filter(tag => task.tagIDs?.includes(tag.id));
+    const bannerColor = taskTags[0]?.color || 'var(--border)';
     const checklists = task.checklists ?? [];
     const totalSubtasks = checklists.reduce((sum, list) => sum + list.items.length, 0);
     const completedSubtasks = checklists.reduce((sum, list) => sum + list.items.filter(item => item.done).length, 0);
@@ -53,10 +55,10 @@ export default function KanbanTask({
         if (
             e.target.closest('.kanban-task-title') ||
             e.target.closest('.kanban-task-checkbox') ||
-            e.target.closest('.kanban-task-cat-btn') ||
+            e.target.closest('.kanban-task-tag-btn') ||
             e.target.closest('.kanban-task-eye-btn') ||
             e.target.closest('.kanban-task-assign-btn') ||
-            e.target.closest('.cat-dropdown') ||
+            e.target.closest('.tag-picker') ||
             e.target.closest('.kanban-task-drag-handle')
         ) return;
 
@@ -177,6 +179,16 @@ export default function KanbanTask({
                 )}
 
                 <div className="kanban-task-cat-row">
+                    {taskTags.length > 0 && (
+                        <span className="kanban-task-tags">
+                            {taskTags.map(tag => (
+                                <span key={tag.id} className="tag-chip" style={{ background: tag.color }}>
+                                    {tag.name}
+                                </span>
+                            ))}
+                        </span>
+                    )}
+
                     {assignees.length > 0 && (
                         <span className="kanban-task-assignees">
                             {assignees.map(member => (
@@ -194,6 +206,20 @@ export default function KanbanTask({
 
                     {canEdit && !isClone && (
                         <button
+                            ref={tagBtnRef}
+                            className="kanban-task-tag-btn"
+                            title="Tags"
+                            onClick={e => {
+                                e.stopPropagation();
+                                setTagRect(tagRect ? null : tagBtnRef.current.getBoundingClientRect());
+                            }}
+                        >
+                            <TagIcon size={13} strokeWidth={2} />
+                        </button>
+                    )}
+
+                    {canEdit && !isClone && (
+                        <button
                             ref={assignBtnRef}
                             className="kanban-task-assign-btn"
                             title="Assign members"
@@ -206,6 +232,21 @@ export default function KanbanTask({
                         </button>
                     )}
 
+                    {tagRect && (
+                        <TagPicker
+                            anchorRect={tagRect}
+                            tags={tags}
+                            selected={task.tagIDs ?? []}
+                            onToggle={tagID => {
+                                const current = task.tagIDs ?? [];
+                                onSetTags(current.includes(tagID)
+                                    ? current.filter(id => id !== tagID)
+                                    : [...current, tagID]);
+                            }}
+                            onClose={() => setTagRect(null)}
+                        />
+                    )}
+
                     {assignRect && (
                         <AssigneeDropdown
                             anchorRect={assignRect}
@@ -213,37 +254,11 @@ export default function KanbanTask({
                             assigned={task.assignedUsers ?? []}
                             onToggle={userID => {
                                 const current = task.assignedUsers ?? [];
-                                const next = current.includes(userID)
+                                onUpdate({ assignedUsers: current.includes(userID)
                                     ? current.filter(id => id !== userID)
-                                    : [...current, userID];
-                                onUpdate({ assignedUsers: next });
+                                    : [...current, userID] });
                             }}
                             onClose={() => setAssignRect(null)}
-                        />
-                    )}
-
-                    <span className="kanban-task-cat-label">
-                        {task.category || 'No category'}
-                    </span>
-
-                    {canEdit && !isClone && (
-                        <button
-                            className="kanban-task-cat-btn"
-                            onClick={e => { e.stopPropagation(); setShowCatDropdown(o => !o); }}
-                        >
-                            ▾
-                        </button>
-                    )}
-
-                    {showCatDropdown && (
-                        <CategoryDropdown
-                            categories={categories}
-                            selected={task.category}
-                            onSelect={cat => {
-                                onUpdate({ category: cat.name, color: cat.color });
-                                setShowCatDropdown(false);
-                            }}
-                            onClose={() => setShowCatDropdown(false)}
                         />
                     )}
                 </div>

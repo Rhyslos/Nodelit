@@ -6,7 +6,6 @@ import { useColumns } from "../hooks/useColumns";
 import { useLists } from "../hooks/useLists";
 import { useTasks } from "../hooks/useTasks";
 import { useTabs } from "../hooks/useTabs";
-import { useWorkspaces } from "../hooks/useWorkspaces";
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkspacePresence } from "../hooks/useWorkspacePresence";
 import { useDragDrop } from "../hooks/useDragDrop";
@@ -22,19 +21,19 @@ import DeleteDropZone from "../components/kanban/DeleteDropZone";
 export default function Kanban() {
     const { workspaceID } = useParams();
     const { user } = useAuth();
-    const { canEdit } = useKanban();
+    const { canEdit, boardData } = useKanban();
     
     // data layer
-    const { categories } = useWorkspaces(user?.id);
     const { members } = useWorkspacePresence(workspaceID);
     const { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab, deleteTab } = useTabs(workspaceID);
     const { columns, addColumn } = useColumns(workspaceID, activeTabId);
 
     const columnIDs = columns.map(c => c.id);
-    const { lists, addList, updateList, reorderLists, deleteList } = useLists(columnIDs);
+    const { lists, addList, updateList, reorderLists, deleteList, setListTags } = useLists(columnIDs);
 
     const listIDs = lists.map(l => l.id);
-    const { tasks, addTask, updateTask, deleteTask, reorderTasks } = useTasks(listIDs);
+    const { tasks, addTask, updateTask, deleteTask, reorderTasks, setTaskTags } = useTasks(listIDs);
+    const tags = boardData.tags;
 
     // ui state
     const [activeTask, setActiveTask] = useState(null);
@@ -204,7 +203,7 @@ export default function Kanban() {
                             column={column}
                             lists={listsByColumnID[column.id] ?? []}
                             tasksByListID={tasksByListID}
-                            categories={categories}
+                            tags={tags}
                             members={members}
                             focusedListId={focusedListId}
                             dragging={dragging}
@@ -214,12 +213,10 @@ export default function Kanban() {
                             isTaskRemoving={isTaskRemoving}
                             isListRemoving={isListRemoving}
                             canEdit={canEdit}
-                            onAddTask={(listID) => {
-                                const list = lists.find(l => l.id === listID);
-                                addTask(listID, list?.category, list?.color);
-                            }}
+                            onAddTask={(listID) => addTask(listID)}
                             onUpdateList={updateList}
                             onUpdateTask={updateTask}
+                            onSetTaskTags={setTaskTags}
                             onStartTaskDrag={(e, task, el) => startDrag(e, task, el, 'task')}
                             onStartListDrag={(e, list, el) => {
                                 registerListElement(list.id, el);
@@ -268,7 +265,7 @@ export default function Kanban() {
                         {dragType === 'task' && draggingTask && (
                             <KanbanTask
                                 task={draggingTask}
-                                categories={categories}
+                                tags={tags}
                                 isClone={true}
                                 onUpdate={() => {}}
                                 onStartDrag={() => {}}
@@ -297,8 +294,9 @@ export default function Kanban() {
             {activeTask && (
                 <TaskModal
                     task={activeTask}
-                    categories={categories}
+                    tags={tags}
                     members={members}
+                    onSetTags={tagIDs => setTaskTags(activeTask.id, tagIDs)}
                     onSave={changes => {
                         updateTask(activeTask.id, changes);
                         setActiveTask(null);

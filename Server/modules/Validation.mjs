@@ -235,3 +235,13 @@ export function optionalIDList(value, field = 'ids') {
 
     return [...new Set(value.map(entry => requireID(entry, field)))];
 }
+
+export function requireColor(value, field = 'color') {
+    const color = optionalColor(value, field);
+
+    if (!color) {
+        throw new ValidationError(`${field} is required`);
+    }
+
+    return color;
+}

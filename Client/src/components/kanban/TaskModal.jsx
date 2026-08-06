@@ -1,25 +1,25 @@
 // component imports
 import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Tag as TagIcon } from 'lucide-react';
 import AssigneeDropdown from './AssigneeDropdown';
+import TagPicker from './TagPicker';
 
 // component functions
-export default function TaskModal({ task, categories = [], members = [], onSave, onClose }) {
+export default function TaskModal({ task, tags = [], members = [], onSave, onSetTags, onClose }) {
     // derived variables
-    const fallbackColor = categories.find(c => c.name === task?.category)?.color ?? '#c8502a';
 
     // state variables
     const [title, setTitle] = useState(task?.title || '');
     const [description, setDescription] = useState(task?.description || '');
     const [isCompleted, setIsCompleted] = useState(!!task?.isCompleted);
-    const [category, setCategory] = useState(task?.category || '');
-    const [color, setColor] = useState(task?.color || fallbackColor);
     const [deadline, setDeadline] = useState(task?.deadline || '');
     const [checklists, setChecklists] = useState(task?.checklists || []);
     const [assignedUsers, setAssignedUsers] = useState(task?.assignedUsers || []);
     const [assignRect, setAssignRect] = useState(null);
     const assignBtnRef = useRef(null);
+    const [tagRect, setTagRect] = useState(null);
+    const tagBtnRef = useRef(null);
 
     // mutation functions
     function addChecklist() {
@@ -64,8 +64,6 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
             title: title.trim() || 'New Task',
             description,
             isCompleted,
-            category: category || null,
-            color,
             deadline,
             checklists,
             assignedUsers
@@ -107,36 +105,7 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
                         />
                     </div>
 
-                    <div className="kanban-modal-group kanban-modal-group--grow">
-                        <label htmlFor="task-category">Category</label>
-                        <select
-                            id="task-category"
-                            className="kanban-modal-select"
-                            value={category}
-                            onChange={e => {
-                                const next = e.target.value;
-                                setCategory(next);
-                                const match = categories.find(c => c.name === next);
-                                if (match) setColor(match.color);
-                            }}
-                        >
-                            <option value="">No category</option>
-                            {categories.map(c => (
-                                <option key={c.id} value={c.name}>{c.name}</option>
-                            ))}
-                        </select>
-                    </div>
 
-                    <div className="kanban-modal-group">
-                        <label htmlFor="task-color">Colour</label>
-                        <input
-                            id="task-color"
-                            type="color"
-                            className="kanban-modal-color"
-                            value={color}
-                            onChange={e => setColor(e.target.value)}
-                        />
-                    </div>
                 </div>
 
                 <textarea
@@ -146,6 +115,43 @@ export default function TaskModal({ task, categories = [], members = [], onSave,
                     placeholder="Add a description…"
                     rows={3}
                 />
+
+                <div className="kanban-modal-group">
+                    <label>Tags</label>
+
+                    <div className="kanban-assignee-row">
+                        {tags.filter(tag => (task?.tagIDs ?? []).includes(tag.id)).map(tag => (
+                            <span key={tag.id} className="tag-chip" style={{ background: tag.color }}>
+                                {tag.name}
+                            </span>
+                        ))}
+
+                        <button
+                            ref={tagBtnRef}
+                            type="button"
+                            className="kanban-assign-btn"
+                            onClick={() => setTagRect(tagRect ? null : tagBtnRef.current.getBoundingClientRect())}
+                        >
+                            <TagIcon size={13} strokeWidth={2} />
+                            Tags
+                        </button>
+
+                        {tagRect && (
+                            <TagPicker
+                                anchorRect={tagRect}
+                                tags={tags}
+                                selected={task?.tagIDs ?? []}
+                                onToggle={tagID => {
+                                    const current = task?.tagIDs ?? [];
+                                    onSetTags(current.includes(tagID)
+                                        ? current.filter(id => id !== tagID)
+                                        : [...current, tagID]);
+                                }}
+                                onClose={() => setTagRect(null)}
+                            />
+                        )}
+                    </div>
+                </div>
 
                 <div className="kanban-modal-group">
                     <label>Assigned to</label>

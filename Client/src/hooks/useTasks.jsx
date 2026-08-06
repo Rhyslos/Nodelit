@@ -4,7 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
 
 // configuration constants
-const CONTENT_FIELDS = ['title', 'description', 'isCompleted', 'category', 'color', 'deadline', 'checklists', 'assignedUsers'];
+const CONTENT_FIELDS = ['title', 'description', 'isCompleted', 'deadline', 'checklists', 'assignedUsers'];
 
 // hook functions
 export function useTasks(listIDs) {
@@ -21,13 +21,13 @@ export function useTasks(listIDs) {
     }, [boardData.tasks, listKey]);
 
     // mutation functions
-    async function addTask(listID, listCategory, listColor) {
+    async function addTask(listID) {
         if (!listID) return null;
 
         try {
             const task = await api('/api/kanban/tasks', {
                 method: 'POST',
-                body: { listID, category: listCategory ?? null, color: listColor ?? null }
+                body: { listID }
             });
 
             setBoardData(prev => applyDelta(prev, { upsert: { tasks: [task] } }));
@@ -105,5 +105,20 @@ export function useTasks(listIDs) {
         }
     }
 
-    return { tasks, addTask, updateTask, deleteTask, reorderTasks };
+    async function setTaskTags(taskID, tagIDs) {
+        setBoardData(prev => ({
+            ...prev,
+            tasks: prev.tasks.map(t => t.id === taskID ? { ...t, tagIDs } : t)
+        }));
+
+        try {
+            const task = await api(`/api/kanban/tasks/${taskID}/tags`, { method: 'PUT', body: { tagIDs } });
+            setBoardData(prev => applyDelta(prev, { upsert: { tasks: [task] } }));
+        } catch (error) {
+            console.error('setTaskTags failed:', error);
+            refresh();
+        }
+    }
+
+    return { tasks, addTask, updateTask, deleteTask, reorderTasks, setTaskTags };
 }

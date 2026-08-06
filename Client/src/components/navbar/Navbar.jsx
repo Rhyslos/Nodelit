@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspacePresence } from '../../hooks/useWorkspacePresence';
 import HamburgerMenu from './HamburgerMenu';
 import MembersModal from '../workspace/MembersModal';
+import TagManager from '../kanban/TagManager';
 import { appName } from '../../App';
 
 // configuration constants
@@ -51,6 +52,7 @@ export default function Navbar() {
     // state variables
     const [menuOpen, setMenuOpen] = useState(false);
     const [membersOpen, setMembersOpen] = useState(false);
+    const [tagsOpen, setTagsOpen] = useState(false);
 
     const { members } = useWorkspacePresence(workspaceID);
     const isOwner = members.some(m => m.id === user?.id && m.memberRole === 'owner');
@@ -87,6 +89,14 @@ export default function Navbar() {
                         </div>
 
                         <div className="navbar-presence">
+                            <button
+                                className="navbar-members-btn"
+                                onClick={() => setTagsOpen(true)}
+                                title="Manage tags"
+                            >
+                                Tags
+                            </button>
+
                             {isOwner && (
                                 <button
                                     className="navbar-members-btn"
@@ -120,6 +130,10 @@ export default function Navbar() {
             </nav>
 
             <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+            {tagsOpen && workspaceID && (
+                <TagManager workspaceID={workspaceID} onClose={() => setTagsOpen(false)} />
+            )}
 
             {membersOpen && workspaceID && (
                 <MembersModal workspaceID={workspaceID} onClose={() => setMembersOpen(false)} />

@@ -162,3 +162,34 @@ BEGIN
         ALTER TABLE tasks DROP COLUMN subtasks;
     END IF;
 END $$;
+
+-- tag tables
+CREATE TABLE IF NOT EXISTS tags (
+    id           text PRIMARY KEY,
+    workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name         text NOT NULL,
+    color        text NOT NULL DEFAULT '#c8502a'
+);
+
+CREATE INDEX IF NOT EXISTS tags_workspace_id_idx ON tags (workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS tags_workspace_name_key ON tags (workspace_id, lower(name));
+
+CREATE TABLE IF NOT EXISTS list_tags (
+    list_id text NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+    tag_id  text NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (list_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS task_tags (
+    task_id text NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    tag_id  text NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (task_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS list_tags_tag_id_idx ON list_tags (tag_id);
+CREATE INDEX IF NOT EXISTS task_tags_tag_id_idx ON task_tags (tag_id);
+
+ALTER TABLE lists DROP COLUMN IF EXISTS category;
+ALTER TABLE lists DROP COLUMN IF EXISTS color;
+ALTER TABLE tasks DROP COLUMN IF EXISTS category;
+ALTER TABLE tasks DROP COLUMN IF EXISTS color;

@@ -6,7 +6,7 @@ export default function KanbanColumn({
     column,
     lists,
     tasksByListID,
-    categories,
+    tags,
     members,
     focusedListId,
     canEdit = true,
@@ -19,6 +19,7 @@ export default function KanbanColumn({
     onAddTask,
     onUpdateList,
     onUpdateTask,
+    onSetTaskTags,
     onStartTaskDrag,
     onStartListDrag,
     onOpenTask,
@@ -47,7 +48,7 @@ export default function KanbanColumn({
                     <KanbanList
                         list={list}
                         tasks={tasksByListID[list.id] ?? []}
-                        categories={categories}
+                        tags={tags}
                         members={members}
                         isFocused={focusedListId === list.id}
                         canEdit={canEdit}
@@ -59,6 +60,7 @@ export default function KanbanColumn({
                         onUpdate={changes => onUpdateList(list.id, changes)}
                         onAddTask={() => onAddTask(list.id)}
                         onUpdateTask={onUpdateTask}
+                        onSetTaskTags={onSetTaskTags}
                         onStartTaskDrag={onStartTaskDrag}
                         onStartListDrag={onStartListDrag}
                         onOpenTask={onOpenTask}

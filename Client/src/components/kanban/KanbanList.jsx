@@ -7,7 +7,7 @@ import AnimatedRemoval from '../AnimatedRemoval';
 export default function KanbanList({
     list,
     tasks,
-    categories,
+    tags = [],
     members,
     isFocused,
     canEdit = true,
@@ -19,6 +19,7 @@ export default function KanbanList({
     onUpdate,
     onAddTask,
     onUpdateTask,
+    onSetTaskTags,
     onStartTaskDrag,
     onStartListDrag,
     onOpenTask,
@@ -77,7 +78,7 @@ export default function KanbanList({
     }
 
     // derived variables
-    const categoryData = categories.find(c => c.name === list.category);
+    const listTags = tags.filter(tag => list.tagIDs?.includes(tag.id));
     const sortedTasks = [...tasks].sort((a, b) => a.taskOrder - b.taskOrder);
 
     const taskInsertionIndex = insertionPoint?.type === 'task' && insertionPoint.listId === list.id
@@ -101,12 +102,11 @@ export default function KanbanList({
                         </div>
                     )}
 
-                    {categoryData && (
-                        <span
-                            className="kanban-list-category-dot"
-                            style={{ background: categoryData.color }}
-                        />
-                    )}
+                    {listTags.map(tag => (
+                        <span key={tag.id} className="tag-chip" style={{ background: tag.color }}>
+                            {tag.name}
+                        </span>
+                    ))}
 
                     <span
                         ref={nameRef}
@@ -130,11 +130,12 @@ export default function KanbanList({
                             <AnimatedRemoval removing={isTaskRemoving?.(task.id) ?? false}>
                                 <KanbanTask
                                     task={task}
-                                    categories={categories}
+                                    tags={tags}
                                     members={members}
                                     isDragging={dragging === task.id}
                                     canEdit={canEdit}
                                     onUpdate={changes => onUpdateTask(task.id, changes)}
+                                    onSetTags={tagIDs => onSetTaskTags(task.id, tagIDs)}
                                     onStartDrag={onStartTaskDrag}
                                     onOpen={() => onOpenTask(task)}
                                     registerTask={registerTask}

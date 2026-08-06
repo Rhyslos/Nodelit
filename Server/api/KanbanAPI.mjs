@@ -5,12 +5,12 @@ import { broadcastKanbanChange } from '../modules/Networking.mjs';
 import {
     requireID,
     optionalText,
-    optionalColor,
     optionalInteger,
     optionalBoolean,
     optionalDate,
     optionalChecklists,
     optionalIDList,
+    requireColor,
     requireInteger,
     requireTaskReorder,
     requireListReorder
@@ -101,7 +101,6 @@ export default function createKanbanRouter(authz) {
         try {
             const tab = await db.createTab(req.workspaceID, {
                 name: optionalText(req.body?.name, 'name', 80) ?? 'New Board',
-                color: optionalColor(req.body?.color, 'color'),
                 tabOrder: optionalInteger(req.body?.tabOrder, 'tabOrder')
             });
 
@@ -116,7 +115,6 @@ export default function createKanbanRouter(authz) {
         try {
             const changes = {
                 name: optionalText(req.body?.name, 'name', 80),
-                color: optionalColor(req.body?.color, 'color'),
                 tabOrder: optionalInteger(req.body?.tabOrder, 'tabOrder'),
                 isArchived: optionalBoolean(req.body?.isArchived, 'isArchived')
             };
@@ -178,8 +176,6 @@ export default function createKanbanRouter(authz) {
 
             const list = await db.createList(columnID, {
                 name: optionalText(req.body?.name, 'name', 80) ?? 'New list',
-                category: optionalText(req.body?.category, 'category', 80),
-                color: optionalColor(req.body?.color, 'color'),
                 listOrder: optionalInteger(req.body?.listOrder, 'listOrder')
             });
 
@@ -208,8 +204,6 @@ export default function createKanbanRouter(authz) {
         try {
             const changes = {
                 name: optionalText(req.body?.name, 'name', 80),
-                category: optionalText(req.body?.category, 'category', 80),
-                color: optionalColor(req.body?.color, 'color'),
                 listOrder: optionalInteger(req.body?.listOrder, 'listOrder')
             };
 
@@ -238,10 +232,8 @@ export default function createKanbanRouter(authz) {
     router.post('/tasks', authz.listEdit('listID'), async (req, res, next) => {
         try {
             const task = await db.createTask(requireID(req.body?.listID, 'listID'), {
-                title: optionalText(req.body?.title, 'title', 200) ?? '',
-                description: optionalText(req.body?.description, 'description', 5000) ?? '',
-                category: optionalText(req.body?.category, 'category', 80),
-                color: optionalColor(req.body?.color, 'color')
+                title: optionalText(req.body?.title, 'title', 200),
+                description: optionalText(req.body?.description, 'description', 5000)
             });
 
             publish(req, { upsert: { tasks: [task] } });
@@ -271,8 +263,6 @@ export default function createKanbanRouter(authz) {
                 title: optionalText(req.body?.title, 'title', 200),
                 description: optionalText(req.body?.description, 'description', 5000),
                 isCompleted: optionalBoolean(req.body?.isCompleted, 'isCompleted'),
-                category: optionalText(req.body?.category, 'category', 80),
-                color: optionalColor(req.body?.color, 'color'),
                 deadline: optionalDate(req.body?.deadline, 'deadline'),
                 checklists: optionalChecklists(req.body?.checklists, 'checklists'),
                 assignedUsers: optionalIDList(req.body?.assignedUsers, 'assignedUsers')
@@ -298,6 +288,85 @@ export default function createKanbanRouter(authz) {
 
             publish(req, { remove: removed });
             res.json({ removed });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    // tag routes
+    router.get('/tags/:workspaceID', authz.workspaceParam(), async (req, res, next) => {
+        try {
+            res.json({ tags: await db.getTags(req.workspaceID) });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.post('/tags', authz.workspaceBodyEdit(), async (req, res, next) => {
+        try {
+            const tag = await db.createTag(
+                req.workspaceID,
+                requireText(req.body?.name, 'name', 40),
+                requireColor(req.body?.color, 'color')
+            );
+
+            publish(req, { upsert: { tags: [tag] } });
+            res.status(201).json(tag);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.put('/tags/:id', authz.requireEditor(req => db.getWorkspaceIDForTag(req.params.id)), async (req, res, next) => {
+        try {
+            const tag = await db.updateTag(req.params.id, {
+                name: req.body?.name === undefined ? undefined : requireText(req.body.name, 'name', 40),
+                color: req.body?.color === undefined ? undefined : requireColor(req.body.color, 'color')
+            });
+
+            if (!tag) return res.status(404).json({ error: 'Not found' });
+
+            publish(req, { upsert: { tags: [tag] } });
+            res.json(tag);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.delete('/tags/:id', authz.requireEditor(req => db.getWorkspaceIDForTag(req.params.id)), async (req, res, next) => {
+        try {
+            const { removed, lists, tasks } = await db.deleteTag(req.params.id);
+
+            publish(req, { upsert: { lists, tasks }, remove: removed });
+            res.json({ removed, lists, tasks });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.put('/lists/:id/tags', authz.listEdit(), async (req, res, next) => {
+        try {
+            const tagIDs = optionalIDList(req.body?.tagIDs, 'tagIDs') ?? [];
+            const { list, tasks } = await db.setListTags(req.params.id, tagIDs);
+
+            if (!list) return res.status(404).json({ error: 'Not found' });
+
+            publish(req, { upsert: { lists: [list], tasks } });
+            res.json({ list, tasks });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.put('/tasks/:id/tags', authz.taskEdit(), async (req, res, next) => {
+        try {
+            const tagIDs = optionalIDList(req.body?.tagIDs, 'tagIDs') ?? [];
+            const task = await db.setTaskTags(req.params.id, tagIDs);
+
+            if (!task) return res.status(404).json({ error: 'Not found' });
+
+            publish(req, { upsert: { tasks: [task] } });
+            res.json(task);
         } catch (error) {
             next(error);
         }
