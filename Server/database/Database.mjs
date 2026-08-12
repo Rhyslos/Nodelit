@@ -1651,6 +1651,22 @@ class Database {
         });
     }
 
+    // notation document functions
+    async getNotationDocument(pageID) {
+        const row = await queryOne('SELECT state FROM notation_documents WHERE page_id = $1', [pageID]);
+        return row?.state ?? null;
+    }
+
+    async saveNotationDocument(pageID, state) {
+        await query(
+            `INSERT INTO notation_documents (page_id, state, updated_at)
+             VALUES ($1, $2, now())
+             ON CONFLICT (page_id) DO UPDATE
+             SET state = EXCLUDED.state, updated_at = now()`,
+            [pageID, state]
+        );
+    }
+
     // notation page functions
     async getNotationPage(pageID) {
         return queryOne(`SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p WHERE p.id = $1`, [pageID]);

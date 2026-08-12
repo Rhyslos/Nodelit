@@ -15,6 +15,7 @@ import createKanbanRouter from './api/KanbanAPI.mjs';
 import createWorkspaceRouter from './api/WorkspaceAPI.mjs';
 import createAdminRouter from './api/AdminAPI.mjs';
 import createNotationRouter from './api/NotationAPI.mjs';
+import { attachCollaboration, stopCollaboration } from './modules/Collaboration.mjs';
 
 // configuration constants
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -238,6 +239,8 @@ class Server {
         this.httpServer.headersTimeout = 65000;
         this.httpServer.keepAliveTimeout = 61000;
 
+        attachCollaboration(this.httpServer);
+
         return this.httpServer;
     }
 
@@ -251,6 +254,8 @@ class Server {
         }, SHUTDOWN_GRACE_MS);
 
         forceExit.unref?.();
+
+        await stopCollaboration();
 
         await new Promise(resolve => this.httpServer?.close(resolve));
 

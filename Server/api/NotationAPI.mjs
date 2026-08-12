@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import db from '../database/Database.mjs';
 import { broadcastNotationChange } from '../modules/Networking.mjs';
+import { closeRoom } from '../modules/Collaboration.mjs';
 import {
     requireID,
     requireText,
@@ -241,6 +242,8 @@ export default function createNotationRouter(authz) {
             const removed = await db.deleteNotationPage(pageID);
 
             if (removed.pages.length > 0) {
+                closeRoom(pageID);
+
                 await audit(req, {
                     action: 'notation.page_deleted',
                     targetType: 'notation_page',
