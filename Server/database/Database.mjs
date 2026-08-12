@@ -10,10 +10,16 @@ const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const AUDIT_RETENTION_DAYS = 90;
 const KEY_LENGTH = 64;
+const MAX_PAGES_PER_WORKSPACE = 500;
+const MAX_GROUPS_PER_WORKSPACE = 100;
+
+export const SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived'];
 const LIST_FIELDS = ['name', 'columnID', 'listOrder'];
 const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'deadline', 'checklists'];
+const NOTATION_GROUP_FIELDS = ['name', 'color', 'groupOrder'];
+const NOTATION_PAGE_FIELDS = ['title', 'groupID', 'pageOrder'];
 const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor', 'theme'];
 
 const FIELD_DEFINITIONS = {
@@ -29,7 +35,10 @@ const FIELD_DEFINITIONS = {
     description: { column: 'description' },
     isCompleted: { column: 'is_completed', transform: Boolean },
     deadline: { column: 'deadline', cast: '::date', transform: value => (value === '' || value === undefined ? null : value) },
-    checklists: { column: 'checklists', cast: '::jsonb', transform: value => JSON.stringify(value ?? []) }
+    checklists: { column: 'checklists', cast: '::jsonb', transform: value => JSON.stringify(value ?? []) },
+    groupID: { column: 'group_id' },
+    groupOrder: { column: 'group_order' },
+    pageOrder: { column: 'page_order' }
 };
 
 // projection constants
@@ -119,6 +128,24 @@ const TASK_FROM = `
     JOIN tabs t ON t.id = c.tab_id
 `;
 
+const NOTATION_GROUP_SELECT = `
+    g.id,
+    g.workspace_id AS "workspaceID",
+    g.name,
+    g.color,
+    g.group_order AS "groupOrder",
+    g.updated_at AS "updatedAt"
+`;
+
+const NOTATION_PAGE_SELECT = `
+    p.id,
+    p.workspace_id AS "workspaceID",
+    p.group_id AS "groupID",
+    p.title,
+    p.page_order AS "pageOrder",
+    p.updated_at AS "updatedAt"
+`;
+
 // utility functions
 function newID(prefix) {
     return `${prefix}-${crypto.randomUUID()}`;
@@ -140,6 +167,10 @@ function emptyChangeSet() {
     return { tabs: [], columns: [], lists: [], tasks: [], tags: [] };
 }
 
+function emptyNotationChangeSet() {
+    return { groups: [], pages: [] };
+}
+
 function badRequest(message) {
     const error = new Error(message);
     error.status = 400;
@@ -148,7 +179,7 @@ function badRequest(message) {
 
 async function derivePassword(password) {
     const salt = crypto.randomBytes(16).toString('hex');
-    const derived = await scrypt(password, salt, KEY_LENGTH);
+    const derived = await scrypt(password, salt, KEY_LENGTH, SCRYPT_OPTIONS);
     return { salt, hash: derived.toString('hex') };
 }
 
@@ -561,7 +592,19 @@ class Database {
     }
 
     async exportAll() {
-        const [users, categories, workspaces, memberships, tabs, columns, lists, tasks] = await Promise.all([
+        const [
+            users,
+            categories,
+            workspaces,
+            memberships,
+            tabs,
+            columns,
+            lists,
+            tasks,
+            tags,
+            notationGroups,
+            notationPages
+        ] = await Promise.all([
             query(`SELECT id, username, display_name AS "displayName", role,
                           cursor_color AS "cursorColor", created_at AS "createdAt",
                           deleted_at AS "deletedAt"
@@ -574,7 +617,10 @@ class Database {
             query(`SELECT ${TAB_SELECT} FROM tabs t ORDER BY t.workspace_id, t.tab_order`),
             query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} ORDER BY c.tab_id, c.column_index`),
             query(`SELECT ${LIST_SELECT} ${LIST_FROM} ORDER BY l.column_id, l.list_order`),
-            query(`SELECT ${TASK_SELECT} ${TASK_FROM} ORDER BY k.list_id, k.task_order`)
+            query(`SELECT ${TASK_SELECT} ${TASK_FROM} ORDER BY k.list_id, k.task_order`),
+            query('SELECT id, workspace_id AS "workspaceID", name, color FROM tags ORDER BY workspace_id, name'),
+            query(`SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g ORDER BY g.workspace_id, g.group_order`),
+            query(`SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p ORDER BY p.workspace_id, p.page_order`)
         ]);
 
         return {
@@ -588,7 +634,9 @@ class Database {
             columns: columns.rows,
             lists: lists.rows,
             tasks: tasks.rows,
-            tags: tags.rows
+            tags: tags.rows,
+            notationGroups: notationGroups.rows,
+            notationPages: notationPages.rows
         };
     }
 
@@ -670,6 +718,12 @@ class Database {
                 [newID('tab'), workspaceID]
             );
 
+            await client.query(
+                `INSERT INTO notation_pages (id, workspace_id, title, page_order)
+                 VALUES ($1, $2, 'Untitled', 0)`,
+                [newID('page'), workspaceID]
+            );
+
             const category = categoryID
                 ? (await client.query('SELECT name, color FROM categories WHERE id = $1', [categoryID])).rows[0]
                 : null;
@@ -698,6 +752,33 @@ class Database {
             [workspaceID, userID]
         );
         return row !== null;
+    }
+
+    async isActiveMember(workspaceID, userID) {
+        const row = await queryOne(
+            `SELECT 1 AS present
+             FROM memberships m
+             JOIN workspaces w ON w.id = m.workspace_id AND w.deleted_at IS NULL
+             JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+             WHERE m.workspace_id = $1 AND m.user_id = $2`,
+            [workspaceID, userID]
+        );
+        return row !== null;
+    }
+
+    async getActiveMemberships(workspaceIDs, userIDs) {
+        if (workspaceIDs.length === 0) return [];
+
+        const { rows } = await query(
+            `SELECT m.workspace_id AS "workspaceID", m.user_id AS "userID"
+             FROM memberships m
+             JOIN workspaces w ON w.id = m.workspace_id AND w.deleted_at IS NULL
+             JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+             JOIN unnest($1::text[], $2::text[]) AS pair(workspace_id, user_id)
+               ON pair.workspace_id = m.workspace_id AND pair.user_id = m.user_id`,
+            [workspaceIDs, userIDs]
+        );
+        return rows;
     }
 
     async getMembership(workspaceID, userID) {
@@ -1403,6 +1484,315 @@ class Database {
 
         const { rows: records } = await query(
             `SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = ANY($1::text[]) ORDER BY k.task_order`,
+            [rows.map(row => row.id)]
+        );
+
+        return records;
+    }
+
+    // notation retrieval functions
+    async getNotationData(workspaceID) {
+        const [groups, pages] = await Promise.all([
+            query(
+                `SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g
+                 WHERE g.workspace_id = $1 ORDER BY g.group_order, g.id`,
+                [workspaceID]
+            ),
+            query(
+                `SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p
+                 WHERE p.workspace_id = $1 ORDER BY p.page_order, p.id`,
+                [workspaceID]
+            )
+        ]);
+
+        return { groups: groups.rows, pages: pages.rows };
+    }
+
+    // notation resolution functions
+    async getWorkspaceIDForNotationGroup(groupID) {
+        const row = await queryOne(
+            'SELECT workspace_id AS "workspaceID" FROM notation_groups WHERE id = $1',
+            [groupID]
+        );
+        return row?.workspaceID ?? null;
+    }
+
+    async getWorkspaceIDForNotationPage(pageID) {
+        const row = await queryOne(
+            'SELECT workspace_id AS "workspaceID" FROM notation_pages WHERE id = $1',
+            [pageID]
+        );
+        return row?.workspaceID ?? null;
+    }
+
+    async getNotationGroupScope(ids) {
+        return this.resolveScope(
+            `SELECT COALESCE(array_agg(DISTINCT g.workspace_id), '{}') AS workspaces,
+                    COUNT(DISTINCT g.id)::int AS found
+             FROM notation_groups g
+             WHERE g.id = ANY($1::text[])`,
+            ids
+        );
+    }
+
+    async getNotationPageScope(ids) {
+        return this.resolveScope(
+            `SELECT COALESCE(array_agg(DISTINCT p.workspace_id), '{}') AS workspaces,
+                    COUNT(DISTINCT p.id)::int AS found
+             FROM notation_pages p
+             WHERE p.id = ANY($1::text[])`,
+            ids
+        );
+    }
+
+    // notation group functions
+    async getNotationGroup(groupID) {
+        return queryOne(`SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g WHERE g.id = $1`, [groupID]);
+    }
+
+    async createNotationGroup(workspaceID, fields = {}) {
+        return withTransaction(async client => {
+            const { rows: existing } = await client.query(
+                'SELECT COUNT(*)::int AS total FROM notation_groups WHERE workspace_id = $1',
+                [workspaceID]
+            );
+
+            if (existing[0].total >= MAX_GROUPS_PER_WORKSPACE) {
+                throw badRequest(`A workspace cannot contain more than ${MAX_GROUPS_PER_WORKSPACE} groups`);
+            }
+
+            const { rows } = await client.query(
+                `INSERT INTO notation_groups (id, workspace_id, name, color, group_order)
+                 VALUES (
+                     $1, $2,
+                     COALESCE($3, 'New group'),
+                     $4,
+                     COALESCE($5, (SELECT COALESCE(MAX(group_order), -1) + 1 FROM notation_groups WHERE workspace_id = $2))
+                 )
+                 RETURNING id`,
+                [newID('group'), workspaceID, fields.name ?? null, fields.color ?? null, fields.groupOrder ?? null]
+            );
+
+            if (rows.length === 0) return null;
+
+            const { rows: created } = await client.query(
+                `SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g WHERE g.id = $1`,
+                [rows[0].id]
+            );
+
+            return created[0] ?? null;
+        });
+    }
+
+    async updateNotationGroup(groupID, changes) {
+        const { assignments, values, nextIndex } = buildAssignments(changes, NOTATION_GROUP_FIELDS, 1);
+        if (assignments.length === 0) return this.getNotationGroup(groupID);
+
+        const updated = await queryOne(
+            `UPDATE notation_groups SET ${assignments.join(', ')}, updated_at = now()
+             WHERE id = $${nextIndex}
+             RETURNING id`,
+            [...values, groupID]
+        );
+
+        return updated ? this.getNotationGroup(updated.id) : null;
+    }
+
+    async deleteNotationGroup(groupID) {
+        return withTransaction(async client => {
+            const removed = emptyNotationChangeSet();
+
+            const scope = await client.query(
+                'SELECT workspace_id AS "workspaceID" FROM notation_groups WHERE id = $1',
+                [groupID]
+            );
+
+            if (scope.rowCount === 0) return { removed, pages: [] };
+
+            const workspaceID = scope.rows[0].workspaceID;
+
+            const { rows: orphans } = await client.query(
+                'SELECT id FROM notation_pages WHERE group_id = $1 ORDER BY page_order, id',
+                [groupID]
+            );
+
+            const base = await client.query(
+                `SELECT COALESCE(MAX(page_order), -1) + 1 AS next
+                 FROM notation_pages
+                 WHERE workspace_id = $1 AND group_id IS NULL`,
+                [workspaceID]
+            );
+
+            const { rowCount } = await client.query('DELETE FROM notation_groups WHERE id = $1', [groupID]);
+            if (rowCount === 0) return { removed, pages: [] };
+
+            removed.groups.push(groupID);
+
+            if (orphans.length === 0) return { removed, pages: [] };
+
+            const orphanIDs = orphans.map(row => row.id);
+            const orphanOrders = orphans.map((row, index) => base.rows[0].next + index);
+
+            await client.query(
+                `UPDATE notation_pages AS p
+                 SET page_order = u.page_order, updated_at = now()
+                 FROM unnest($1::text[], $2::int[]) AS u(id, page_order)
+                 WHERE p.id = u.id`,
+                [orphanIDs, orphanOrders]
+            );
+
+            const { rows: pages } = await client.query(
+                `SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p
+                 WHERE p.id = ANY($1::text[]) ORDER BY p.page_order`,
+                [orphanIDs]
+            );
+
+            return { removed, pages };
+        });
+    }
+
+    // notation page functions
+    async getNotationPage(pageID) {
+        return queryOne(`SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p WHERE p.id = $1`, [pageID]);
+    }
+
+    async createNotationPage(workspaceID, fields = {}) {
+        return withTransaction(async client => {
+            const groupID = fields.groupID ?? null;
+
+            const { rows: existing } = await client.query(
+                'SELECT COUNT(*)::int AS total FROM notation_pages WHERE workspace_id = $1',
+                [workspaceID]
+            );
+
+            if (existing[0].total >= MAX_PAGES_PER_WORKSPACE) {
+                throw badRequest(`A workspace cannot contain more than ${MAX_PAGES_PER_WORKSPACE} pages`);
+            }
+
+            if (groupID) {
+                const { rowCount } = await client.query(
+                    'SELECT 1 FROM notation_groups WHERE id = $1 AND workspace_id = $2',
+                    [groupID, workspaceID]
+                );
+                if (rowCount === 0) throw badRequest('That group does not exist');
+            }
+
+            const { rows } = await client.query(
+                `INSERT INTO notation_pages (id, workspace_id, group_id, title, page_order)
+                 VALUES (
+                     $1, $2, $3::text,
+                     COALESCE($4, 'Untitled'),
+                     COALESCE($5, (
+                         SELECT COALESCE(MAX(page_order), -1) + 1
+                         FROM notation_pages
+                         WHERE workspace_id = $2 AND group_id IS NOT DISTINCT FROM $3::text
+                     ))
+                 )
+                 RETURNING id`,
+                [newID('page'), workspaceID, groupID, fields.title ?? null, fields.pageOrder ?? null]
+            );
+
+            if (rows.length === 0) return null;
+
+            const { rows: created } = await client.query(
+                `SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p WHERE p.id = $1`,
+                [rows[0].id]
+            );
+
+            return created[0] ?? null;
+        });
+    }
+
+    async updateNotationPage(pageID, changes, workspaceID) {
+        return withTransaction(async client => {
+            const current = await client.query(
+                'SELECT workspace_id AS "workspaceID", group_id AS "groupID" FROM notation_pages WHERE id = $1',
+                [pageID]
+            );
+
+            if (current.rowCount === 0) return null;
+
+            const applied = { ...changes };
+
+            if (applied.groupID) {
+                const { rowCount } = await client.query(
+                    'SELECT 1 FROM notation_groups WHERE id = $1 AND workspace_id = $2',
+                    [applied.groupID, workspaceID]
+                );
+                if (rowCount === 0) throw badRequest('That group does not exist');
+            }
+
+            const movesGroup = applied.groupID !== undefined
+                && (applied.groupID ?? null) !== (current.rows[0].groupID ?? null);
+
+            if (movesGroup && applied.pageOrder === undefined) {
+                const { rows: tail } = await client.query(
+                    `SELECT COALESCE(MAX(page_order), -1) + 1 AS next
+                     FROM notation_pages
+                     WHERE workspace_id = $1
+                       AND group_id IS NOT DISTINCT FROM $2::text
+                       AND id <> $3`,
+                    [current.rows[0].workspaceID, applied.groupID ?? null, pageID]
+                );
+                applied.pageOrder = tail[0].next;
+            }
+
+            const { assignments, values, nextIndex } = buildAssignments(applied, NOTATION_PAGE_FIELDS, 1);
+
+            if (assignments.length === 0) {
+                const { rows: unchanged } = await client.query(
+                    `SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p WHERE p.id = $1`,
+                    [pageID]
+                );
+                return unchanged[0] ?? null;
+            }
+
+            const { rows } = await client.query(
+                `UPDATE notation_pages SET ${assignments.join(', ')}, updated_at = now()
+                 WHERE id = $${nextIndex}
+                 RETURNING id`,
+                [...values, pageID]
+            );
+
+            if (rows.length === 0) return null;
+
+            const { rows: updated } = await client.query(
+                `SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p WHERE p.id = $1`,
+                [rows[0].id]
+            );
+
+            return updated[0] ?? null;
+        });
+    }
+
+    async deleteNotationPage(pageID) {
+        const removed = emptyNotationChangeSet();
+        const { rowCount } = await query('DELETE FROM notation_pages WHERE id = $1', [pageID]);
+        if (rowCount > 0) removed.pages.push(pageID);
+        return removed;
+    }
+
+    async reorderNotationPages(updates) {
+        if (!updates || updates.length === 0) return [];
+
+        const ids = updates.map(update => update.id);
+        const groupIDs = updates.map(update => update.groupID);
+        const orders = updates.map(update => update.pageOrder);
+
+        const { rows } = await query(
+            `UPDATE notation_pages AS p
+             SET group_id = u.group_id, page_order = u.page_order, updated_at = now()
+             FROM unnest($1::text[], $2::text[], $3::int[]) AS u(id, group_id, page_order)
+             WHERE p.id = u.id
+             RETURNING p.id`,
+            [ids, groupIDs, orders]
+        );
+
+        if (rows.length === 0) return [];
+
+        const { rows: records } = await query(
+            `SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p
+             WHERE p.id = ANY($1::text[]) ORDER BY p.page_order`,
             [rows.map(row => row.id)]
         );
 

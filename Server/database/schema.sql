@@ -202,3 +202,39 @@ ALTER TABLE tasks DROP COLUMN IF EXISTS color;
 
 -- theme columns
 ALTER TABLE users ADD COLUMN IF NOT EXISTS theme jsonb NOT NULL DEFAULT '{"mode":"default","custom":{}}'::jsonb;
+
+-- notation tables
+CREATE TABLE IF NOT EXISTS notation_groups (
+    id           text PRIMARY KEY,
+    workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name         text NOT NULL DEFAULT 'New group',
+    color        text,
+    group_order  integer NOT NULL DEFAULT 0,
+    updated_at   timestamptz(3) NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS notation_groups_workspace_id_idx ON notation_groups (workspace_id);
+
+CREATE TABLE IF NOT EXISTS notation_pages (
+    id           text PRIMARY KEY,
+    workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    group_id     text REFERENCES notation_groups(id) ON DELETE SET NULL,
+    title        text NOT NULL DEFAULT 'Untitled',
+    page_order   integer NOT NULL DEFAULT 0,
+    updated_at   timestamptz(3) NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS notation_pages_workspace_id_idx ON notation_pages (workspace_id);
+CREATE INDEX IF NOT EXISTS notation_pages_group_id_idx ON notation_pages (group_id);
+
+CREATE TABLE IF NOT EXISTS notation_documents (
+    page_id    text PRIMARY KEY REFERENCES notation_pages(id) ON DELETE CASCADE,
+    state      bytea NOT NULL,
+    updated_at timestamptz(3) NOT NULL DEFAULT now()
+);
+
+INSERT INTO notation_pages (id, workspace_id, title, page_order)
+SELECT 'page-' || gen_random_uuid(), w.id, 'Untitled', 0
+FROM workspaces w
+WHERE w.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM notation_pages p WHERE p.workspace_id = w.id);

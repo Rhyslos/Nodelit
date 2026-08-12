@@ -11,7 +11,9 @@ const resolvers = {
     tab: field => async req => db.getWorkspaceIDForTab(req.params[field] ?? req.body?.[field]),
     column: field => async req => db.getWorkspaceIDForColumn(req.params[field] ?? req.body?.[field]),
     list: field => async req => db.getWorkspaceIDForList(req.params[field] ?? req.body?.[field]),
-    task: field => async req => db.getWorkspaceIDForTask(req.params[field] ?? req.body?.[field])
+    task: field => async req => db.getWorkspaceIDForTask(req.params[field] ?? req.body?.[field]),
+    notationGroup: field => async req => db.getWorkspaceIDForNotationGroup(req.params[field] ?? req.body?.[field]),
+    notationPage: field => async req => db.getWorkspaceIDForNotationPage(req.params[field] ?? req.body?.[field])
 };
 
 // authorization classes
@@ -144,6 +146,22 @@ class Authorization {
 
     taskEdit(field = 'id') {
         return this.requireEditor(resolvers.task(field));
+    }
+
+    notationGroupAccess(field = 'id') {
+        return this.requireMembership(resolvers.notationGroup(field));
+    }
+
+    notationGroupEdit(field = 'id') {
+        return this.requireEditor(resolvers.notationGroup(field));
+    }
+
+    notationPageAccess(field = 'id') {
+        return this.requireMembership(resolvers.notationPage(field));
+    }
+
+    notationPageEdit(field = 'id') {
+        return this.requireEditor(resolvers.notationPage(field));
     }
 }
 

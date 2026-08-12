@@ -189,6 +189,14 @@ export function requireListReorder(updates) {
     }));
 }
 
+export function requireNotationPageReorder(updates) {
+    return requireArray(updates, 'updates').map(update => ({
+        id: requireID(update?.id, 'updates.id'),
+        groupID: optionalID(update?.groupID, 'updates.groupID'),
+        pageOrder: requireInteger(update?.pageOrder, 'updates.pageOrder')
+    }));
+}
+
 // account validation functions
 export function requireUsername(value, field = 'username') {
     if (typeof value !== 'string' || !USERNAME_PATTERN.test(value)) {

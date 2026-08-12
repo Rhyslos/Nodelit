@@ -1,7 +1,7 @@
 // authentication imports
 import crypto from 'crypto';
 import { promisify } from 'node:util';
-import db from '../database/Database.mjs';
+import db, { SCRYPT_OPTIONS } from '../database/Database.mjs';
 import { requirePassword, requireText, optionalColor, optionalTheme } from './Validation.mjs';
 
 const scrypt = promisify(crypto.scrypt);
@@ -13,7 +13,6 @@ const SALT_BYTES = 16;
 const MAX_CREDENTIAL_LENGTH = 200;
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/;
 const MAX_AUDIT_TARGET_LENGTH = 64;
-const SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 const LOCKOUT_WINDOW_MINUTES = 15;
 const MAX_FAILURES_PER_USERNAME = 10;

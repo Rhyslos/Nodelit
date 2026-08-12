@@ -22,6 +22,10 @@ function startHeartbeat() {
         for (const connection of connections.values()) {
             connection.res.write(':\n\n');
         }
+
+        revalidateConnections().catch(error => {
+            console.error('Stream revalidation failed:', error.message);
+        });
     }, HEARTBEAT_INTERVAL_MS);
 
     heartbeatTimer.unref?.();
@@ -31,6 +35,42 @@ function stopHeartbeat() {
     if (connections.size > 0 || !heartbeatTimer) return;
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
+}
+
+// revocation functions
+function membershipKey(workspaceID, userID) {
+    return `${workspaceID}\u0000${userID}`;
+}
+
+async function revalidateConnections() {
+    const attached = Array.from(connections.values()).filter(connection => connection.workspaceID);
+    if (attached.length === 0) return;
+
+    const active = await db.getActiveMemberships(
+        attached.map(connection => connection.workspaceID),
+        attached.map(connection => connection.userID)
+    );
+
+    const allowed = new Set(active.map(row => membershipKey(row.workspaceID, row.userID)));
+
+    const revoked = attached.filter(connection =>
+        !allowed.has(membershipKey(connection.workspaceID, connection.userID))
+    );
+
+    if (revoked.length === 0) return;
+
+    const affected = new Set();
+
+    for (const connection of revoked) {
+        affected.add(connection.workspaceID);
+        connections.delete(connection.id);
+        writeEvent(connection.res, { type: 'revoked', workspaceID: connection.workspaceID });
+        connection.res.end();
+    }
+
+    stopHeartbeat();
+
+    for (const workspaceID of affected) await broadcastPresence(workspaceID);
 }
 
 // broadcast functions
@@ -46,6 +86,10 @@ export function broadcastToWorkspace(workspaceID, payload, originClientID) {
 
 export function broadcastKanbanChange(workspaceID, changes, originClientID) {
     broadcastToWorkspace(workspaceID, { type: 'kanban', ...changes }, originClientID);
+}
+
+export function broadcastNotationChange(workspaceID, changes, originClientID) {
+    broadcastToWorkspace(workspaceID, { type: 'notation', ...changes }, originClientID);
 }
 
 // presence functions
@@ -77,7 +121,7 @@ async function attachToWorkspace(connection, workspaceID) {
     const previous = connection.workspaceID;
     if (previous === workspaceID) return;
 
-    if (workspaceID && !await db.isMember(workspaceID, connection.userID)) return;
+    if (workspaceID && !await db.isActiveMember(workspaceID, connection.userID)) return;
 
     connection.workspaceID = workspaceID ?? null;
 
