@@ -62,7 +62,7 @@ export default function Notation() {
         editor?.setEditable(canEdit);
     }, [editor, canEdit]);
 
-    const activePage = pages.find(page => page.id === activePageID) ?? null;
+    const activePage = notationData.pages.find(page => page.id === activePageID) ?? null;
 
     if (error) return <div className="route-loading">{error.message}</div>;
 
