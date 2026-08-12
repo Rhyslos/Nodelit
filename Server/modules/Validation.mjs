@@ -190,11 +190,17 @@ export function requireListReorder(updates) {
 }
 
 export function requireNotationPageReorder(updates) {
-    return requireArray(updates, 'updates').map(update => ({
+    const parsed = requireArray(updates, 'updates').map(update => ({
         id: requireID(update?.id, 'updates.id'),
         groupID: optionalID(update?.groupID, 'updates.groupID'),
         pageOrder: requireInteger(update?.pageOrder, 'updates.pageOrder')
     }));
+
+    if (new Set(parsed.map(update => update.id)).size !== parsed.length) {
+        throw new ValidationError('updates cannot contain the same page twice');
+    }
+
+    return parsed;
 }
 
 // account validation functions

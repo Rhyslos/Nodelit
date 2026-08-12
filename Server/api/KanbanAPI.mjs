@@ -59,6 +59,12 @@ export default function createKanbanRouter(authz) {
                 }
 
                 const anchor = entities.workspaceIDs[0];
+                const workspace = await db.getWorkspace(anchor);
+
+                if (!workspace) {
+                    return res.status(404).json({ error: 'Not found' });
+                }
+
                 const membership = await db.getMembership(anchor, req.user.id);
 
                 if (!membership) {

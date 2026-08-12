@@ -4,10 +4,12 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { StreamProvider } from './contexts/StreamContext';
 import { KanbanProvider } from './contexts/KanbanContext';
+import { NotationProvider } from './contexts/NotationContext';
 import Navbar from './components/navbar/Navbar';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Kanban from './pages/Kanban';
+import Notation from './pages/Notation';
 import Admin from './pages/Admin';
 import Profile from './pages/Profile';
 
@@ -53,6 +55,14 @@ function WorkspaceLayout() {
     );
 }
 
+function NotationLayout() {
+    return (
+        <NotationProvider>
+            <Outlet />
+        </NotationProvider>
+    );
+}
+
 function AppLayout() {
     const location = useLocation();
     const hideNavbar = location.pathname === '/login';
@@ -76,6 +86,10 @@ function AppLayout() {
                     <Route path="/workspace/:workspaceID" element={<WorkspaceLayout />}>
                         <Route index element={<Navigate to="kanban" replace />} />
                         <Route path="kanban" element={<Kanban />} />
+
+                        <Route element={<NotationLayout />}>
+                            <Route path="notation" element={<Notation />} />
+                        </Route>
                     </Route>
                 </Route>
 
