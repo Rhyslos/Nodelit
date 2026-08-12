@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS notation_documents (
 );
 
 INSERT INTO notation_pages (id, workspace_id, title, page_order)
-SELECT 'page-' || gen_random_uuid(), w.id, 'Untitled', 0
+SELECT 'page-' || w.id, w.id, 'Untitled', 0
 FROM workspaces w
 WHERE w.deleted_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM notation_pages p WHERE p.workspace_id = w.id);
