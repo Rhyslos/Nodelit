@@ -31,7 +31,7 @@ function renderCaret(user) {
 // page functions
 export default function Notation() {
     const { user } = useAuth();
-    const { pages, loading, error, canEdit } = useNotation();
+    const { notationData, loading, error, canEdit } = useNotation();
 
     // state variables
     const [activePageID, setActivePageID] = useState(null);
