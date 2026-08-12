@@ -92,6 +92,22 @@ export function broadcastNotationChange(workspaceID, changes, originClientID) {
     broadcastToWorkspace(workspaceID, { type: 'notation', ...changes }, originClientID);
 }
 
+// shutdown functions
+export function stopStreams() {
+    stopHeartbeat();
+
+    for (const connection of connections.values()) {
+        try {
+            writeEvent(connection.res, { type: 'shutdown' });
+            connection.res.end();
+        } catch {
+            continue;
+        }
+    }
+
+    connections.clear();
+}
+
 // presence functions
 function getOnlineUserIDs(workspaceID) {
     const online = new Set();

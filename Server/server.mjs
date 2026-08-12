@@ -10,7 +10,7 @@ import pool, { applySchema, closePool } from './database/Pool.mjs';
 import db from './database/Database.mjs';
 import Authentication from './modules/Authentication.mjs';
 import Authorization from './modules/Authorization.mjs';
-import createNetworkingRouter from './modules/Networking.mjs';
+import createNetworkingRouter, { stopStreams } from './modules/Networking.mjs';
 import createKanbanRouter from './api/KanbanAPI.mjs';
 import createWorkspaceRouter from './api/WorkspaceAPI.mjs';
 import createAdminRouter from './api/AdminAPI.mjs';
@@ -256,11 +256,14 @@ class Server {
         forceExit.unref?.();
 
         await stopCollaboration();
+        stopStreams();
 
-        await new Promise(resolve => this.httpServer?.close(resolve));
+        const closed = new Promise(resolve => this.httpServer?.close(resolve));
 
+        this.httpServer?.closeIdleConnections?.();
         this.httpServer?.closeAllConnections?.();
 
+        await closed;
         await closePool();
         clearTimeout(forceExit);
         process.exit(0);
