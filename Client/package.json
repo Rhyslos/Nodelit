@@ -10,10 +10,25 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tiptap/core": "^3.30.0",
+    "@tiptap/extension-collaboration": "^3.30.0",
+    "@tiptap/extension-collaboration-caret": "^3.30.0",
+    "@tiptap/extension-highlight": "^3.30.0",
+    "@tiptap/extension-list": "^3.30.0",
+    "@tiptap/extension-subscript": "^3.30.0",
+    "@tiptap/extension-superscript": "^3.30.0",
+    "@tiptap/extension-text-align": "^3.30.0",
+    "@tiptap/extension-text-style": "^3.30.0",
+    "@tiptap/extensions": "^3.30.0",
+    "@tiptap/pm": "^3.30.0",
+    "@tiptap/react": "^3.30.0",
+    "@tiptap/starter-kit": "^3.30.0",
     "lucide-react": "^1.28.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.11.0"
+    "react-router-dom": "^7.11.0",
+    "y-websocket": "^3.1.0",
+    "yjs": "^13.6.32"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -58,6 +58,11 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
 }
 
 // stream functions
+export function socketBase() {
+    if (API_BASE) return API_BASE.replace(/^http/, 'ws');
+    return `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+}
+
 export function openStream(path, params = {}) {
     const query = new URLSearchParams({ clientId: clientID, ...params });
     return new EventSource(`${API_BASE}${path}?${query}`, { withCredentials: true });
