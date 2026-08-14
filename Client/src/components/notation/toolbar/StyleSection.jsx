@@ -1,6 +1,6 @@
 // import modules
 import { useEditorState } from '@tiptap/react';
-import { FONTS, FONT_WEIGHTS } from '../Constants';
+import { FONTS, FONT_WEIGHTS, FONT_SIZES, BLOCK_DEFAULTS } from '../Constants';
 
 // utility functions
 function activeBlock(instance) {
@@ -32,10 +32,20 @@ function matchFont(value) {
     return found?.value ?? FONTS[0].value;
 }
 
-function matchWeight(value) {
+function matchWeight(value, block) {
     if (value === 'bold') return '700';
     if (value === 'normal') return '400';
-    return (value ?? '400').toString();
+    if (value === null || value === undefined) return BLOCK_DEFAULTS[block].weight;
+    return value.toString();
+}
+
+function matchSize(value, block) {
+    const size = parseInt(value, 10);
+    return Number.isNaN(size) ? BLOCK_DEFAULTS[block].size : size.toString();
+}
+
+function sizeOptions(size) {
+    return FONT_SIZES.includes(size) ? FONT_SIZES : [size, ...FONT_SIZES];
 }
 
 // event functions
@@ -52,11 +62,13 @@ export default function StyleSection({ editor }) {
         editor,
         selector: ({ editor: instance }) => {
             const attributes = textStyleAttributes(instance);
+            const block = activeBlock(instance);
 
             return {
-                block: activeBlock(instance),
+                block,
                 font: matchFont(attributes.fontFamily),
-                weight: matchWeight(attributes.fontWeight)
+                weight: matchWeight(attributes.fontWeight, block),
+                size: matchSize(attributes.fontSize, block)
             };
         }
     });
@@ -84,6 +96,16 @@ export default function StyleSection({ editor }) {
                     <option key={font.value} value={font.value} style={{ fontFamily: font.value }}>
                         {font.label}
                     </option>
+                ))}
+            </select>
+
+            <select
+                className="tiptap-select tiptap-select-narrow"
+                value={state.size}
+                onChange={event => editor.chain().focus().setFontSize(event.target.value).run()}
+            >
+                {sizeOptions(state.size).map(size => (
+                    <option key={size} value={size}>{size}</option>
                 ))}
             </select>
 

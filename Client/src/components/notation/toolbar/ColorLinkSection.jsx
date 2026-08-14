@@ -104,7 +104,12 @@ export default function ColorLinkSection({ editor }) {
                         editor.chain().focus().setColor(color).run();
                         setActivePicker(null);
                     }}
-                    style={{ right: 0, left: 'auto', transform: 'none' }}
+                    style={{
+                        right: 0,
+                        left: 'auto',
+                        transform: 'none',
+                        gridTemplateColumns: 'repeat(5, 1fr)'
+                    }}
                 />
             )}
         </div>

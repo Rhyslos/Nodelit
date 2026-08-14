@@ -1,6 +1,6 @@
 // colour constants
 export const TEXT_COLORS = [
-    '#000000', '#6B7280', '#EF4444', '#F97316',
+    '#000000', '#6B7280', '#FFFFFF', '#EF4444', '#F97316',
     '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899'
 ];
 
@@ -35,3 +35,15 @@ export const FONT_WEIGHTS = [
     { label: 'Extra-Bold', value: '800' },
     { label: 'Black', value: '900' }
 ];
+
+export const FONT_SIZES = [
+    '8', '9', '10', '11', '12', '13', '14', '15', '16', '18',
+    '20', '24', '28', '32', '36', '48', '60', '72'
+];
+
+export const BLOCK_DEFAULTS = {
+    p: { size: '15', weight: '400' },
+    h1: { size: '32', weight: '400' },
+    h2: { size: '24', weight: '400' },
+    h3: { size: '18', weight: '600' }
+};
