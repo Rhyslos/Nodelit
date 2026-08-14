@@ -30,6 +30,14 @@ export default function ListSection({ editor }) {
                     {list.label}
                 </button>
             ))}
+
+            <button onClick={() => editor.commands.outdentBlock()} title="Decrease indent">
+                ⇤
+            </button>
+
+            <button onClick={() => editor.commands.indentBlock()} title="Increase indent">
+                ⇥
+            </button>
         </div>
     );
 }
