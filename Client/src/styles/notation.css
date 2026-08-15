@@ -1141,9 +1141,10 @@
     padding: 0 10px 10px;
     border: none;
     background: transparent;
-    font-family: 'Noto Sans', sans-serif;
-    font-size: 13px;
-    line-height: 1.5;
+    font-family: 'Patrick Hand', 'Segoe Print', 'Bradley Hand', cursive;
+    font-size: 16px;
+    line-height: 1.45;
+    letter-spacing: 0.2px;
     color: #1f2937;
     resize: none;
     outline: none;
