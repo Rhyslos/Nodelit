@@ -1,12 +1,11 @@
 // import modules
 import ToolbarOverflow from './toolbar/ToolbarOverflow';
-import HistorySection from './toolbar/HistorySection';
+import InsertMenu from './toolbar/InsertMenu';
+import ViewMenu from './toolbar/ViewMenu';
 import StyleSection from './toolbar/StyleSection';
 import FormattingSection from './toolbar/FormattingSection';
 import ListSection from './toolbar/ListSection';
 import ColorSection from './toolbar/ColorSection';
-import InsertMenu from './toolbar/InsertMenu';
-import ViewMenu from './toolbar/ViewMenu';
 import AlignmentSection from './toolbar/AlignmentSection';
 import WordCountSection from './toolbar/WordCountSection';
 
@@ -25,13 +24,12 @@ export default function TipTapToolbar({ editor, view }) {
 
     return (
         <ToolbarOverflow>
-            <HistorySection editor={editor} />
+            <InsertMenu editor={editor} view={view} />
+            <ViewMenu view={view} />
             <StyleSection editor={editor} />
             <FormattingSection editor={editor} />
             <ListSection editor={editor} />
             <ColorSection editor={editor} />
-            <InsertMenu editor={editor} view={view} />
-            <ViewMenu view={view} />
             <AlignmentSection editor={editor} />
             <WordCountSection editor={editor} />
         </ToolbarOverflow>
