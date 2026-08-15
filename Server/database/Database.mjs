@@ -1790,6 +1790,32 @@ class Database {
         return removed;
     }
 
+    async reorderNotationGroups(updates) {
+        if (!updates || updates.length === 0) return [];
+
+        const ids = updates.map(update => update.id);
+        const orders = updates.map(update => update.groupOrder);
+
+        const { rows } = await query(
+            `UPDATE notation_groups AS g
+             SET group_order = u.group_order, updated_at = now()
+             FROM unnest($1::text[], $2::int[]) AS u(id, group_order)
+             WHERE g.id = u.id
+             RETURNING g.id`,
+            [ids, orders]
+        );
+
+        if (rows.length === 0) return [];
+
+        const { rows: records } = await query(
+            `SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g
+             WHERE g.id = ANY($1::text[]) ORDER BY g.group_order`,
+            [rows.map(row => row.id)]
+        );
+
+        return records;
+    }
+
     async reorderNotationPages(updates) {
         if (!updates || updates.length === 0) return [];
 

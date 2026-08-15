@@ -204,6 +204,19 @@ export function requireNotationPageReorder(updates) {
     return parsed;
 }
 
+export function requireNotationGroupReorder(updates) {
+    const parsed = requireArray(updates, 'updates').map(update => ({
+        id: requireID(update?.id, 'updates.id'),
+        groupOrder: requireInteger(update?.groupOrder, 'updates.groupOrder')
+    }));
+
+    if (new Set(parsed.map(update => update.id)).size !== parsed.length) {
+        throw new ValidationError('updates cannot contain the same group twice');
+    }
+
+    return parsed;
+}
+
 // account validation functions
 export function requireUsername(value, field = 'username') {
     if (typeof value !== 'string' || !USERNAME_PATTERN.test(value)) {

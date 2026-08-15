@@ -10,6 +10,7 @@ import {
     optionalColor,
     optionalInteger,
     optionalNotationLayout,
+    requireNotationGroupReorder,
     requireNotationPageReorder
 } from '../modules/Validation.mjs';
 
@@ -114,6 +115,41 @@ export default function createNotationRouter(authz) {
         };
     }
 
+    function resolveGroupBatchScope() {
+        return async (req, res, next) => {
+            try {
+                const groupIDs = [...new Set(req.batchUpdates.map(update => update.id))];
+                const groups = await db.getNotationGroupScope(groupIDs);
+
+                if (groups.found !== groupIDs.length || groups.workspaceIDs.length !== 1) {
+                    return res.status(404).json({ error: 'Not found' });
+                }
+
+                const anchor = groups.workspaceIDs[0];
+                const workspace = await db.getWorkspace(anchor);
+
+                if (!workspace) {
+                    return res.status(404).json({ error: 'Not found' });
+                }
+
+                const membership = await db.getMembership(anchor, req.user.id);
+
+                if (!membership) {
+                    return res.status(404).json({ error: 'Not found' });
+                }
+
+                if (!EDIT_ROLES.has(membership.role)) {
+                    return res.status(403).json({ error: 'You have read only access to this workspace' });
+                }
+
+                req.workspaceID = anchor;
+                next();
+            } catch (error) {
+                next(error);
+            }
+        };
+    }
+
     // group routes
     router.post('/groups', authz.workspaceBodyEdit(), async (req, res, next) => {
         try {
@@ -131,6 +167,20 @@ export default function createNotationRouter(authz) {
             next(error);
         }
     });
+
+    router.put('/groups/reorder',
+        parseBatch(requireNotationGroupReorder),
+        resolveGroupBatchScope(),
+        async (req, res, next) => {
+            try {
+                const groups = await db.reorderNotationGroups(req.batchUpdates);
+
+                publish(req, { upsert: { groups } });
+                res.json({ groups });
+            } catch (error) {
+                next(error);
+            }
+        });
 
     router.put('/groups/:id', authz.notationGroupEdit(), async (req, res, next) => {
         try {

@@ -124,10 +124,27 @@
 }
 
 .notation-sidebar-group-header {
+    position: relative;
     display: flex;
     align-items: center;
     cursor: pointer;
     user-select: none;
+}
+
+.notation-sidebar-group-header[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.notation-sidebar-group-header.dragging {
+    opacity: 0.4;
+}
+
+.notation-sidebar-group-header > .notation-drop-indicator:first-child {
+    top: -3px;
+}
+
+.notation-sidebar-group-header > .notation-drop-indicator:last-child {
+    bottom: -3px;
 }
 
 .notation-sidebar-group-pages {

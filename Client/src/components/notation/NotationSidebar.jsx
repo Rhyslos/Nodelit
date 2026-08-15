@@ -128,7 +128,24 @@ function PageRow({
     );
 }
 
-function GroupHeader({ group, isCollapsed, canEdit, isEditing, onToggle, onStartEditing, onCommitName, onColorClick, onAddPage, onContextMenu }) {
+function GroupHeader({
+    group,
+    isCollapsed,
+    canEdit,
+    isEditing,
+    isDragged,
+    dropPosition,
+    onToggle,
+    onStartEditing,
+    onCommitName,
+    onColorClick,
+    onAddPage,
+    onContextMenu,
+    onDragStart,
+    onDragOver,
+    onDragLeave,
+    onDrop
+}) {
     const nameRef = useRef(null);
     const colorRef = useRef(null);
 
@@ -159,7 +176,12 @@ function GroupHeader({ group, isCollapsed, canEdit, isEditing, onToggle, onStart
 
     return (
         <div
-            className="notation-sidebar-group-header"
+            className={`notation-sidebar-group-header ${isDragged ? 'dragging' : ''}`}
+            draggable={canEdit && !isEditing}
+            onDragStart={event => onDragStart(event, group.id)}
+            onDragOver={event => onDragOver(event, group.id)}
+            onDragLeave={onDragLeave}
+            onDrop={event => onDrop(event, group.id)}
             onContextMenu={event => onContextMenu(event, group)}
             onClick={() => { if (!isEditing) onToggle(group.id); }}
             onDoubleClick={() => {
@@ -167,6 +189,8 @@ function GroupHeader({ group, isCollapsed, canEdit, isEditing, onToggle, onStart
                 onStartEditing(group.id);
             }}
         >
+            {dropPosition === 'before' && <div className="notation-drop-indicator" />}
+
             <div className="notation-sidebar-group-pill" style={group.color ? { background: group.color } : undefined}>
                 <span className="notation-sidebar-arrow">{isCollapsed ? '▸' : '▾'}</span>
 
@@ -207,6 +231,8 @@ function GroupHeader({ group, isCollapsed, canEdit, isEditing, onToggle, onStart
                     </>
                 )}
             </div>
+
+            {dropPosition === 'after' && <div className="notation-drop-indicator" />}
         </div>
     );
 }
@@ -228,7 +254,8 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         renamePage,
         deletePage,
         deleteGroup,
-        reorderPages
+        reorderPages,
+        reorderGroups
     } = useNotationSidebar();
 
     const [collapsedGroups, setCollapsedGroups] = useState(new Set());
@@ -249,6 +276,10 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     const [draggedPageID, setDraggedPageID] = useState(null);
     const [dropTargetID, setDropTargetID] = useState(null);
     const [dropPosition, setDropPosition] = useState(null);
+
+    const [draggedGroupID, setDraggedGroupID] = useState(null);
+    const [groupDropID, setGroupDropID] = useState(null);
+    const [groupDropPosition, setGroupDropPosition] = useState(null);
 
     // data derived
     const groupIDs = new Set(groups.map(group => group.id));
@@ -322,6 +353,58 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         setDraggedPageID(null);
         setDropTargetID(null);
         setDropPosition(null);
+    }
+
+    function resetGroupDrag() {
+        setDraggedGroupID(null);
+        setGroupDropID(null);
+        setGroupDropPosition(null);
+    }
+
+    function handleGroupDragStart(event, groupID) {
+        event.stopPropagation();
+        setDraggedGroupID(groupID);
+        event.dataTransfer.effectAllowed = 'move';
+    }
+
+    function handleGroupDragOver(event, targetGroupID) {
+        if (!draggedGroupID) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'move';
+
+        if (draggedGroupID === targetGroupID) {
+            setGroupDropID(null);
+            setGroupDropPosition(null);
+            return;
+        }
+
+        const rect = event.currentTarget.getBoundingClientRect();
+        const position = event.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
+
+        setGroupDropID(targetGroupID);
+        setGroupDropPosition(position);
+    }
+
+    function handleGroupDrop(event, targetGroupID) {
+        if (!draggedGroupID) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const dragged = draggedGroupID;
+        const position = groupDropPosition;
+
+        resetGroupDrag();
+
+        if (!dragged || dragged === targetGroupID) return;
+
+        const remaining = groups.filter(group => group.id !== dragged);
+        const anchor = remaining.findIndex(group => group.id === targetGroupID);
+        if (anchor === -1) return;
+
+        reorderGroups(dragged, position === 'after' ? anchor + 1 : anchor);
     }
 
     function handleDropOnPage(event, targetPage, list) {
@@ -500,6 +583,12 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                                 onColorClick={handleColorClick}
                                 onAddPage={handleAddPage}
                                 onContextMenu={handleGroupContext}
+                                isDragged={draggedGroupID === group.id}
+                                dropPosition={groupDropID === group.id ? groupDropPosition : null}
+                                onDragStart={handleGroupDragStart}
+                                onDragOver={handleGroupDragOver}
+                                onDragLeave={() => setGroupDropID(null)}
+                                onDrop={handleGroupDrop}
                             />
 
                             {!isCollapsed && (

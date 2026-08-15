@@ -47,6 +47,20 @@ export function buildReorder(pages, draggedPageID, targetGroupID, targetIndex) {
     return updates;
 }
 
+export function buildGroupReorder(groups, draggedGroupID, targetIndex) {
+    const dragged = groups.find(group => group.id === draggedGroupID);
+    if (!dragged) return null;
+
+    const ordered = groups.filter(group => group.id !== draggedGroupID);
+    const index = Math.max(0, Math.min(targetIndex, ordered.length));
+
+    ordered.splice(index, 0, dragged);
+
+    if (ordered.every((group, position) => group.groupOrder === position)) return [];
+
+    return ordered.map((group, position) => ({ id: group.id, groupOrder: position }));
+}
+
 // hook functions
 export function useNotationSidebar() {
     const {
@@ -194,6 +208,32 @@ export function useNotationSidebar() {
         }
     }
 
+    async function reorderGroups(draggedGroupID, targetIndex) {
+        const updates = buildGroupReorder(groups, draggedGroupID, targetIndex);
+        if (!updates || updates.length === 0) return;
+
+        setNotationData(prev => {
+            const moved = new Map(updates.map(u => [u.id, u]));
+
+            return {
+                ...prev,
+                groups: prev.groups.map(g => {
+                    const update = moved.get(g.id);
+                    return update ? { ...g, groupOrder: update.groupOrder } : g;
+                })
+            };
+        });
+
+        try {
+            const result = await api('/api/notation/groups/reorder', { method: 'PUT', body: { updates } });
+            setNotationData(prev => applyDelta(prev, { upsert: { groups: result.groups } }));
+            setActionError(null);
+        } catch (err) {
+            setActionError(err.message);
+            refresh();
+        }
+    }
+
     async function reorderPages(draggedPageID, targetGroupID, targetIndex) {
         const updates = buildReorder(pages, draggedPageID, targetGroupID, targetIndex);
         if (!updates || updates.length === 0) return;
@@ -237,6 +277,7 @@ export function useNotationSidebar() {
         renamePage,
         setPageLayout,
         deletePage,
-        reorderPages
+        reorderPages,
+        reorderGroups
     };
 }
