@@ -18,7 +18,7 @@ function safeURL(value) {
 }
 
 // component functions
-export default function InsertMenu({ editor }) {
+export default function InsertMenu({ editor, view }) {
     const state = useEditorState({
         editor,
         selector: ({ editor: instance }) => ({
@@ -66,6 +66,10 @@ export default function InsertMenu({ editor }) {
 
                 <ToolbarMenuItem onSelect={() => editor.chain().focus().toggleCodeBlock().run()}>
                     Code block
+                </ToolbarMenuItem>
+
+                <ToolbarMenuItem onSelect={() => view.onAddSticky()}>
+                    Sticky note
                 </ToolbarMenuItem>
 
                 <ToolbarMenuDivider />

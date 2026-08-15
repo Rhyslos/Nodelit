@@ -30,7 +30,7 @@ export default function TipTapToolbar({ editor, view }) {
             <FormattingSection editor={editor} />
             <ListSection editor={editor} />
             <ColorSection editor={editor} />
-            <InsertMenu editor={editor} />
+            <InsertMenu editor={editor} view={view} />
             <ViewMenu view={view} />
             <AlignmentSection editor={editor} />
             <WordCountSection editor={editor} />

@@ -9,6 +9,11 @@ export const HIGHLIGHT_COLORS = [
     '#FEF08A', '#A7F3D0', '#BFDBFE', '#DDD6FE', '#FBCFE8'
 ];
 
+export const STICKY_COLORS = [
+    '#FEF3B7', '#FFD9C0', '#FFC9D4',
+    '#DDD0F7', '#C4E4FB', '#C7EFD5'
+];
+
 // typography constants
 export const FONTS = [
     { label: 'Noto Sans', value: 'Noto Sans, sans-serif' },

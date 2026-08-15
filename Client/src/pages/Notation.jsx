@@ -10,6 +10,8 @@ import { useNotationSidebar } from '../hooks/useNotationSidebar';
 import { editorExtensions } from '../components/notation/EditorExtensions';
 import NotationSidebar from '../components/notation/NotationSidebar';
 import EditorContextMenu from '../components/notation/EditorContextMenu';
+import StickyLayer from '../components/notation/StickyLayer';
+import { useStickyNotes } from '../hooks/useStickyNotes';
 import NotationSubbar from '../components/subbar/NotationSubbar';
 
 // configuration constants
@@ -42,6 +44,7 @@ export default function Notation() {
     const [reading, setReading] = useState(false);
 
     const { session, status } = useNotationDocument(activePageID);
+    const { notes, createNote, updateNote, deleteNote } = useStickyNotes(session?.ydoc ?? null);
 
     const editor = useEditor({
         editable: canEdit,
@@ -69,10 +72,13 @@ export default function Notation() {
     const activePage = notationData.pages.find(page => page.id === activePageID) ?? null;
     const layout = activePage?.layout ?? 'pageless';
 
+    const editable = canEdit && !reading;
+
     const view = {
         reading,
         layout,
         canEdit,
+        onAddSticky: () => createNote({ x: 24, y: 24 }),
         onReading: setReading,
         onLayout: next => { if (activePageID) setPageLayout(activePageID, next); }
     };
@@ -116,10 +122,18 @@ export default function Notation() {
                     )}
 
                     {!loading && activePage && session && (
-                        <EditorContent
+                        <StickyLayer
                             editor={editor}
-                            className={`notation-editor notation-editor--${layout} ${reading ? 'notation-editor--reading' : ''}`}
-                        />
+                            notes={notes}
+                            editable={editable}
+                            onUpdate={updateNote}
+                            onDelete={deleteNote}
+                        >
+                            <EditorContent
+                                editor={editor}
+                                className={`notation-editor notation-editor--${layout} ${reading ? 'notation-editor--reading' : ''}`}
+                            />
+                        </StickyLayer>
                     )}
                 </div>
             </div>

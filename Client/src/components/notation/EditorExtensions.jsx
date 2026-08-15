@@ -13,6 +13,7 @@ import { FontWeight } from './FontWeight';
 import { FontSize } from './FontSize';
 import { Indent } from './Indent';
 import { LinkBehaviour } from './LinkBehaviour';
+import { StickyFloats } from './StickyFloats';
 
 // extension configuration
 export const editorExtensions = [
@@ -35,6 +36,7 @@ export const editorExtensions = [
     FontSize,
     Indent,
     LinkBehaviour,
+    StickyFloats,
     Highlight.configure({ multicolor: true }),
     Subscript,
     Superscript,
