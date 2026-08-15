@@ -1659,14 +1659,29 @@ class Database {
         return row?.state ?? null;
     }
 
-    async saveNotationDocument(pageID, state) {
+    async saveNotationDocument(pageID, state, content = '') {
         await query(
-            `INSERT INTO notation_documents (page_id, state, updated_at)
-             VALUES ($1, $2, now())
+            `INSERT INTO notation_documents (page_id, state, content, updated_at)
+             VALUES ($1, $2, $3, now())
              ON CONFLICT (page_id) DO UPDATE
-             SET state = EXCLUDED.state, updated_at = now()`,
-            [pageID, state]
+             SET state = EXCLUDED.state, content = EXCLUDED.content, updated_at = now()`,
+            [pageID, state, content]
         );
+    }
+
+    async searchNotationContent(workspaceID, term) {
+        const pattern = `%${term.replace(/([\\%_])/g, '\\$1')}%`;
+
+        const { rows } = await query(
+            `SELECT p.id
+             FROM notation_pages p
+             JOIN notation_documents d ON d.page_id = p.id
+             WHERE p.workspace_id = $1 AND d.content ILIKE $2
+             ORDER BY p.page_order, p.id`,
+            [workspaceID, pattern]
+        );
+
+        return rows.map(row => row.id);
     }
 
     // notation page functions

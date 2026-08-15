@@ -246,3 +246,6 @@ ALTER TABLE notation_pages DROP CONSTRAINT IF EXISTS notation_pages_layout_check
 
 ALTER TABLE notation_pages ADD CONSTRAINT notation_pages_layout_check
     CHECK (layout IN ('paged', 'pageless'));
+
+-- notation search columns
+ALTER TABLE notation_documents ADD COLUMN IF NOT EXISTS content text NOT NULL DEFAULT '';

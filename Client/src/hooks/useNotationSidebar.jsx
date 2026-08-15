@@ -88,6 +88,13 @@ export function useNotationSidebar() {
         [notationData.pages]
     );
 
+    // query functions
+    async function searchContent(term, signal) {
+        const query = new URLSearchParams({ q: term });
+        const result = await api(`/api/notation/${workspaceID}/search?${query}`, { signal });
+        return result.pages;
+    }
+
     // mutation functions
     async function createGroup(name = 'New group') {
         try {
@@ -278,6 +285,7 @@ export function useNotationSidebar() {
         setPageLayout,
         deletePage,
         reorderPages,
-        reorderGroups
+        reorderGroups,
+        searchContent
     };
 }

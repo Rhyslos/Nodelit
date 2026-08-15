@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNotationSidebar } from '../../hooks/useNotationSidebar';
 import ContextMenu, { ContextMenuItem, ContextMenuDivider, ContextMenuLabel } from './ContextMenu';
+import SidebarSearch from './SidebarSearch';
 
 // configuration constants
 const PRESET_COLORS = [
@@ -52,6 +53,7 @@ function PageRow({
     list,
     isActive,
     canEdit,
+    canDrag,
     isEditing,
     isDragged,
     dropPosition,
@@ -97,7 +99,7 @@ function PageRow({
 
             <div
                 className={`notation-sidebar-page ${isActive ? 'active' : ''} ${isDragged ? 'dragging' : ''}`}
-                draggable={canEdit && !isEditing}
+                draggable={canDrag && !isEditing}
                 onDragStart={event => onDragStart(event, page.id)}
                 onDragOver={event => onDragOver(event, page.id)}
                 onDragLeave={onDragLeave}
@@ -132,6 +134,7 @@ function GroupHeader({
     group,
     isCollapsed,
     canEdit,
+    canDrag,
     isEditing,
     isDragged,
     dropPosition,
@@ -177,7 +180,7 @@ function GroupHeader({
     return (
         <div
             className={`notation-sidebar-group-header ${isDragged ? 'dragging' : ''}`}
-            draggable={canEdit && !isEditing}
+            draggable={canDrag && !isEditing}
             onDragStart={event => onDragStart(event, group.id)}
             onDragOver={event => onDragOver(event, group.id)}
             onDragLeave={onDragLeave}
@@ -255,8 +258,14 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         deletePage,
         deleteGroup,
         reorderPages,
-        reorderGroups
+        reorderGroups,
+        searchContent
     } = useNotationSidebar();
+
+    const [query, setQuery] = useState('');
+    const [mode, setMode] = useState('quick');
+    const [contentMatches, setContentMatches] = useState(null);
+    const [searching, setSearching] = useState(false);
 
     const [collapsedGroups, setCollapsedGroups] = useState(new Set());
     const [editingGroupID, setEditingGroupID] = useState(null);
@@ -281,9 +290,63 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     const [groupDropID, setGroupDropID] = useState(null);
     const [groupDropPosition, setGroupDropPosition] = useState(null);
 
+    // search effects
+    const term = query.trim();
+    const isSearching = term.length > 0;
+
+    useEffect(() => {
+        if (mode !== 'thorough' || term.length === 0) {
+            setContentMatches(null);
+            setSearching(false);
+            return undefined;
+        }
+
+        const controller = new AbortController();
+        let active = true;
+
+        setSearching(true);
+
+        const timer = setTimeout(() => {
+            searchContent(term, controller.signal)
+                .then(ids => {
+                    if (active) setContentMatches(new Set(ids));
+                })
+                .catch(() => {
+                    if (active) setContentMatches(new Set());
+                })
+                .finally(() => {
+                    if (active) setSearching(false);
+                });
+        }, 300);
+
+        return () => {
+            active = false;
+            controller.abort();
+            clearTimeout(timer);
+        };
+    }, [term, mode]);
+
     // data derived
     const groupIDs = new Set(groups.map(group => group.id));
-    const uncategorized = pages.filter(page => !page.groupID || !groupIDs.has(page.groupID));
+    const needle = term.toLowerCase();
+
+    function pageMatches(page) {
+        if (!isSearching) return true;
+        if (page.title.toLowerCase().includes(needle)) return true;
+        return mode === 'thorough' && Boolean(contentMatches?.has(page.id));
+    }
+
+    function groupMatches(group) {
+        if (!isSearching) return true;
+        return group.name.toLowerCase().includes(needle);
+    }
+
+    const visiblePages = pages.filter(pageMatches);
+
+    const uncategorized = visiblePages.filter(page => !page.groupID || !groupIDs.has(page.groupID));
+
+    const visibleGroups = groups.filter(group =>
+        groupMatches(group) || visiblePages.some(page => page.groupID === group.id));
 
     // group handlers
     function toggleGroup(groupID) {
@@ -536,6 +599,14 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                 onDragOver={handleDragOverGroup}
                 onDrop={event => handleDropOnGroup(event, null, uncategorized)}
             >
+                <SidebarSearch
+                    query={query}
+                    mode={mode}
+                    searching={searching}
+                    onQuery={setQuery}
+                    onMode={setMode}
+                />
+
                 {(error || actionError) && (
                     <div className="notation-sidebar-error">{error?.message ?? actionError}</div>
                 )}
@@ -547,6 +618,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                         list={uncategorized}
                         isActive={page.id === activePageID}
                         canEdit={canEdit}
+                        canDrag={canEdit && !isSearching}
                         isEditing={editingPageID === page.id}
                         isDragged={draggedPageID === page.id}
                         dropPosition={dropTargetID === page.id ? dropPosition : null}
@@ -561,9 +633,9 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                     />
                 ))}
 
-                {groups.map(group => {
-                    const groupPages = pages.filter(page => page.groupID === group.id);
-                    const isCollapsed = collapsedGroups.has(group.id);
+                {visibleGroups.map(group => {
+                    const groupPages = visiblePages.filter(page => page.groupID === group.id);
+                    const isCollapsed = !isSearching && collapsedGroups.has(group.id);
 
                     return (
                         <div
@@ -576,6 +648,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                                 group={group}
                                 isCollapsed={isCollapsed}
                                 canEdit={canEdit}
+                                canDrag={canEdit && !isSearching}
                                 isEditing={editingGroupID === group.id}
                                 onToggle={toggleGroup}
                                 onStartEditing={setEditingGroupID}
@@ -600,6 +673,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                                             list={groupPages}
                                             isActive={page.id === activePageID}
                                             canEdit={canEdit}
+                                            canDrag={canEdit && !isSearching}
                                             isEditing={editingPageID === page.id}
                                             isDragged={draggedPageID === page.id}
                                             dropPosition={dropTargetID === page.id ? dropPosition : null}

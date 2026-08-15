@@ -49,6 +49,7 @@ function audit(req, entry) {
 const EDIT_ROLES = new Set(['owner', 'member']);
 const MAX_GROUP_NAME = 60;
 const MAX_PAGE_TITLE = 120;
+const MAX_SEARCH_TERM = 100;
 
 // router configuration
 export default function createNotationRouter(authz) {
@@ -312,6 +313,17 @@ export default function createNotationRouter(authz) {
     });
 
     // retrieval routes
+    router.get('/:workspaceID/search', authz.workspaceParam(), async (req, res, next) => {
+        try {
+            const term = requireText(req.query.q, 'q', MAX_SEARCH_TERM);
+            const pages = await db.searchNotationContent(req.workspaceID, term);
+
+            res.json({ pages });
+        } catch (error) {
+            next(error);
+        }
+    });
+
     router.get('/:workspaceID', authz.workspaceParam(), async (req, res, next) => {
         try {
             const notation = await db.getNotationData(req.workspaceID);

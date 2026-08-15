@@ -19,6 +19,7 @@ const SYNC_UPDATE = 2;
 const MAX_PAYLOAD_BYTES = 1024 * 1024;
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 const MAX_CONNECTIONS_PER_PAGE = 40;
+const MAX_CONTENT_CHARS = 200000;
 const SAVE_DEBOUNCE_MS = 2000;
 const REVALIDATE_INTERVAL_MS = 60000;
 const PING_INTERVAL_MS = 30000;
@@ -72,6 +73,41 @@ function broadcast(room, payload, exclude) {
         if (connection === exclude) continue;
         send(connection, payload);
     }
+}
+
+// extraction functions
+function collectText(node, parts) {
+    if (node instanceof Y.XmlText) {
+        const text = node.toDelta()
+            .map(operation => (typeof operation.insert === 'string' ? operation.insert : ''))
+            .join('');
+
+        if (text) parts.push(text);
+        return;
+    }
+
+    if (node instanceof Y.XmlElement || node instanceof Y.XmlFragment) {
+        for (const child of node.toArray()) collectText(child, parts);
+        if (node instanceof Y.XmlElement) parts.push('\n');
+    }
+}
+
+function documentText(doc) {
+    const parts = [];
+
+    try {
+        collectText(doc.getXmlFragment('default'), parts);
+
+        doc.getMap('stickies').forEach(note => {
+            const text = note?.get?.('text');
+            if (text) parts.push(text.toString());
+        });
+    } catch (error) {
+        console.error('Notation text extraction failed:', error.message);
+        return '';
+    }
+
+    return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, MAX_CONTENT_CHARS);
 }
 
 // persistence functions
@@ -168,7 +204,7 @@ async function saveRoom(room) {
     room.dirty = false;
 
     try {
-        await db.saveNotationDocument(room.pageID, Buffer.from(state));
+        await db.saveNotationDocument(room.pageID, Buffer.from(state), documentText(room.doc));
     } catch (error) {
         room.dirty = true;
 
