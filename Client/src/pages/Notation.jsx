@@ -9,6 +9,7 @@ import { useNotationDocument } from '../hooks/useNotationDocument';
 import { useNotationSidebar } from '../hooks/useNotationSidebar';
 import { editorExtensions } from '../components/notation/EditorExtensions';
 import NotationSidebar from '../components/notation/NotationSidebar';
+import EditorContextMenu from '../components/notation/EditorContextMenu';
 import NotationSubbar from '../components/subbar/NotationSubbar';
 
 // configuration constants
@@ -108,6 +109,10 @@ export default function Notation() {
 
                     {!loading && !activePage && (
                         <p className="notation-loading">Select a page to get started</p>
+                    )}
+
+                    {!loading && activePage && session && (
+                        <EditorContextMenu editor={editor} canEdit={canEdit} reading={reading} />
                     )}
 
                     {!loading && activePage && session && (

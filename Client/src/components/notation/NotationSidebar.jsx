@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNotationSidebar } from '../../hooks/useNotationSidebar';
+import ContextMenu, { ContextMenuItem, ContextMenuDivider, ContextMenuLabel } from './ContextMenu';
 
 // configuration constants
 const PRESET_COLORS = [
@@ -60,7 +61,8 @@ function PageRow({
     onDragStart,
     onDragOver,
     onDragLeave,
-    onDrop
+    onDrop,
+    onContextMenu
 }) {
     const titleRef = useRef(null);
 
@@ -96,6 +98,7 @@ function PageRow({
                 onDragOver={event => onDragOver(event, page.id)}
                 onDragLeave={onDragLeave}
                 onDrop={event => onDrop(event, page, list)}
+                onContextMenu={event => onContextMenu(event, page)}
                 onClick={() => { if (!isEditing) onSelect(page.id); }}
                 onDoubleClick={() => {
                     if (!canEdit) return;
@@ -122,7 +125,7 @@ function PageRow({
     );
 }
 
-function GroupHeader({ group, isCollapsed, canEdit, isEditing, onToggle, onStartEditing, onCommitName, onColorClick, onAddPage }) {
+function GroupHeader({ group, isCollapsed, canEdit, isEditing, onToggle, onStartEditing, onCommitName, onColorClick, onAddPage, onContextMenu }) {
     const nameRef = useRef(null);
     const colorRef = useRef(null);
 
@@ -150,6 +153,7 @@ function GroupHeader({ group, isCollapsed, canEdit, isEditing, onToggle, onStart
     return (
         <div
             className="notation-sidebar-group-header"
+            onContextMenu={event => onContextMenu(event, group)}
             onClick={() => { if (!isEditing) onToggle(group.id); }}
             onDoubleClick={() => {
                 if (!canEdit) return;
@@ -216,6 +220,8 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         colorGroup,
         createPage,
         renamePage,
+        deletePage,
+        deleteGroup,
         reorderPages
     } = useNotationSidebar();
 
@@ -230,6 +236,9 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
     const [colorPickerID, setColorPickerID] = useState(null);
     const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
+
+    const [contextTarget, setContextTarget] = useState(null);
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
 
     const [draggedPageID, setDraggedPageID] = useState(null);
     const [dropTargetID, setDropTargetID] = useState(null);
@@ -344,6 +353,47 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
     const closeColorPicker = useCallback(() => setColorPickerID(null), []);
 
+    const closeContext = useCallback(() => {
+        setContextTarget(null);
+        setConfirmingDelete(false);
+    }, []);
+
+    function openContext(event, kind, entity) {
+        if (!canEdit) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        setConfirmingDelete(false);
+        setContextTarget({ kind, entity, x: event.clientX, y: event.clientY });
+    }
+
+    function handlePageContext(event, page) {
+        openContext(event, 'page', page);
+    }
+
+    function handleGroupContext(event, group) {
+        openContext(event, 'group', group);
+    }
+
+    function startRenameFromContext() {
+        const { kind, entity } = contextTarget;
+
+        if (kind === 'page') setEditingPageID(entity.id);
+        else setEditingGroupID(entity.id);
+
+        closeContext();
+    }
+
+    async function confirmDelete() {
+        const { kind, entity } = contextTarget;
+
+        closeContext();
+
+        if (kind === 'page') await deletePage(entity.id);
+        else await deleteGroup(entity.id);
+    }
+
     async function handleNewPage() {
         const page = await createPage('Untitled', selectedGroupID);
         if (page) onPageSelect(page.id);
@@ -401,6 +451,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                         onDragOver={handleDragOverPage}
                         onDragLeave={handleDragLeavePage}
                         onDrop={handleDropOnPage}
+                        onContextMenu={handlePageContext}
                     />
                 ))}
 
@@ -425,6 +476,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                                 onCommitName={renameGroup}
                                 onColorClick={handleColorClick}
                                 onAddPage={handleAddPage}
+                                onContextMenu={handleGroupContext}
                             />
 
                             {!isCollapsed && (
@@ -446,6 +498,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                                             onDragOver={handleDragOverPage}
                                             onDragLeave={handleDragLeavePage}
                                             onDrop={handleDropOnPage}
+                                            onContextMenu={handlePageContext}
                                         />
                                     ))}
                                 </div>
@@ -467,6 +520,63 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                     </button>
                 )}
             </div>
+
+            {contextTarget && (
+                <ContextMenu position={{ x: contextTarget.x, y: contextTarget.y }} onClose={closeContext}>
+                    <ContextMenuLabel>{contextTarget.entity.title ?? contextTarget.entity.name}</ContextMenuLabel>
+
+                    <ContextMenuItem onSelect={startRenameFromContext}>Rename</ContextMenuItem>
+
+                    {contextTarget.kind === 'group' && (
+                        <>
+                            <ContextMenuItem
+                                onSelect={() => {
+                                    handleAddPage(contextTarget.entity.id);
+                                    closeContext();
+                                }}
+                            >
+                                New page
+                            </ContextMenuItem>
+
+                            <ContextMenuItem
+                                onSelect={() => {
+                                    setPickerPos({ top: contextTarget.y, left: contextTarget.x });
+                                    setColorPickerID(contextTarget.entity.id);
+                                    closeContext();
+                                }}
+                            >
+                                Colour
+                            </ContextMenuItem>
+                        </>
+                    )}
+
+                    <ContextMenuDivider />
+
+                    {!confirmingDelete && (
+                        <ContextMenuItem onSelect={() => setConfirmingDelete(true)} danger>
+                            {contextTarget.kind === 'page' ? 'Delete page' : 'Delete group'}
+                        </ContextMenuItem>
+                    )}
+
+                    {confirmingDelete && (
+                        <>
+                            <ContextMenuLabel>
+                                {contextTarget.kind === 'page'
+                                    ? 'This permanently deletes the page and its contents'
+                                    : 'Pages in this group are kept and moved out'}
+                            </ContextMenuLabel>
+
+                            <ContextMenuItem onSelect={confirmDelete} danger>
+                                Confirm delete
+                            </ContextMenuItem>
+
+                            <ContextMenuItem onSelect={() => setConfirmingDelete(false)}>
+                                Cancel
+                            </ContextMenuItem>
+                        </>
+                    )}
+                </ContextMenu>
+            )}
 
             {showModal && createPortal(
                 <div

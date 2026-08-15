@@ -271,6 +271,75 @@
     bottom: -1px;
 }
 
+/* context menu styles */
+.notation-context-menu {
+    position: fixed;
+    z-index: 10000;
+    min-width: 180px;
+    max-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: 0 8px 24px var(--shadow);
+    animation: panelIn 0.12s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.notation-context-item {
+    width: 100%;
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.notation-context-item:hover:not(:disabled) {
+    background: var(--accent-lt);
+    color: var(--accent);
+}
+
+.notation-context-item:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.notation-context-item.danger {
+    color: #ef4444;
+}
+
+.notation-context-item.danger:hover:not(:disabled) {
+    background: #ef44441a;
+    color: #ef4444;
+}
+
+.notation-context-divider {
+    height: 1px;
+    margin: 4px 2px;
+    background: var(--border);
+}
+
+.notation-context-label {
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* modal styles */
 .notation-modal {
     width: 260px;
