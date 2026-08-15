@@ -472,6 +472,32 @@
     max-width: 780px;
 }
 
+.notation-editor--paged {
+    max-width: 794px;
+}
+
+.notation-editor--paged .tiptap {
+    padding: 72px 76px;
+    background:
+        repeating-linear-gradient(
+            to bottom,
+            var(--field) 0,
+            var(--field) 1123px,
+            var(--border) 1123px,
+            var(--border) 1124px,
+            var(--paper) 1124px,
+            var(--paper) 1148px
+        );
+}
+
+.notation-editor--reading .tiptap {
+    cursor: default;
+}
+
+.notation-editor--reading .tiptap p.is-editor-empty:first-child::before {
+    content: none;
+}
+
 .notation-editor .tiptap {
     min-height: calc(100vh - var(--navbar-h) - 220px);
     padding: 48px 56px;

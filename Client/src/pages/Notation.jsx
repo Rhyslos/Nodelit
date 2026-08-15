@@ -6,6 +6,7 @@ import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotation } from '../contexts/NotationContext';
 import { useNotationDocument } from '../hooks/useNotationDocument';
+import { useNotationSidebar } from '../hooks/useNotationSidebar';
 import { editorExtensions } from '../components/notation/EditorExtensions';
 import NotationSidebar from '../components/notation/NotationSidebar';
 import NotationSubbar from '../components/subbar/NotationSubbar';
@@ -32,10 +33,12 @@ function renderCaret(user) {
 export default function Notation() {
     const { user } = useAuth();
     const { notationData, loading, error, canEdit } = useNotation();
+    const { setPageLayout } = useNotationSidebar();
 
     // state variables
     const [activePageID, setActivePageID] = useState(null);
     const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [reading, setReading] = useState(false);
 
     const { session, status } = useNotationDocument(activePageID);
 
@@ -59,16 +62,30 @@ export default function Notation() {
 
     // lifecycle functions
     useEffect(() => {
-        editor?.setEditable(canEdit);
-    }, [editor, canEdit]);
+        editor?.setEditable(canEdit && !reading);
+    }, [editor, canEdit, reading]);
 
     const activePage = notationData.pages.find(page => page.id === activePageID) ?? null;
+    const layout = activePage?.layout ?? 'pageless';
+
+    const view = {
+        reading,
+        layout,
+        canEdit,
+        onReading: setReading,
+        onLayout: next => { if (activePageID) setPageLayout(activePageID, next); }
+    };
 
     if (error) return <div className="route-loading">{error.message}</div>;
 
     return (
         <div className="notation-root">
-            <NotationSubbar editor={session ? editor : null} status={status} canEdit={canEdit} />
+            <NotationSubbar
+                editor={session ? editor : null}
+                status={status}
+                canEdit={canEdit}
+                view={view}
+            />
 
             <div className="notation-body">
                 <button
@@ -94,7 +111,10 @@ export default function Notation() {
                     )}
 
                     {!loading && activePage && session && (
-                        <EditorContent editor={editor} className="notation-editor" />
+                        <EditorContent
+                            editor={editor}
+                            className={`notation-editor notation-editor--${layout} ${reading ? 'notation-editor--reading' : ''}`}
+                        />
                     )}
                 </div>
             </div>

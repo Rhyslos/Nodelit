@@ -238,3 +238,11 @@ SELECT 'page-' || w.id, w.id, 'Untitled', 0
 FROM workspaces w
 WHERE w.deleted_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM notation_pages p WHERE p.workspace_id = w.id);
+
+-- notation layout columns
+ALTER TABLE notation_pages ADD COLUMN IF NOT EXISTS layout text NOT NULL DEFAULT 'pageless';
+
+ALTER TABLE notation_pages DROP CONSTRAINT IF EXISTS notation_pages_layout_check;
+
+ALTER TABLE notation_pages ADD CONSTRAINT notation_pages_layout_check
+    CHECK (layout IN ('paged', 'pageless'));

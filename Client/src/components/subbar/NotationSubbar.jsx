@@ -11,13 +11,13 @@ const STATUS_LABELS = {
 };
 
 // component functions
-export default function NotationSubbar({ editor, status, canEdit }) {
+export default function NotationSubbar({ editor, status, canEdit, view }) {
     return (
         <Subbar className="subbar--notation">
-            <TipTapToolbar editor={canEdit ? editor : null} />
+            <TipTapToolbar editor={editor} view={view} />
 
             <div className="notation-save-indicator">
-                {canEdit ? STATUS_LABELS[status] ?? '' : 'Read only'}
+                {view.reading ? 'Reading' : canEdit ? STATUS_LABELS[status] ?? '' : 'Read only'}
             </div>
         </Subbar>
     );

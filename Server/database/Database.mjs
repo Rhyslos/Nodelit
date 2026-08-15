@@ -19,7 +19,7 @@ const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived'];
 const LIST_FIELDS = ['name', 'columnID', 'listOrder'];
 const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'deadline', 'checklists'];
 const NOTATION_GROUP_FIELDS = ['name', 'color', 'groupOrder'];
-const NOTATION_PAGE_FIELDS = ['title', 'groupID', 'pageOrder'];
+const NOTATION_PAGE_FIELDS = ['title', 'groupID', 'pageOrder', 'layout'];
 const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor', 'theme'];
 
 const FIELD_DEFINITIONS = {
@@ -38,7 +38,8 @@ const FIELD_DEFINITIONS = {
     checklists: { column: 'checklists', cast: '::jsonb', transform: value => JSON.stringify(value ?? []) },
     groupID: { column: 'group_id' },
     groupOrder: { column: 'group_order' },
-    pageOrder: { column: 'page_order' }
+    pageOrder: { column: 'page_order' },
+    layout: { column: 'layout' }
 };
 
 // projection constants
@@ -142,6 +143,7 @@ const NOTATION_PAGE_SELECT = `
     p.workspace_id AS "workspaceID",
     p.group_id AS "groupID",
     p.title,
+    p.layout,
     p.page_order AS "pageOrder",
     p.updated_at AS "updatedAt"
 `;

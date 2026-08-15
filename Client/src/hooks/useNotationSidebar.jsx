@@ -165,6 +165,22 @@ export function useNotationSidebar() {
         }
     }
 
+    async function setPageLayout(pageID, layout) {
+        setNotationData(prev => ({
+            ...prev,
+            pages: prev.pages.map(p => p.id === pageID ? { ...p, layout } : p)
+        }));
+
+        try {
+            const page = await api(`/api/notation/pages/${pageID}`, { method: 'PUT', body: { layout } });
+            setNotationData(prev => applyDelta(prev, { upsert: { pages: [page] } }));
+            setActionError(null);
+        } catch (err) {
+            setActionError(err.message);
+            refresh();
+        }
+    }
+
     async function deletePage(pageID) {
         setNotationData(prev => applyDelta(prev, { remove: { pages: [pageID] } }));
 
@@ -219,6 +235,7 @@ export function useNotationSidebar() {
         deleteGroup,
         createPage,
         renamePage,
+        setPageLayout,
         deletePage,
         reorderPages
     };

@@ -13,6 +13,7 @@ const USER_ROLES = ['admin', 'member'];
 const MEMBER_ROLES = ['member', 'viewer'];
 const MAX_ASSIGNEES = 20;
 const THEME_MODES = ['default', 'dark', 'custom'];
+const NOTATION_LAYOUTS = ['paged', 'pageless'];
 const THEME_KEYS = ['navbar', 'subbar', 'background', 'surface', 'accent', 'text'];
 
 // error classes
@@ -260,6 +261,16 @@ export function requireColor(value, field = 'color') {
     }
 
     return color;
+}
+
+export function optionalNotationLayout(value, field = 'layout') {
+    if (value === undefined || value === null) return undefined;
+
+    if (typeof value !== 'string' || !NOTATION_LAYOUTS.includes(value)) {
+        throw new ValidationError(`${field} must be one of ${NOTATION_LAYOUTS.join(', ')}`);
+    }
+
+    return value;
 }
 
 export function optionalTheme(value, field = 'theme') {

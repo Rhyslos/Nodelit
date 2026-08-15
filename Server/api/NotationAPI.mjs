@@ -9,6 +9,7 @@ import {
     optionalID,
     optionalColor,
     optionalInteger,
+    optionalNotationLayout,
     requireNotationPageReorder
 } from '../modules/Validation.mjs';
 
@@ -221,7 +222,8 @@ export default function createNotationRouter(authz) {
                 groupID: req.body?.groupID === undefined
                     ? undefined
                     : optionalID(req.body.groupID, 'groupID'),
-                pageOrder: optionalInteger(req.body?.pageOrder, 'pageOrder')
+                pageOrder: optionalInteger(req.body?.pageOrder, 'pageOrder'),
+                layout: optionalNotationLayout(req.body?.layout, 'layout')
             };
 
             const page = await db.updateNotationPage(pageID, changes, req.workspaceID);

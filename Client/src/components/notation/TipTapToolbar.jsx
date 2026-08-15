@@ -6,12 +6,22 @@ import FormattingSection from './toolbar/FormattingSection';
 import ListSection from './toolbar/ListSection';
 import ColorSection from './toolbar/ColorSection';
 import InsertMenu from './toolbar/InsertMenu';
+import ViewMenu from './toolbar/ViewMenu';
 import AlignmentSection from './toolbar/AlignmentSection';
 import WordCountSection from './toolbar/WordCountSection';
 
 // component functions
-export default function TipTapToolbar({ editor }) {
+export default function TipTapToolbar({ editor, view }) {
     if (!editor) return null;
+
+    if (view.reading || !view.canEdit) {
+        return (
+            <ToolbarOverflow>
+                <ViewMenu view={view} />
+                <WordCountSection editor={editor} />
+            </ToolbarOverflow>
+        );
+    }
 
     return (
         <ToolbarOverflow>
@@ -21,6 +31,7 @@ export default function TipTapToolbar({ editor }) {
             <ListSection editor={editor} />
             <ColorSection editor={editor} />
             <InsertMenu editor={editor} />
+            <ViewMenu view={view} />
             <AlignmentSection editor={editor} />
             <WordCountSection editor={editor} />
         </ToolbarOverflow>
