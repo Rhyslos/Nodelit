@@ -92,7 +92,7 @@ function collectText(node, parts) {
     }
 }
 
-function documentText(doc) {
+export function documentText(doc) {
     const parts = [];
 
     try {
@@ -113,11 +113,14 @@ function documentText(doc) {
 // persistence functions
 async function loadRoom(pageID) {
     const doc = new Y.Doc();
-    const state = await db.getNotationDocument(pageID);
+    const record = await db.getNotationDocument(pageID);
 
-    if (state) {
+    let loaded = false;
+
+    if (record?.state) {
         try {
-            Y.applyUpdate(doc, new Uint8Array(state));
+            Y.applyUpdate(doc, new Uint8Array(record.state));
+            loaded = true;
         } catch (error) {
             console.error(`Notation document ${pageID} failed to load:`, error.message);
         }
@@ -133,6 +136,11 @@ async function loadRoom(pageID) {
     };
 
     room.awareness.setLocalState(null);
+
+    if (loaded && !record.content) {
+        room.dirty = true;
+        scheduleSave(room);
+    }
 
     doc.on('update', (update, origin) => {
         const encoder = encoding.createEncoder();

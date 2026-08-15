@@ -8,7 +8,7 @@ const MODES = [
 ];
 
 // component functions
-export default function SidebarSearch({ query, mode, searching, onQuery, onMode }) {
+export default function SidebarSearch({ query, mode, searching, error, onQuery, onMode }) {
     const inputRef = useRef(null);
 
     return (
@@ -57,6 +57,8 @@ export default function SidebarSearch({ query, mode, searching, onQuery, onMode 
 
                 {searching && <span className="notation-search-status">Searching…</span>}
             </div>
+
+            {error && <div className="notation-search-error">{error}</div>}
         </div>
     );
 }

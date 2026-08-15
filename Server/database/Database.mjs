@@ -1654,9 +1654,23 @@ class Database {
     }
 
     // notation document functions
+    async listNotationDocumentIDs() {
+        const { rows } = await query('SELECT page_id AS "pageID" FROM notation_documents ORDER BY page_id');
+        return rows.map(row => row.pageID);
+    }
+
+    async saveNotationDocumentContent(pageID, content) {
+        await query(
+            'UPDATE notation_documents SET content = $2 WHERE page_id = $1',
+            [pageID, content]
+        );
+    }
+
     async getNotationDocument(pageID) {
-        const row = await queryOne('SELECT state FROM notation_documents WHERE page_id = $1', [pageID]);
-        return row?.state ?? null;
+        const row = await queryOne('SELECT state, content FROM notation_documents WHERE page_id = $1', [pageID]);
+        if (!row) return null;
+
+        return { state: row.state ?? null, content: row.content ?? '' };
     }
 
     async saveNotationDocument(pageID, state, content = '') {

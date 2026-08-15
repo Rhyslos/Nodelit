@@ -266,6 +266,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     const [mode, setMode] = useState('quick');
     const [contentMatches, setContentMatches] = useState(null);
     const [searching, setSearching] = useState(false);
+    const [searchError, setSearchError] = useState(null);
 
     const [collapsedGroups, setCollapsedGroups] = useState(new Set());
     const [editingGroupID, setEditingGroupID] = useState(null);
@@ -297,6 +298,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     useEffect(() => {
         if (mode !== 'thorough' || term.length === 0) {
             setContentMatches(null);
+            setSearchError(null);
             setSearching(false);
             return undefined;
         }
@@ -309,10 +311,14 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         const timer = setTimeout(() => {
             searchContent(term, controller.signal)
                 .then(ids => {
-                    if (active) setContentMatches(new Set(ids));
+                    if (!active) return;
+                    setContentMatches(new Set(ids));
+                    setSearchError(null);
                 })
-                .catch(() => {
-                    if (active) setContentMatches(new Set());
+                .catch(err => {
+                    if (!active || err.name === 'AbortError') return;
+                    setContentMatches(null);
+                    setSearchError(err.message ?? 'Search failed');
                 })
                 .finally(() => {
                     if (active) setSearching(false);
@@ -603,6 +609,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                     query={query}
                     mode={mode}
                     searching={searching}
+                    error={searchError}
                     onQuery={setQuery}
                     onMode={setMode}
                 />

@@ -157,6 +157,14 @@
     color: var(--faint);
 }
 
+.notation-search-error {
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--accent-lt);
+    font-size: 11px;
+    color: var(--accent);
+}
+
 /* sidebar page styles */
 .notation-sidebar-page-wrapper {
     position: relative;
