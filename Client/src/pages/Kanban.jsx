@@ -199,6 +199,7 @@ export default function Kanban() {
             <KanbanTabs
                 tabs={tabs}
                 tabGroups={tabGroups}
+                workspaceID={workspaceID}
                 activeTabId={activeTabId}
                 onSelect={setActiveTabId}
                 onAdd={addTab}

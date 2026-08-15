@@ -4,10 +4,11 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import TabContextMenu from './TabContextMenu';
 import ConfirmModal from './ConfirmModal';
-import { useKanban } from '../../contexts/KanbanContext';
 import { useTabDrag, buildTabSlots } from '../../hooks/useTabDrag';
 
 // configuration constants
+const GROUP_STORAGE_PREFIX = 'nodelit:tabgroups:';
+
 const PRESET_COLORS = [
     { color: '#ffb3b3', label: 'Red' },
     { color: '#ffd0a8', label: 'Orange' },
@@ -18,10 +19,33 @@ const PRESET_COLORS = [
     { color: '#e8b3ff', label: 'Magenta' }
 ];
 
+// utility functions
+function readCollapsedGroups(workspaceID) {
+    if (!workspaceID) return new Set();
+
+    try {
+        const stored = localStorage.getItem(`${GROUP_STORAGE_PREFIX}${workspaceID}`);
+        return new Set(stored ? JSON.parse(stored) : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function persistCollapsedGroups(workspaceID, groupIDs) {
+    if (!workspaceID) return;
+
+    try {
+        localStorage.setItem(`${GROUP_STORAGE_PREFIX}${workspaceID}`, JSON.stringify([...groupIDs]));
+    } catch {
+        return;
+    }
+}
+
 // component functions
 export default function KanbanTabs({
     tabs,
     tabGroups = [],
+    workspaceID,
     activeTabId,
     onSelect,
     onAdd,
@@ -33,9 +57,8 @@ export default function KanbanTabs({
     onUpdateGroup,
     onDeleteGroup
 }) {
-    const { collapsedGroups, toggleGroup } = useKanban();
-
     // state variables
+    const [collapsedGroups, setCollapsedGroups] = useState(() => readCollapsedGroups(workspaceID));
     const [editingId, setEditingId] = useState(null);
     const [editingColor, setEditingColor] = useState(null);
     const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
@@ -64,6 +87,10 @@ export default function KanbanTabs({
 
     // lifecycle functions
     useEffect(() => {
+        setCollapsedGroups(readCollapsedGroups(workspaceID));
+    }, [workspaceID]);
+
+    useEffect(() => {
         const validIds = new Set([...tabs.map(t => t.id), ...tabGroups.map(g => g.id)]);
 
         for (const id of Object.keys(nameRefs.current)) {
@@ -90,6 +117,20 @@ export default function KanbanTabs({
             window.removeEventListener('resize', handleClose);
         };
     }, [editingColor]);
+
+    // group handlers
+    function toggleGroup(groupID) {
+        setCollapsedGroups(previous => {
+            const next = new Set(previous);
+
+            if (next.has(groupID)) next.delete(groupID);
+            else next.add(groupID);
+
+            persistCollapsedGroups(workspaceID, next);
+
+            return next;
+        });
+    }
 
     // editing handlers
     function startEditing(id) {

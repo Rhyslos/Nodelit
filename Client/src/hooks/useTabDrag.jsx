@@ -178,7 +178,7 @@ export function useTabDrag({ slots, collapsedGroups, onReorder }) {
                 const rect = el.getBoundingClientRect();
                 if (cx < rect.left || cx > rect.right || cy < rect.top || cy > rect.bottom) continue;
 
-                if (collapsedRef.current.has(slot.id)) {
+                if (collapsedRef.current?.has(slot.id)) {
                     return { groupID: slot.id, index: slot.tabs.length };
                 }
 

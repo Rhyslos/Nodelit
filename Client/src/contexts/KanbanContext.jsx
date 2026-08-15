@@ -7,9 +7,9 @@ import { useStream } from './StreamContext';
 // context initialization
 const KanbanContext = createContext(null);
 
-const EMPTY_BOARD = { tabs: [], columns: [], lists: [], tasks: [], tags: [] };
+const EMPTY_BOARD = { tabs: [], tabGroups: [], columns: [], lists: [], tasks: [], tags: [] };
 const EDIT_ROLES = new Set(['owner', 'member']);
-const COLLECTIONS = ['tabs', 'columns', 'lists', 'tasks', 'tags'];
+const COLLECTIONS = ['tabs', 'tabGroups', 'columns', 'lists', 'tasks', 'tags'];
 const CHECKLIST_STORAGE_PREFIX = 'nodelit:checklists:';
 const BOARD_REFRESH_EVENT = 'nodelit:board-refresh';
 
