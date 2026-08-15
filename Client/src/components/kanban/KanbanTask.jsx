@@ -11,12 +11,14 @@ export default function KanbanTask({
     tags = [],
     members = [],
     isDragging,
+    isFocused,
     isClone,
     canEdit = true,
     onUpdate,
     onSetTags,
     onStartDrag,
     onOpen,
+    onFocusClear,
     registerTask,
     registerElement,
 }) {
@@ -41,6 +43,24 @@ export default function KanbanTask({
             if (registerElement && !isClone) registerElement(task.id, null);
         };
     }, [task.id, registerTask, registerElement, isClone]);
+
+    useEffect(() => {
+        if (!isFocused) return;
+
+        const el = titleRef.current;
+        if (!el || !el.isConnected) return;
+
+        el.focus();
+
+        const range = document.createRange();
+        range.selectNodeContents(el);
+
+        const selection = window.getSelection();
+        if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+    }, [isFocused]);
 
     // derived variables
     const taskTags = tags.filter(tag => task.tagIDs?.includes(tag.id));
@@ -68,6 +88,7 @@ export default function KanbanTask({
     function handleTitleBlur() {
         const text = titleRef.current?.textContent.trim() || 'New Task';
         if (text !== task.title) onUpdate({ title: text });
+        onFocusClear?.();
     }
 
     function handleTitleKeyDown(e) {

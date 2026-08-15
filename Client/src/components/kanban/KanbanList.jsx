@@ -12,6 +12,7 @@ export default function KanbanList({
     tags = [],
     members,
     isFocused,
+    focusedTaskId,
     canEdit = true,
     dragging,
     insertionPoint,
@@ -170,11 +171,13 @@ export default function KanbanList({
                                     tags={tags}
                                     members={members}
                                     isDragging={dragging === task.id}
+                                    isFocused={focusedTaskId === task.id}
                                     canEdit={canEdit}
                                     onUpdate={changes => onUpdateTask(task.id, changes)}
                                     onSetTags={tagIDs => onSetTaskTags(task.id, tagIDs)}
                                     onStartDrag={onStartTaskDrag}
                                     onOpen={() => onOpenTask(task)}
+                                    onFocusClear={onFocusClear}
                                     registerTask={registerTask}
                                     registerElement={registerTaskElement}
                                 />

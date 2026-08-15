@@ -38,6 +38,7 @@ export default function Kanban() {
     // ui state
     const [activeTask, setActiveTask] = useState(null);
     const [focusedListId, setFocusedListId] = useState(null);
+    const [focusedTaskId, setFocusedTaskId] = useState(null);
 
     const topbarRef = useRef(null);
     const boardRef = useRef(null);
@@ -152,6 +153,16 @@ export default function Kanban() {
         if (listID) setFocusedListId(listID);
     }
 
+    async function handleAddTask(listID) {
+        const taskID = await addTask(listID);
+        if (taskID) setFocusedTaskId(taskID);
+    }
+
+    function handleFocusClear() {
+        setFocusedListId(null);
+        setFocusedTaskId(null);
+    }
+
     const tasksByListID = useMemo(() => {
         const map = {};
         for (const task of tasks) {
@@ -206,6 +217,7 @@ export default function Kanban() {
                             tags={tags}
                             members={members}
                             focusedListId={focusedListId}
+                            focusedTaskId={focusedTaskId}
                             dragging={dragging}
                             dragType={dragType}
                             insertionPoint={insertionPoint}
@@ -213,7 +225,7 @@ export default function Kanban() {
                             isTaskRemoving={isTaskRemoving}
                             isListRemoving={isListRemoving}
                             canEdit={canEdit}
-                            onAddTask={(listID) => addTask(listID)}
+                            onAddTask={handleAddTask}
                             onUpdateList={updateList}
                             onSetListTags={setListTags}
                             onUpdateTask={updateTask}
@@ -224,7 +236,7 @@ export default function Kanban() {
                                 startDrag(e, list, el, 'list');
                             }}
                             onOpenTask={setActiveTask}
-                            onFocusClear={() => setFocusedListId(null)}
+                            onFocusClear={handleFocusClear}
                             registerList={registerList}
                             registerTask={registerTask}
                             registerGhost={registerGhost}
