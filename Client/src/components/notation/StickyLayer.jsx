@@ -1,5 +1,5 @@
 // import modules
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import StickyNote from './StickyNote';
 
 // configuration constants
@@ -42,8 +42,7 @@ function floatFor(note, box) {
 }
 
 // component functions
-export default function StickyLayer({ editor, notes, editable, onUpdate, onDelete, children }) {
-    const layerRef = useRef(null);
+export default function StickyLayer({ editor, notes, editable, layerRef, onUpdate, onDelete, children }) {
 
     const syncFloats = useCallback(() => {
         if (!editor || !layerRef.current) return;
@@ -55,7 +54,7 @@ export default function StickyLayer({ editor, notes, editable, onUpdate, onDelet
             : [];
 
         editor.commands.setStickyFloats(floats);
-    }, [editor, notes]);
+    }, [editor, notes, layerRef]);
 
     useEffect(() => {
         syncFloats();
@@ -64,7 +63,7 @@ export default function StickyLayer({ editor, notes, editable, onUpdate, onDelet
         if (layerRef.current) observer.observe(layerRef.current);
 
         return () => observer.disconnect();
-    }, [syncFloats]);
+    }, [syncFloats, layerRef]);
 
     return (
         <div className="notation-sticky-layer" ref={layerRef}>

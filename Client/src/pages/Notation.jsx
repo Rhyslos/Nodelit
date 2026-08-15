@@ -1,5 +1,5 @@
 // page imports
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
@@ -43,6 +43,8 @@ export default function Notation() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [reading, setReading] = useState(false);
 
+    const layerRef = useRef(null);
+
     const { session, status } = useNotationDocument(activePageID);
     const { notes, createNote, updateNote, deleteNote } = useStickyNotes(session?.ydoc ?? null);
 
@@ -74,11 +76,23 @@ export default function Notation() {
 
     const editable = canEdit && !reading;
 
+    const addStickyAt = useCallback(point => {
+        const layer = layerRef.current;
+
+        if (!layer || !point) {
+            createNote({ x: 24, y: 24 });
+            return;
+        }
+
+        const rect = layer.getBoundingClientRect();
+        createNote({ x: point.x - rect.left, y: point.y - rect.top });
+    }, [createNote]);
+
     const view = {
         reading,
         layout,
         canEdit,
-        onAddSticky: () => createNote({ x: 24, y: 24 }),
+        onAddSticky: () => addStickyAt(null),
         onReading: setReading,
         onLayout: next => { if (activePageID) setPageLayout(activePageID, next); }
     };
@@ -118,12 +132,19 @@ export default function Notation() {
                     )}
 
                     {!loading && activePage && session && (
-                        <EditorContextMenu editor={editor} canEdit={canEdit} reading={reading} />
+                        <EditorContextMenu
+                            editor={editor}
+                            canEdit={canEdit}
+                            reading={reading}
+                            boundsRef={layerRef}
+                            onAddSticky={addStickyAt}
+                        />
                     )}
 
                     {!loading && activePage && session && (
                         <StickyLayer
                             editor={editor}
+                            layerRef={layerRef}
                             notes={notes}
                             editable={editable}
                             onUpdate={updateNote}

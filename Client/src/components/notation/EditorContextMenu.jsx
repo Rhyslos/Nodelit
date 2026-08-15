@@ -32,7 +32,7 @@ function placeCursor(editor, event) {
 }
 
 // component functions
-export default function EditorContextMenu({ editor, canEdit, reading }) {
+export default function EditorContextMenu({ editor, canEdit, reading, boundsRef, onAddSticky }) {
     const [position, setPosition] = useState(null);
 
     const close = useCallback(() => setPosition(null), []);
@@ -42,16 +42,21 @@ export default function EditorContextMenu({ editor, canEdit, reading }) {
 
         function handleContextMenu(event) {
             if (event.shiftKey) return;
-            if (!editor.view.dom.contains(event.target)) return;
+
+            const bounds = boundsRef?.current ?? editor.view.dom;
+            if (!bounds.contains(event.target)) return;
+            if (event.target instanceof Element && event.target.closest('.notation-sticky')) return;
 
             event.preventDefault();
-            placeCursor(editor, event);
+
+            if (editor.view.dom.contains(event.target)) placeCursor(editor, event);
+
             setPosition({ x: event.clientX, y: event.clientY });
         }
 
         document.addEventListener('contextmenu', handleContextMenu);
         return () => document.removeEventListener('contextmenu', handleContextMenu);
-    }, [editor]);
+    }, [editor, boundsRef]);
 
     if (!editor || !position) return null;
 
@@ -193,6 +198,16 @@ export default function EditorContextMenu({ editor, canEdit, reading }) {
 
                     <ContextMenuItem onSelect={() => run(() => editor.chain().focus().toggleCodeBlock().run())}>
                         Code block
+                    </ContextMenuItem>
+                </>
+            )}
+
+            {editable && (
+                <>
+                    <ContextMenuDivider />
+
+                    <ContextMenuItem onSelect={() => run(() => onAddSticky(position))}>
+                        Sticky note here
                     </ContextMenuItem>
                 </>
             )}
