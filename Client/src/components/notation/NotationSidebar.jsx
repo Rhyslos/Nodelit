@@ -66,6 +66,10 @@ function PageRow({
 }) {
     const titleRef = useRef(null);
 
+    useEffect(() => {
+        if (isEditing) selectContents(titleRef.current);
+    }, [isEditing]);
+
     function handleKeyDown(event) {
         if (event.key === 'Enter') {
             event.preventDefault();
@@ -103,7 +107,6 @@ function PageRow({
                 onDoubleClick={() => {
                     if (!canEdit) return;
                     onStartEditing(page.id);
-                    selectContents(titleRef.current);
                 }}
             >
                 <span className="notation-sidebar-dot" />
@@ -128,6 +131,10 @@ function PageRow({
 function GroupHeader({ group, isCollapsed, canEdit, isEditing, onToggle, onStartEditing, onCommitName, onColorClick, onAddPage, onContextMenu }) {
     const nameRef = useRef(null);
     const colorRef = useRef(null);
+
+    useEffect(() => {
+        if (isEditing) selectContents(nameRef.current);
+    }, [isEditing]);
 
     function handleKeyDown(event) {
         if (event.key === 'Enter') {
@@ -158,7 +165,6 @@ function GroupHeader({ group, isCollapsed, canEdit, isEditing, onToggle, onStart
             onDoubleClick={() => {
                 if (!canEdit) return;
                 onStartEditing(group.id);
-                selectContents(nameRef.current);
             }}
         >
             <div className="notation-sidebar-group-pill" style={group.color ? { background: group.color } : undefined}>
@@ -271,7 +277,10 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
     async function handleAddPage(groupID) {
         const page = await createPage('Untitled', groupID);
-        if (page) onPageSelect(page.id);
+        if (!page) return;
+
+        onPageSelect(page.id);
+        setEditingPageID(page.id);
     }
 
     // drag handlers
@@ -396,13 +405,27 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
     async function handleNewPage() {
         const page = await createPage('Untitled', selectedGroupID);
-        if (page) onPageSelect(page.id);
         closeModal();
+
+        if (!page) return;
+
+        onPageSelect(page.id);
+        setEditingPageID(page.id);
     }
 
     async function handleNewGroup() {
-        await createGroup('New group');
+        const group = await createGroup('New group');
         closeModal();
+
+        if (!group) return;
+
+        setCollapsedGroups(previous => {
+            const next = new Set(previous);
+            next.delete(group.id);
+            return next;
+        });
+
+        setEditingGroupID(group.id);
     }
 
     // side effects
