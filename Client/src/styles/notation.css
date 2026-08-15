@@ -595,6 +595,133 @@
     pointer-events: none;
 }
 
+/* code block styles */
+.notation-editor .tiptap .notation-code-block {
+    --code-keyword: #c678dd;
+    --code-type: #56b6c2;
+    --code-string: #98c379;
+    --code-number: #d19a66;
+    --code-comment: var(--muted);
+    --code-meta: #e5c07b;
+    --code-title: #61afef;
+
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    overflow: hidden;
+}
+
+.notation-code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    background: var(--paper);
+    user-select: none;
+}
+
+.notation-code-language,
+.notation-code-copy {
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--field);
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    outline: none;
+}
+
+.notation-code-language:focus,
+.notation-code-copy:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.notation-code-body {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    overflow-x: auto;
+}
+
+.notation-code-gutter {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    padding: 12px 8px 12px 12px;
+    border-right: 1px solid var(--border);
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--faint);
+    text-align: right;
+    user-select: none;
+}
+
+.notation-editor .tiptap .notation-code-pre {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 12px 16px;
+    border: none;
+    background: transparent;
+}
+
+.notation-editor .tiptap .notation-code-pre code {
+    display: block;
+    padding: 0;
+    background: transparent;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink);
+    white-space: pre;
+    tab-size: 4;
+}
+
+.notation-code-pre .hljs-keyword,
+.notation-code-pre .hljs-literal,
+.notation-code-pre .hljs-operator {
+    color: var(--code-keyword);
+}
+
+.notation-code-pre .hljs-built_in,
+.notation-code-pre .hljs-type {
+    color: var(--code-type);
+}
+
+.notation-code-pre .hljs-string,
+.notation-code-pre .hljs-regexp {
+    color: var(--code-string);
+}
+
+.notation-code-pre .hljs-number {
+    color: var(--code-number);
+}
+
+.notation-code-pre .hljs-comment,
+.notation-code-pre .hljs-quote {
+    color: var(--code-comment);
+    font-style: italic;
+}
+
+.notation-code-pre .hljs-meta,
+.notation-code-pre .hljs-attr {
+    color: var(--code-meta);
+}
+
+.notation-code-pre .hljs-title,
+.notation-code-pre .hljs-function,
+.notation-code-pre .hljs-class {
+    color: var(--code-title);
+}
+
 /* table styles */
 .notation-editor .tiptap .tableWrapper {
     margin-bottom: 16px;

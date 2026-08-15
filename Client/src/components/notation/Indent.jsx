@@ -85,11 +85,11 @@ export const Indent = Extension.create({
     addKeyboardShortcuts() {
         return {
             Tab: () => {
-                if (this.editor.isActive('table')) return false;
+                if (this.editor.isActive('table') || this.editor.isActive('codeBlock')) return false;
                 return this.editor.commands.indentBlock();
             },
             'Shift-Tab': () => {
-                if (this.editor.isActive('table')) return false;
+                if (this.editor.isActive('table') || this.editor.isActive('codeBlock')) return false;
                 return this.editor.commands.outdentBlock();
             }
         };

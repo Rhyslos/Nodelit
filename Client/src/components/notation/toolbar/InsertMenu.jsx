@@ -64,6 +64,12 @@ export default function InsertMenu({ editor }) {
 
                 <ToolbarMenuDivider />
 
+                <ToolbarMenuItem onSelect={() => editor.chain().focus().toggleCodeBlock().run()}>
+                    Code block
+                </ToolbarMenuItem>
+
+                <ToolbarMenuDivider />
+
                 <ToolbarMenuItem
                     onSelect={() => editor.chain().focus()
                         .insertTable({ rows: TABLE_ROWS, cols: TABLE_COLUMNS, withHeaderRow: true })

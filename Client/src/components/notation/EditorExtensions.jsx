@@ -8,6 +8,7 @@ import { Superscript } from '@tiptap/extension-superscript';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
 import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table';
 import { Placeholder, CharacterCount } from '@tiptap/extensions';
+import { CodeBlock } from './CodeBlock';
 import { FontWeight } from './FontWeight';
 import { FontSize } from './FontSize';
 import { Indent } from './Indent';
@@ -17,6 +18,7 @@ import { LinkBehaviour } from './LinkBehaviour';
 export const editorExtensions = [
     StarterKit.configure({
         undoRedo: false,
+        codeBlock: false,
         link: {
             openOnClick: false,
             autolink: true,
@@ -24,6 +26,7 @@ export const editorExtensions = [
             HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer nofollow' }
         }
     }),
+    CodeBlock,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     TextStyle,
     Color,
