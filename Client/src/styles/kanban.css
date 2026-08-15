@@ -1646,3 +1646,121 @@
 .tag-color-hex:focus {
     border-color: var(--accent);
 }
+/* tab group styles */
+.kanban-tabs-strip.is-dragging {
+    user-select: none;
+}
+
+.kanban-tab-group {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    padding: 0 4px 0 2px;
+    border-radius: 8px 8px 0 0;
+    background: color-mix(in srgb, var(--group-color) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--group-color) 45%, transparent);
+    border-bottom: none;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.kanban-tab-group.holds-active {
+    background: color-mix(in srgb, var(--group-color) 28%, transparent);
+}
+
+.kanban-tab-group.is-drop-target {
+    background: color-mix(in srgb, var(--group-color) 40%, transparent);
+    border-color: var(--accent);
+}
+
+.kanban-tab-group-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    cursor: grab;
+    align-self: stretch;
+}
+
+.kanban-tab-group-head:active {
+    cursor: grabbing;
+}
+
+.kanban-tab-group-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.kanban-tab-group-toggle:hover {
+    background: var(--faint);
+    color: var(--ink);
+}
+
+.kanban-tab-group-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    outline: none;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kanban-tab-group-name[contenteditable="true"] {
+    background: var(--field);
+    border-radius: 4px;
+    padding: 0 4px;
+    text-overflow: clip;
+}
+
+.kanban-tab-group-count {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--faint);
+    border-radius: 999px;
+    padding: 1px 5px;
+    min-width: 16px;
+    text-align: center;
+}
+
+.kanban-tab-group-tabs {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.kanban-tab-group.is-collapsed .kanban-tab-group-head {
+    padding-right: 8px;
+}
+
+/* tab drag styles */
+.kanban-tab-insertion-indicator {
+    width: 3px;
+    align-self: stretch;
+    min-height: 24px;
+    margin: 0 1px;
+    border-radius: 999px;
+    background: var(--accent);
+    animation: insertFade 0.15s ease both;
+}
+
+.kanban-tab-drag-clone {
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 1002;
+    opacity: 0.9;
+    filter: drop-shadow(0 12px 24px var(--shadow));
+    will-change: transform;
+}

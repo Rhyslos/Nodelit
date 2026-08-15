@@ -11,15 +11,17 @@ import {
     optionalDate,
     optionalChecklists,
     optionalIDList,
+    requireIDList,
     requireColor,
     requireInteger,
     requireTaskReorder,
-    requireListReorder
+    requireListReorder,
+    requireTabReorder
 } from '../modules/Validation.mjs';
 
 // utility functions
 function emptyCollections() {
-    return { tabs: [], columns: [], lists: [], tasks: [], tags: [] };
+    return { tabs: [], tabGroups: [], columns: [], lists: [], tasks: [], tags: [] };
 }
 
 function buildDelta({ upsert = {}, remove = {} } = {}) {
@@ -75,13 +77,16 @@ export default function createKanbanRouter(authz) {
                     return res.status(403).json({ error: 'You have read only access to this workspace' });
                 }
 
-                const targetIDs = [...new Set(updates.map(update => update[targetField]))];
-                const targets = await resolveTargets(targetIDs);
+                const targetIDs = [...new Set(updates.map(update => update[targetField]).filter(Boolean))];
 
-                if (targets.found !== targetIDs.length
-                    || targets.workspaceIDs.length !== 1
-                    || targets.workspaceIDs[0] !== anchor) {
-                    return res.status(403).json({ error: 'Forbidden' });
+                if (targetIDs.length > 0) {
+                    const targets = await resolveTargets(targetIDs);
+
+                    if (targets.found !== targetIDs.length
+                        || targets.workspaceIDs.length !== 1
+                        || targets.workspaceIDs[0] !== anchor) {
+                        return res.status(403).json({ error: 'Forbidden' });
+                    }
                 }
 
                 req.workspaceID = anchor;
@@ -119,6 +124,20 @@ export default function createKanbanRouter(authz) {
         }
     });
 
+    router.put('/tabs/reorder',
+        parseBatch(requireTabReorder),
+        resolveBatchScope(ids => db.getWorkspaceScopeForTabs(ids), 'groupID', ids => db.getWorkspaceScopeForTabGroups(ids)),
+        async (req, res, next) => {
+            try {
+                const { tabs, removed } = await db.reorderTabs(req.batchUpdates);
+
+                publish(req, { upsert: { tabs }, remove: removed });
+                res.json({ tabs, removed });
+            } catch (error) {
+                next(error);
+            }
+        });
+
     router.put('/tabs/:id', authz.tabEdit(), async (req, res, next) => {
         try {
             const changes = {
@@ -140,10 +159,58 @@ export default function createKanbanRouter(authz) {
 
     router.delete('/tabs/:id', authz.tabEdit(), async (req, res, next) => {
         try {
-            const removed = await db.deleteTab(req.params.id);
+            const { removed, tabs } = await db.deleteTab(req.params.id);
 
-            publish(req, { remove: removed });
-            res.json({ removed });
+            publish(req, { upsert: { tabs }, remove: removed });
+            res.json({ removed, tabs });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    // tab group routes
+    router.post('/tab-groups', authz.workspaceBodyEdit(), async (req, res, next) => {
+        try {
+            const { group, tabs, removed } = await db.createTabGroup(
+                req.workspaceID,
+                {
+                    name: optionalText(req.body?.name, 'name', 80) ?? 'New group',
+                    color: optionalColor(req.body?.color, 'color')
+                },
+                requireIDList(req.body?.tabIDs, 'tabIDs', 100)
+            );
+
+            if (!group) return res.status(404).json({ error: 'Not found' });
+
+            publish(req, { upsert: { tabGroups: [group], tabs }, remove: removed });
+            res.status(201).json({ group, tabs, removed });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.put('/tab-groups/:id', authz.tabGroupEdit(), async (req, res, next) => {
+        try {
+            const group = await db.updateTabGroup(req.params.id, {
+                name: optionalText(req.body?.name, 'name', 80),
+                color: optionalColor(req.body?.color, 'color')
+            });
+
+            if (!group) return res.status(404).json({ error: 'Not found' });
+
+            publish(req, { upsert: { tabGroups: [group] } });
+            res.json(group);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.delete('/tab-groups/:id', authz.tabGroupEdit(), async (req, res, next) => {
+        try {
+            const { removed, tabs } = await db.deleteTabGroup(req.params.id);
+
+            publish(req, { upsert: { tabs }, remove: removed });
+            res.json({ removed, tabs });
         } catch (error) {
             next(error);
         }

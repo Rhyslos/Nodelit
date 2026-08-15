@@ -182,6 +182,20 @@ export function requireTaskReorder(updates) {
     }));
 }
 
+export function requireTabReorder(updates) {
+    const parsed = requireArray(updates, 'updates').map(update => ({
+        id: requireID(update?.id, 'updates.id'),
+        groupID: optionalID(update?.groupID, 'updates.groupID'),
+        tabOrder: requireInteger(update?.tabOrder, 'updates.tabOrder')
+    }));
+
+    if (new Set(parsed.map(update => update.id)).size !== parsed.length) {
+        throw new ValidationError('updates cannot contain the same tab twice');
+    }
+
+    return parsed;
+}
+
 export function requireListReorder(updates) {
     return requireArray(updates, 'updates').map(update => ({
         id: requireID(update?.id, 'updates.id'),
@@ -261,6 +275,22 @@ export function optionalIDList(value, field = 'ids') {
 
     if (value.length > MAX_ASSIGNEES) {
         throw new ValidationError(`${field} cannot contain more than ${MAX_ASSIGNEES} entries`);
+    }
+
+    return [...new Set(value.map(entry => requireID(entry, field)))];
+}
+
+export function requireIDList(value, field = 'ids', max = MAX_BATCH_SIZE) {
+    if (!Array.isArray(value)) {
+        throw new ValidationError(`${field} must be an array`);
+    }
+
+    if (value.length === 0) {
+        throw new ValidationError(`${field} cannot be empty`);
+    }
+
+    if (value.length > max) {
+        throw new ValidationError(`${field} cannot contain more than ${max} entries`);
     }
 
     return [...new Set(value.map(entry => requireID(entry, field)))];

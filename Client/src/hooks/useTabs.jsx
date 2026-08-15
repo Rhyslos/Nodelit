@@ -15,6 +15,8 @@ export function useTabs(workspaceID) {
         [boardData.tabs]
     );
 
+    const tabGroups = useMemo(() => boardData.tabGroups ?? [], [boardData.tabGroups]);
+
     // lifecycle functions
     useEffect(() => {
         if (tabs.length === 0) {
@@ -66,12 +68,112 @@ export function useTabs(workspaceID) {
         setBoardData(prev => applyDelta(prev, { remove: { tabs: [tabId] } }));
 
         try {
-            const { removed } = await api(`/api/kanban/tabs/${tabId}`, { method: 'DELETE' });
-            setBoardData(prev => applyDelta(prev, { remove: removed }));
+            const { removed, tabs: updated } = await api(`/api/kanban/tabs/${tabId}`, { method: 'DELETE' });
+            setBoardData(prev => applyDelta(prev, { upsert: { tabs: updated }, remove: removed }));
         } catch {
             refresh();
         }
     }
 
-    return { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab, deleteTab };
+    async function reorderTabs(updates) {
+        if (!updates || updates.length === 0) return;
+
+        setBoardData(prev => {
+            const moved = new Map(updates.map(u => [u.id, u]));
+
+            return {
+                ...prev,
+                tabs: prev.tabs.map(t => {
+                    const update = moved.get(t.id);
+                    return update ? { ...t, groupID: update.groupID, tabOrder: update.tabOrder } : t;
+                })
+            };
+        });
+
+        try {
+            const result = await api('/api/kanban/tabs/reorder', {
+                method: 'PUT',
+                body: { updates }
+            });
+
+            setBoardData(prev => applyDelta(prev, {
+                upsert: { tabs: result.tabs },
+                remove: result.removed
+            }));
+        } catch (error) {
+            console.error('reorderTabs failed:', error);
+            refresh();
+        }
+    }
+
+    async function addTabGroup(tabIDs, name, color) {
+        if (!tabIDs || tabIDs.length === 0) return null;
+
+        try {
+            const result = await api('/api/kanban/tab-groups', {
+                method: 'POST',
+                body: { workspaceID, tabIDs, name, color }
+            });
+
+            setBoardData(prev => applyDelta(prev, {
+                upsert: { tabGroups: [result.group], tabs: result.tabs },
+                remove: result.removed
+            }));
+
+            return result.group.id;
+        } catch (error) {
+            console.error('addTabGroup failed:', error);
+            refresh();
+            return null;
+        }
+    }
+
+    async function updateTabGroup(groupID, changes) {
+        setBoardData(prev => ({
+            ...prev,
+            tabGroups: prev.tabGroups.map(g => g.id === groupID ? { ...g, ...changes } : g)
+        }));
+
+        try {
+            const group = await api(`/api/kanban/tab-groups/${groupID}`, { method: 'PUT', body: changes });
+            setBoardData(prev => applyDelta(prev, { upsert: { tabGroups: [group] } }));
+        } catch (error) {
+            console.error('updateTabGroup failed:', error);
+            refresh();
+        }
+    }
+
+    async function deleteTabGroup(groupID) {
+        setBoardData(prev => applyDelta(prev, {
+            upsert: { tabs: prev.tabs.filter(t => t.groupID === groupID).map(t => ({ ...t, groupID: null })) },
+            remove: { tabGroups: [groupID] }
+        }));
+
+        try {
+            const result = await api(`/api/kanban/tab-groups/${groupID}`, { method: 'DELETE' });
+
+            setBoardData(prev => applyDelta(prev, {
+                upsert: { tabs: result.tabs },
+                remove: result.removed
+            }));
+        } catch (error) {
+            console.error('deleteTabGroup failed:', error);
+            refresh();
+        }
+    }
+
+    return {
+        tabs,
+        tabGroups,
+        activeTabId,
+        setActiveTabId,
+        addTab,
+        updateTab,
+        archiveTab,
+        deleteTab,
+        reorderTabs,
+        addTabGroup,
+        updateTabGroup,
+        deleteTabGroup
+    };
 }

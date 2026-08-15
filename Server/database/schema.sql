@@ -249,3 +249,23 @@ ALTER TABLE notation_pages ADD CONSTRAINT notation_pages_layout_check
 
 -- notation search columns
 ALTER TABLE notation_documents ADD COLUMN IF NOT EXISTS content text NOT NULL DEFAULT '';
+
+-- tab group tables
+CREATE TABLE IF NOT EXISTS tab_groups (
+    id           text PRIMARY KEY,
+    workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name         text NOT NULL DEFAULT 'New group',
+    color        text NOT NULL DEFAULT '#6c8ebf',
+    updated_at   timestamptz(3) NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS tab_groups_workspace_id_idx ON tab_groups (workspace_id);
+
+ALTER TABLE tabs ADD COLUMN IF NOT EXISTS group_id text;
+
+ALTER TABLE tabs DROP CONSTRAINT IF EXISTS tabs_group_id_fkey;
+
+ALTER TABLE tabs ADD CONSTRAINT tabs_group_id_fkey
+    FOREIGN KEY (group_id) REFERENCES tab_groups(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS tabs_group_id_idx ON tabs (group_id);

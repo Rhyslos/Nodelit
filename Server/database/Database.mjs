@@ -15,7 +15,8 @@ const MAX_GROUPS_PER_WORKSPACE = 100;
 
 export const SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
-const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived'];
+const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived', 'groupID'];
+const TAB_GROUP_FIELDS = ['name', 'color'];
 const LIST_FIELDS = ['name', 'columnID', 'listOrder'];
 const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'deadline', 'checklists'];
 const NOTATION_GROUP_FIELDS = ['name', 'color', 'groupOrder'];
@@ -63,11 +64,20 @@ const WORKSPACE_SELECT = `
 const TAB_SELECT = `
     t.id,
     t.workspace_id AS "workspaceID",
+    t.group_id AS "groupID",
     t.name,
     t.color,
     t.tab_order AS "tabOrder",
     t.is_archived AS "isArchived",
     t.updated_at AS "updatedAt"
+`;
+
+const TAB_GROUP_SELECT = `
+    g.id,
+    g.workspace_id AS "workspaceID",
+    g.name,
+    g.color,
+    g.updated_at AS "updatedAt"
 `;
 
 const COLUMN_SELECT = `
@@ -166,7 +176,7 @@ function pickFields(source, allowed) {
 }
 
 function emptyChangeSet() {
-    return { tabs: [], columns: [], lists: [], tasks: [], tags: [] };
+    return { tabs: [], tabGroups: [], columns: [], lists: [], tasks: [], tags: [] };
 }
 
 function emptyNotationChangeSet() {
@@ -260,6 +270,85 @@ async function normalizeColumns(client, tabIDs) {
     );
 
     return { removedColumnIDs, updatedColumns };
+}
+
+async function normalizeTabs(client, workspaceIDs) {
+    const removedGroupIDs = [];
+    const touched = [];
+
+    for (const workspaceID of new Set(workspaceIDs)) {
+        if (!workspaceID) continue;
+
+        const { rows } = await client.query(
+            'SELECT id, group_id, tab_order FROM tabs WHERE workspace_id = $1 ORDER BY tab_order, id',
+            [workspaceID]
+        );
+
+        const byGroup = new Map();
+
+        for (const row of rows) {
+            if (!row.group_id) continue;
+            if (!byGroup.has(row.group_id)) byGroup.set(row.group_id, []);
+            byGroup.get(row.group_id).push(row);
+        }
+
+        const ordered = [];
+        const emitted = new Set();
+
+        for (const row of rows) {
+            if (!row.group_id) {
+                ordered.push(row);
+                continue;
+            }
+
+            if (emitted.has(row.group_id)) continue;
+
+            emitted.add(row.group_id);
+            ordered.push(...byGroup.get(row.group_id));
+        }
+
+        const moves = [];
+        ordered.forEach((row, index) => {
+            if (row.tab_order !== index) moves.push({ id: row.id, index });
+        });
+
+        if (moves.length > 0) {
+            await client.query(
+                `UPDATE tabs AS t
+                 SET tab_order = u.tab_order
+                 FROM unnest($1::text[], $2::int[]) AS u(id, tab_order)
+                 WHERE t.id = u.id`,
+                [moves.map(move => move.id), moves.map(move => move.index)]
+            );
+        }
+
+        const { rows: empty } = await client.query(
+            `SELECT g.id FROM tab_groups g
+             WHERE g.workspace_id = $1
+               AND NOT EXISTS (SELECT 1 FROM tabs t WHERE t.group_id = g.id)`,
+            [workspaceID]
+        );
+
+        if (empty.length > 0) {
+            await client.query(
+                'DELETE FROM tab_groups WHERE id = ANY($1::text[])',
+                [empty.map(row => row.id)]
+            );
+
+            removedGroupIDs.push(...empty.map(row => row.id));
+        }
+
+        touched.push(workspaceID);
+    }
+
+    if (touched.length === 0) return { removedGroupIDs, tabs: [] };
+
+    const { rows: tabs } = await client.query(
+        `SELECT ${TAB_SELECT} FROM tabs t WHERE t.workspace_id = ANY($1::text[]) ORDER BY t.tab_order`,
+        [touched]
+    );
+
+    return { removedGroupIDs, tabs };
 }
 
 // database classes
@@ -854,8 +943,9 @@ class Database {
 
     // board retrieval functions
     async getWorkspaceData(workspaceID) {
-        const [tabs, columns, lists, tasks, tags] = await Promise.all([
+        const [tabs, tabGroups, columns, lists, tasks, tags] = await Promise.all([
             query(`SELECT ${TAB_SELECT} FROM tabs t WHERE t.workspace_id = $1 ORDER BY t.tab_order`, [workspaceID]),
+            query(`SELECT ${TAB_GROUP_SELECT} FROM tab_groups g WHERE g.workspace_id = $1 ORDER BY g.id`, [workspaceID]),
             query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE t.workspace_id = $1 ORDER BY c.column_index`, [workspaceID]),
             query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE t.workspace_id = $1 ORDER BY l.list_order`, [workspaceID]),
             query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE t.workspace_id = $1 ORDER BY k.task_order`, [workspaceID]),
@@ -864,6 +954,7 @@ class Database {
 
         return {
             tabs: tabs.rows,
+            tabGroups: tabGroups.rows,
             columns: columns.rows,
             lists: lists.rows,
             tasks: tasks.rows,
@@ -872,6 +963,26 @@ class Database {
     }
 
     // resolution functions
+    async getWorkspaceScopeForTabs(ids) {
+        return this.resolveScope(
+            `SELECT COALESCE(array_agg(DISTINCT t.workspace_id), '{}') AS workspaces,
+                    COUNT(DISTINCT t.id)::int AS found
+             FROM tabs t
+             WHERE t.id = ANY($1::text[])`,
+            ids
+        );
+    }
+
+    async getWorkspaceScopeForTabGroups(ids) {
+        return this.resolveScope(
+            `SELECT COALESCE(array_agg(DISTINCT g.workspace_id), '{}') AS workspaces,
+                    COUNT(DISTINCT g.id)::int AS found
+             FROM tab_groups g
+             WHERE g.id = ANY($1::text[])`,
+            ids
+        );
+    }
+
     async getWorkspaceScopeForLists(ids) {
         return this.resolveScope(
             `SELECT COALESCE(array_agg(DISTINCT t.workspace_id), '{}') AS workspaces,
@@ -1125,6 +1236,108 @@ class Database {
         });
     }
 
+    // tab group functions
+    async getTabGroup(groupID) {
+        return queryOne(`SELECT ${TAB_GROUP_SELECT} FROM tab_groups g WHERE g.id = $1`, [groupID]);
+    }
+
+    async getWorkspaceIDForTabGroup(groupID) {
+        const row = await queryOne('SELECT workspace_id AS "workspaceID" FROM tab_groups WHERE id = $1', [groupID]);
+        return row?.workspaceID ?? null;
+    }
+
+    async createTabGroup(workspaceID, fields = {}, tabIDs = []) {
+        return withTransaction(async client => {
+            const { rows } = await client.query(
+                `INSERT INTO tab_groups (id, workspace_id, name, color)
+                 VALUES ($1, $2, COALESCE($3, 'New group'), COALESCE($4, '#6c8ebf'))
+                 RETURNING id`,
+                [newID('tabgroup'), workspaceID, fields.name ?? null, fields.color ?? null]
+            );
+
+            const groupID = rows[0].id;
+
+            await client.query(
+                'UPDATE tabs SET group_id = $1, updated_at = now() WHERE id = ANY($2::text[]) AND workspace_id = $3',
+                [groupID, tabIDs, workspaceID]
+            );
+
+            const { removedGroupIDs, tabs } = await normalizeTabs(client, [workspaceID]);
+
+            const removed = emptyChangeSet();
+            removed.tabGroups = removedGroupIDs;
+
+            const group = await client.query(
+                `SELECT ${TAB_GROUP_SELECT} FROM tab_groups g WHERE g.id = $1`,
+                [groupID]
+            );
+
+            return { group: group.rows[0] ?? null, tabs, removed };
+        });
+    }
+
+    async updateTabGroup(groupID, changes) {
+        const { assignments, values, nextIndex } = buildAssignments(changes, TAB_GROUP_FIELDS, 1);
+        if (assignments.length === 0) return this.getTabGroup(groupID);
+
+        return queryOne(
+            `UPDATE tab_groups SET ${assignments.join(', ')}, updated_at = now()
+             WHERE id = $${nextIndex}
+             RETURNING id, workspace_id AS "workspaceID", name, color, updated_at AS "updatedAt"`,
+            [...values, groupID]
+        );
+    }
+
+    async deleteTabGroup(groupID) {
+        return withTransaction(async client => {
+            const scope = await client.query(
+                'SELECT workspace_id AS "workspaceID" FROM tab_groups WHERE id = $1',
+                [groupID]
+            );
+
+            if (scope.rowCount === 0) return { removed: emptyChangeSet(), tabs: [] };
+
+            await client.query('UPDATE tabs SET group_id = NULL, updated_at = now() WHERE group_id = $1', [groupID]);
+            await client.query('DELETE FROM tab_groups WHERE id = $1', [groupID]);
+
+            const { removedGroupIDs, tabs } = await normalizeTabs(client, [scope.rows[0].workspaceID]);
+
+            const removed = emptyChangeSet();
+            removed.tabGroups = [groupID, ...removedGroupIDs];
+
+            return { removed, tabs };
+        });
+    }
+
+    async reorderTabs(updates) {
+        const empty = { tabs: [], removed: emptyChangeSet() };
+        if (!updates || updates.length === 0) return empty;
+
+        const ids = updates.map(update => update.id);
+        const groupIDs = updates.map(update => update.groupID);
+        const orders = updates.map(update => update.tabOrder);
+
+        return withTransaction(async client => {
+            const { rows: touched } = await client.query(
+                `UPDATE tabs AS t
+                 SET group_id = u.group_id, tab_order = u.tab_order, updated_at = now()
+                 FROM unnest($1::text[], $2::text[], $3::int[]) AS u(id, group_id, tab_order)
+                 WHERE t.id = u.id
+                 RETURNING t.workspace_id AS "workspaceID"`,
+                [ids, groupIDs, orders]
+            );
+
+            if (touched.length === 0) return empty;
+
+            const { removedGroupIDs, tabs } = await normalizeTabs(client, touched.map(row => row.workspaceID));
+
+            const removed = emptyChangeSet();
+            removed.tabGroups = removedGroupIDs;
+
+            return { tabs, removed };
+        });
+    }
+
     // tab functions
     async getTab(tabID) {
         return queryOne(`SELECT ${TAB_SELECT} FROM tabs t WHERE t.id = $1`, [tabID]);
@@ -1139,7 +1352,7 @@ class Database {
                  COALESCE($4, '#6c8ebf'),
                  COALESCE($5, (SELECT COALESCE(MAX(tab_order), -1) + 1 FROM tabs WHERE workspace_id = $2))
              )
-             RETURNING id, workspace_id AS "workspaceID", name, color,
+             RETURNING id, workspace_id AS "workspaceID", group_id AS "groupID", name, color,
                        tab_order AS "tabOrder", is_archived AS "isArchived", updated_at AS "updatedAt"`,
             [newID('tab'), workspaceID, fields.name ?? null, fields.color ?? null, fields.tabOrder ?? null]
         );
@@ -1152,7 +1365,7 @@ class Database {
         return queryOne(
             `UPDATE tabs SET ${assignments.join(', ')}, updated_at = now()
              WHERE id = $${nextIndex}
-             RETURNING id, workspace_id AS "workspaceID", name, color,
+             RETURNING id, workspace_id AS "workspaceID", group_id AS "groupID", name, color,
                        tab_order AS "tabOrder", is_archived AS "isArchived", updated_at AS "updatedAt"`,
             [...values, tabID]
         );
@@ -1161,6 +1374,13 @@ class Database {
     async deleteTab(tabID) {
         return withTransaction(async client => {
             const removed = emptyChangeSet();
+
+            const scope = await client.query(
+                'SELECT workspace_id AS "workspaceID" FROM tabs WHERE id = $1',
+                [tabID]
+            );
+
+            if (scope.rowCount === 0) return { removed, tabs: [] };
 
             const { rows } = await client.query(
                 `SELECT c.id AS column_id, l.id AS list_id, k.id AS task_id
@@ -1181,13 +1401,16 @@ class Database {
             }
 
             const { rowCount } = await client.query('DELETE FROM tabs WHERE id = $1', [tabID]);
-            if (rowCount === 0) return emptyChangeSet();
+            if (rowCount === 0) return { removed: emptyChangeSet(), tabs: [] };
 
             removed.columns = Array.from(columnIDs);
             removed.lists = Array.from(listIDs);
             removed.tabs.push(tabID);
 
-            return removed;
+            const { removedGroupIDs, tabs } = await normalizeTabs(client, [scope.rows[0].workspaceID]);
+            removed.tabGroups = removedGroupIDs;
+
+            return { removed, tabs };
         });
     }
 

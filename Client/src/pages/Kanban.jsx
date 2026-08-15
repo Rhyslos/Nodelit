@@ -25,7 +25,20 @@ export default function Kanban() {
     
     // data layer
     const { members } = useWorkspacePresence(workspaceID);
-    const { tabs, activeTabId, setActiveTabId, addTab, updateTab, archiveTab, deleteTab } = useTabs(workspaceID);
+    const {
+        tabs,
+        tabGroups,
+        activeTabId,
+        setActiveTabId,
+        addTab,
+        updateTab,
+        archiveTab,
+        deleteTab,
+        reorderTabs,
+        addTabGroup,
+        updateTabGroup,
+        deleteTabGroup
+    } = useTabs(workspaceID);
     const { columns, addColumn } = useColumns(workspaceID, activeTabId);
 
     const columnIDs = columns.map(c => c.id);
@@ -185,12 +198,17 @@ export default function Kanban() {
         <div className="kanban-root">
             <KanbanTabs
                 tabs={tabs}
+                tabGroups={tabGroups}
                 activeTabId={activeTabId}
                 onSelect={setActiveTabId}
                 onAdd={addTab}
                 onUpdate={updateTab}
                 onArchive={archiveTab}
                 onDelete={deleteTab}
+                onReorder={reorderTabs}
+                onCreateGroup={addTabGroup}
+                onUpdateGroup={updateTabGroup}
+                onDeleteGroup={deleteTabGroup}
             />
 
             <div className="kanban-topbar" ref={topbarRef}>

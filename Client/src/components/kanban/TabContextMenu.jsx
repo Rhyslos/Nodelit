@@ -1,13 +1,13 @@
 // component imports
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2, Archive } from 'lucide-react';
+import { Trash2, Archive, FolderPlus, FolderMinus, Ungroup } from 'lucide-react';
 
 // configuration constants
 const MENU_MARGIN = 8;
 
 // component functions
-export default function TabContextMenu({ open, x, y, onArchive, onDelete, onClose }) {
+export default function TabContextMenu({ open, x, y, onGroup, onRemoveFromGroup, onUngroup, onArchive, onDelete, onClose }) {
     // dom references
     const menuRef = useRef(null);
 
@@ -90,15 +90,40 @@ export default function TabContextMenu({ open, x, y, onArchive, onDelete, onClos
             onMouseDown={e => e.stopPropagation()}
             onContextMenu={e => e.preventDefault()}
         >
-            <button className="kanban-context-item" onClick={onArchive}>
-                <Archive size={14} strokeWidth={2} />
-                Archive tab
-            </button>
+            {onGroup && (
+                <button className="kanban-context-item" onClick={onGroup}>
+                    <FolderPlus size={14} strokeWidth={2} />
+                    New group from tab
+                </button>
+            )}
 
-            <button className="kanban-context-item kanban-context-item--danger" onClick={onDelete}>
-                <Trash2 size={14} strokeWidth={2} />
-                Delete tab
-            </button>
+            {onRemoveFromGroup && (
+                <button className="kanban-context-item" onClick={onRemoveFromGroup}>
+                    <FolderMinus size={14} strokeWidth={2} />
+                    Remove from group
+                </button>
+            )}
+
+            {onUngroup && (
+                <button className="kanban-context-item" onClick={onUngroup}>
+                    <Ungroup size={14} strokeWidth={2} />
+                    Ungroup tabs
+                </button>
+            )}
+
+            {onArchive && (
+                <button className="kanban-context-item" onClick={onArchive}>
+                    <Archive size={14} strokeWidth={2} />
+                    Archive tab
+                </button>
+            )}
+
+            {onDelete && (
+                <button className="kanban-context-item kanban-context-item--danger" onClick={onDelete}>
+                    <Trash2 size={14} strokeWidth={2} />
+                    Delete tab
+                </button>
+            )}
         </div>,
         document.body
     );
