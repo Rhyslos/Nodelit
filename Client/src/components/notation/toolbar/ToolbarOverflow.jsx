@@ -25,7 +25,7 @@ export default function ToolbarOverflow({ children }) {
         if (!container || !measure) return;
 
         const widths = [...measure.children].map(
-            child => child.getBoundingClientRect().width + SECTION_GAP
+            (child, index) => child.getBoundingClientRect().width + (index === 0 ? 0 : SECTION_GAP)
         );
 
         const available = container.getBoundingClientRect().width;

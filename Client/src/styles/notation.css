@@ -656,6 +656,7 @@
 .subbar--notation {
     align-items: center;
     gap: 16px;
+    overflow: visible;
 }
 
 .tiptap-toolbar {
@@ -668,7 +669,7 @@
     flex-wrap: nowrap;
     gap: 14px;
     padding: 8px 0;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .tiptap-toolbar-measure {
@@ -757,7 +758,7 @@
 
 .tiptap-select {
     height: 30px;
-    max-width: 150px;
+    max-width: 120px;
     flex-shrink: 0;
     padding: 0 8px;
     border: 1px solid var(--border);
