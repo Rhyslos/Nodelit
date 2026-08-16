@@ -4,6 +4,7 @@ import db from '../database/Database.mjs';
 import { broadcastKanbanChange } from '../modules/Networking.mjs';
 import {
     requireID,
+    optionalID,
     optionalColor,
     optionalText,
     optionalInteger,
@@ -129,10 +130,13 @@ export default function createKanbanRouter(authz) {
         resolveBatchScope(ids => db.getWorkspaceScopeForTabs(ids), 'groupID', ids => db.getWorkspaceScopeForTabGroups(ids)),
         async (req, res, next) => {
             try {
-                const { tabs, removed } = await db.reorderTabs(req.batchUpdates);
+                const { tabs, tags, lists, tasks, removed } = await db.reorderTabs(
+                    req.batchUpdates,
+                    req.body?.combineTags === true
+                );
 
-                publish(req, { upsert: { tabs }, remove: removed });
-                res.json({ tabs, removed });
+                publish(req, { upsert: { tabs, tags, lists, tasks }, remove: removed });
+                res.json({ tabs, tags, lists, tasks, removed });
             } catch (error) {
                 next(error);
             }
@@ -171,19 +175,20 @@ export default function createKanbanRouter(authz) {
     // tab group routes
     router.post('/tab-groups', authz.workspaceBodyEdit(), async (req, res, next) => {
         try {
-            const { group, tabs, removed } = await db.createTabGroup(
+            const { group, tabs, tags, lists, tasks, removed } = await db.createTabGroup(
                 req.workspaceID,
                 {
                     name: optionalText(req.body?.name, 'name', 80) ?? 'New group',
                     color: optionalColor(req.body?.color, 'color')
                 },
-                requireIDList(req.body?.tabIDs, 'tabIDs', 100)
+                requireIDList(req.body?.tabIDs, 'tabIDs', 100),
+                req.body?.combineTags === true
             );
 
             if (!group) return res.status(404).json({ error: 'Not found' });
 
-            publish(req, { upsert: { tabGroups: [group], tabs }, remove: removed });
-            res.status(201).json({ group, tabs, removed });
+            publish(req, { upsert: { tabGroups: [group], tabs, tags, lists, tasks }, remove: removed });
+            res.status(201).json({ group, tabs, tags, lists, tasks, removed });
         } catch (error) {
             next(error);
         }
@@ -207,10 +212,10 @@ export default function createKanbanRouter(authz) {
 
     router.delete('/tab-groups/:id', authz.tabGroupEdit(), async (req, res, next) => {
         try {
-            const { removed, tabs } = await db.deleteTabGroup(req.params.id);
+            const { removed, tabs, tags, lists, tasks } = await db.deleteTabGroup(req.params.id);
 
-            publish(req, { upsert: { tabs }, remove: removed });
-            res.json({ removed, tabs });
+            publish(req, { upsert: { tabs, tags, lists, tasks }, remove: removed });
+            res.json({ removed, tabs, tags, lists, tasks });
         } catch (error) {
             next(error);
         }
@@ -372,7 +377,13 @@ export default function createKanbanRouter(authz) {
     // tag routes
     router.get('/tags/:workspaceID', authz.workspaceParam(), async (req, res, next) => {
         try {
-            res.json({ tags: await db.getTags(req.workspaceID) });
+            const board = await db.getWorkspaceData(req.workspaceID);
+
+            res.json({
+                tags: board.tags,
+                tabs: board.tabs,
+                tabGroups: board.tabGroups
+            });
         } catch (error) {
             next(error);
         }
@@ -383,7 +394,11 @@ export default function createKanbanRouter(authz) {
             const tag = await db.createTag(
                 req.workspaceID,
                 optionalText(req.body?.name, 'name', 40) ?? '',
-                requireColor(req.body?.color, 'color')
+                requireColor(req.body?.color, 'color'),
+                {
+                    tabID: optionalID(req.body?.tabID, 'tabID') ?? null,
+                    groupID: optionalID(req.body?.groupID, 'groupID') ?? null
+                }
             );
 
             publish(req, { upsert: { tags: [tag] } });
@@ -395,9 +410,15 @@ export default function createKanbanRouter(authz) {
 
     router.put('/tags/:id', authz.requireEditor(req => db.getWorkspaceIDForTag(req.params.id)), async (req, res, next) => {
         try {
+            const scope = req.body?.scope === undefined ? undefined : {
+                tabID: optionalID(req.body.scope?.tabID, 'scope.tabID') ?? null,
+                groupID: optionalID(req.body.scope?.groupID, 'scope.groupID') ?? null
+            };
+
             const tag = await db.updateTag(req.params.id, {
                 name: req.body?.name === undefined ? undefined : (optionalText(req.body.name, 'name', 40) ?? ''),
-                color: req.body?.color === undefined ? undefined : requireColor(req.body.color, 'color')
+                color: req.body?.color === undefined ? undefined : requireColor(req.body.color, 'color'),
+                scope
             });
 
             if (!tag) return res.status(404).json({ error: 'Not found' });

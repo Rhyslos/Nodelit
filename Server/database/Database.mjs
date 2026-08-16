@@ -72,6 +72,15 @@ const TAB_SELECT = `
     t.updated_at AS "updatedAt"
 `;
 
+const TAG_SELECT = `
+    tg.id,
+    tg.workspace_id AS "workspaceID",
+    tg.tab_id AS "tabID",
+    tg.group_id AS "groupID",
+    tg.name,
+    tg.color
+`;
+
 const TAB_GROUP_SELECT = `
     g.id,
     g.workspace_id AS "workspaceID",
@@ -270,6 +279,179 @@ async function normalizeColumns(client, tabIDs) {
     );
 
     return { removedColumnIDs, updatedColumns };
+}
+
+async function repointTagLinks(client, fromTagID, toTagID) {
+    await client.query(
+        `INSERT INTO list_tags (list_id, tag_id)
+         SELECT list_id, $2 FROM list_tags WHERE tag_id = $1
+         ON CONFLICT DO NOTHING`,
+        [fromTagID, toTagID]
+    );
+
+    await client.query(
+        `INSERT INTO task_tags (task_id, tag_id)
+         SELECT task_id, $2 FROM task_tags WHERE tag_id = $1
+         ON CONFLICT DO NOTHING`,
+        [fromTagID, toTagID]
+    );
+}
+
+async function repointTagLinksForTab(client, fromTagID, toTagID, tabID) {
+    await client.query(
+        `INSERT INTO list_tags (list_id, tag_id)
+         SELECT lt.list_id, $2
+         FROM list_tags lt
+         JOIN lists l ON l.id = lt.list_id
+         JOIN board_columns c ON c.id = l.column_id
+         WHERE lt.tag_id = $1 AND c.tab_id = $3
+         ON CONFLICT DO NOTHING`,
+        [fromTagID, toTagID, tabID]
+    );
+
+    await client.query(
+        `INSERT INTO task_tags (task_id, tag_id)
+         SELECT kt.task_id, $2
+         FROM task_tags kt
+         JOIN tasks k ON k.id = kt.task_id
+         JOIN lists l ON l.id = k.list_id
+         JOIN board_columns c ON c.id = l.column_id
+         WHERE kt.tag_id = $1 AND c.tab_id = $3
+         ON CONFLICT DO NOTHING`,
+        [fromTagID, toTagID, tabID]
+    );
+}
+
+async function collectTagTargets(client, tagIDs) {
+    if (tagIDs.length === 0) return { listIDs: [], taskIDs: [] };
+
+    const lists = await client.query('SELECT DISTINCT list_id FROM list_tags WHERE tag_id = ANY($1::text[])', [tagIDs]);
+    const tasks = await client.query('SELECT DISTINCT task_id FROM task_tags WHERE tag_id = ANY($1::text[])', [tagIDs]);
+
+    return {
+        listIDs: lists.rows.map(row => row.list_id),
+        taskIDs: tasks.rows.map(row => row.task_id)
+    };
+}
+
+async function hydrateTagTargets(client, listIDs, taskIDs) {
+    const lists = listIDs.length > 0
+        ? (await client.query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = ANY($1::text[])`, [listIDs])).rows
+        : [];
+
+    const tasks = taskIDs.length > 0
+        ? (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = ANY($1::text[])`, [taskIDs])).rows
+        : [];
+
+    return { lists, tasks };
+}
+
+async function combineTabTagsIntoGroup(client, tabIDs, groupID) {
+    const result = { tags: [], removedTagIDs: [], listIDs: [], taskIDs: [] };
+    if (tabIDs.length === 0 || !groupID) return result;
+
+    const { rows: candidates } = await client.query(
+        `SELECT ${TAG_SELECT} FROM tags tg WHERE tg.tab_id = ANY($1::text[]) ORDER BY tg.id`,
+        [tabIDs]
+    );
+
+    if (candidates.length === 0) return result;
+
+    const { rows: existing } = await client.query(
+        `SELECT ${TAG_SELECT} FROM tags tg WHERE tg.group_id = $1`,
+        [groupID]
+    );
+
+    const byName = new Map();
+    for (const tag of existing) {
+        if (tag.name !== '') byName.set(tag.name.toLowerCase(), tag.id);
+    }
+
+    const touched = await collectTagTargets(client, candidates.map(tag => tag.id));
+    result.listIDs = touched.listIDs;
+    result.taskIDs = touched.taskIDs;
+
+    for (const candidate of candidates) {
+        const key = candidate.name === '' ? null : candidate.name.toLowerCase();
+        const survivor = key ? byName.get(key) : undefined;
+
+        if (survivor) {
+            await repointTagLinks(client, candidate.id, survivor);
+            await client.query('DELETE FROM tags WHERE id = $1', [candidate.id]);
+            result.removedTagIDs.push(candidate.id);
+            continue;
+        }
+
+        const { rows } = await client.query(
+            `UPDATE tags SET tab_id = NULL, group_id = $2 WHERE id = $1
+             RETURNING id, workspace_id AS "workspaceID", tab_id AS "tabID",
+                       group_id AS "groupID", name, color`,
+            [candidate.id, groupID]
+        );
+
+        if (rows[0]) result.tags.push(rows[0]);
+        if (key) byName.set(key, candidate.id);
+    }
+
+    const survivors = await client.query(
+        `SELECT ${TAG_SELECT} FROM tags tg WHERE tg.group_id = $1`,
+        [groupID]
+    );
+
+    result.tags = survivors.rows;
+
+    return result;
+}
+
+async function splitGroupTagsToTabs(client, groupID, tabIDs) {
+    const result = { tags: [], removedTagIDs: [], listIDs: [], taskIDs: [] };
+    if (!groupID) return result;
+
+    const { rows: groupTags } = await client.query(
+        `SELECT ${TAG_SELECT} FROM tags tg WHERE tg.group_id = $1 ORDER BY tg.id`,
+        [groupID]
+    );
+
+    if (groupTags.length === 0) return result;
+
+    const touched = await collectTagTargets(client, groupTags.map(tag => tag.id));
+    result.listIDs = touched.listIDs;
+    result.taskIDs = touched.taskIDs;
+
+    for (const groupTag of groupTags) {
+        for (const tabID of tabIDs) {
+            let targetID = null;
+
+            if (groupTag.name !== '') {
+                const { rows } = await client.query(
+                    'SELECT id FROM tags WHERE tab_id = $1 AND lower(name) = lower($2)',
+                    [tabID, groupTag.name]
+                );
+
+                targetID = rows[0]?.id ?? null;
+            }
+
+            if (!targetID) {
+                const { rows } = await client.query(
+                    `INSERT INTO tags (id, workspace_id, tab_id, name, color)
+                     VALUES ($1, $2, $3, $4, $5)
+                     RETURNING id, workspace_id AS "workspaceID", tab_id AS "tabID",
+                               group_id AS "groupID", name, color`,
+                    [newID('tag'), groupTag.workspaceID, tabID, groupTag.name, groupTag.color]
+                );
+
+                targetID = rows[0].id;
+                result.tags.push(rows[0]);
+            }
+
+            await repointTagLinksForTab(client, groupTag.id, targetID, tabID);
+        }
+
+        await client.query('DELETE FROM tags WHERE id = $1', [groupTag.id]);
+        result.removedTagIDs.push(groupTag.id);
+    }
+
+    return result;
 }
 
 async function normalizeTabs(client, workspaceIDs) {
@@ -1067,7 +1249,7 @@ class Database {
     // tag functions
     async getTags(workspaceID) {
         const { rows } = await query(
-            'SELECT id, workspace_id AS "workspaceID", name, color FROM tags WHERE workspace_id = $1 ORDER BY name',
+            `SELECT ${TAG_SELECT} FROM tags tg WHERE tg.workspace_id = $1 ORDER BY tg.name`,
             [workspaceID]
         );
         return rows;
@@ -1078,13 +1260,14 @@ class Database {
         return row?.workspaceID ?? null;
     }
 
-    async createTag(workspaceID, name, color) {
+    async createTag(workspaceID, name, color, scope = {}) {
         try {
             return await queryOne(
-                `INSERT INTO tags (id, workspace_id, name, color)
-                 VALUES ($1, $2, $3, $4)
-                 RETURNING id, workspace_id AS "workspaceID", name, color`,
-                [newID('tag'), workspaceID, name, color]
+                `INSERT INTO tags (id, workspace_id, tab_id, group_id, name, color)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 RETURNING id, workspace_id AS "workspaceID", tab_id AS "tabID",
+                           group_id AS "groupID", name, color`,
+                [newID('tag'), workspaceID, scope.tabID ?? null, scope.groupID ?? null, name, color]
             );
         } catch (error) {
             if (error.code === '23505') {
@@ -1110,15 +1293,23 @@ class Database {
             values.push(changes.color);
         }
 
+        if (changes.scope !== undefined) {
+            assignments.push(`tab_id = $${assignments.length + 1}`);
+            values.push(changes.scope.tabID ?? null);
+            assignments.push(`group_id = $${assignments.length + 1}`);
+            values.push(changes.scope.groupID ?? null);
+        }
+
         if (assignments.length === 0) {
-            return queryOne('SELECT id, workspace_id AS "workspaceID", name, color FROM tags WHERE id = $1', [tagID]);
+            return queryOne(`SELECT ${TAG_SELECT} FROM tags tg WHERE tg.id = $1`, [tagID]);
         }
 
         try {
             return await queryOne(
                 `UPDATE tags SET ${assignments.join(', ')}
                  WHERE id = $${values.length + 1}
-                 RETURNING id, workspace_id AS "workspaceID", name, color`,
+                 RETURNING id, workspace_id AS "workspaceID", tab_id AS "tabID",
+                           group_id AS "groupID", name, color`,
                 [...values, tagID]
             );
         } catch (error) {
@@ -1246,7 +1437,7 @@ class Database {
         return row?.workspaceID ?? null;
     }
 
-    async createTabGroup(workspaceID, fields = {}, tabIDs = []) {
+    async createTabGroup(workspaceID, fields = {}, tabIDs = [], combineTags = false) {
         return withTransaction(async client => {
             const { rows } = await client.query(
                 `INSERT INTO tab_groups (id, workspace_id, name, color)
@@ -1262,17 +1453,24 @@ class Database {
                 [groupID, tabIDs, workspaceID]
             );
 
+            const merged = combineTags
+                ? await combineTabTagsIntoGroup(client, tabIDs, groupID)
+                : { tags: [], removedTagIDs: [], listIDs: [], taskIDs: [] };
+
             const { removedGroupIDs, tabs } = await normalizeTabs(client, [workspaceID]);
 
             const removed = emptyChangeSet();
             removed.tabGroups = removedGroupIDs;
+            removed.tags = merged.removedTagIDs;
+
+            const { lists, tasks } = await hydrateTagTargets(client, merged.listIDs, merged.taskIDs);
 
             const group = await client.query(
                 `SELECT ${TAB_GROUP_SELECT} FROM tab_groups g WHERE g.id = $1`,
                 [groupID]
             );
 
-            return { group: group.rows[0] ?? null, tabs, removed };
+            return { group: group.rows[0] ?? null, tabs, tags: merged.tags, lists, tasks, removed };
         });
     }
 
@@ -1295,7 +1493,12 @@ class Database {
                 [groupID]
             );
 
-            if (scope.rowCount === 0) return { removed: emptyChangeSet(), tabs: [] };
+            if (scope.rowCount === 0) return { removed: emptyChangeSet(), tabs: [], tags: [], lists: [], tasks: [] };
+
+            const members = await client.query('SELECT id FROM tabs WHERE group_id = $1 ORDER BY tab_order', [groupID]);
+            const memberTabIDs = members.rows.map(row => row.id);
+
+            const split = await splitGroupTagsToTabs(client, groupID, memberTabIDs);
 
             await client.query('UPDATE tabs SET group_id = NULL, updated_at = now() WHERE group_id = $1', [groupID]);
             await client.query('DELETE FROM tab_groups WHERE id = $1', [groupID]);
@@ -1304,13 +1507,16 @@ class Database {
 
             const removed = emptyChangeSet();
             removed.tabGroups = [groupID, ...removedGroupIDs];
+            removed.tags = split.removedTagIDs;
 
-            return { removed, tabs };
+            const { lists, tasks } = await hydrateTagTargets(client, split.listIDs, split.taskIDs);
+
+            return { removed, tabs, tags: split.tags, lists, tasks };
         });
     }
 
-    async reorderTabs(updates) {
-        const empty = { tabs: [], removed: emptyChangeSet() };
+    async reorderTabs(updates, combineTags = false) {
+        const empty = { tabs: [], tags: [], lists: [], tasks: [], removed: emptyChangeSet() };
         if (!updates || updates.length === 0) return empty;
 
         const ids = updates.map(update => update.id);
@@ -1329,12 +1535,40 @@ class Database {
 
             if (touched.length === 0) return empty;
 
+            const merged = { tags: [], removedTagIDs: [], listIDs: [], taskIDs: [] };
+
+            if (combineTags) {
+                const joins = new Map();
+
+                for (const update of updates) {
+                    if (!update.groupID) continue;
+                    if (!joins.has(update.groupID)) joins.set(update.groupID, []);
+                    joins.get(update.groupID).push(update.id);
+                }
+
+                for (const [joinGroupID, joinTabIDs] of joins) {
+                    const outcome = await combineTabTagsIntoGroup(client, joinTabIDs, joinGroupID);
+
+                    merged.tags.push(...outcome.tags);
+                    merged.removedTagIDs.push(...outcome.removedTagIDs);
+                    merged.listIDs.push(...outcome.listIDs);
+                    merged.taskIDs.push(...outcome.taskIDs);
+                }
+            }
+
             const { removedGroupIDs, tabs } = await normalizeTabs(client, touched.map(row => row.workspaceID));
 
             const removed = emptyChangeSet();
             removed.tabGroups = removedGroupIDs;
+            removed.tags = merged.removedTagIDs;
 
-            return { tabs, removed };
+            const { lists, tasks } = await hydrateTagTargets(
+                client,
+                [...new Set(merged.listIDs)],
+                [...new Set(merged.taskIDs)]
+            );
+
+            return { tabs, tags: merged.tags, lists, tasks, removed };
         });
     }
 

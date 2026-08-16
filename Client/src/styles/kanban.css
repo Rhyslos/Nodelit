@@ -1764,3 +1764,33 @@
     filter: drop-shadow(0 12px 24px var(--shadow));
     will-change: transform;
 }
+
+/* tag scope styles */
+.tag-scope-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tag-manager-scope {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--field);
+    color: var(--ink);
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.tag-manager-scope:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.tag-manager-row .tag-manager-scope {
+    flex: 0 0 120px;
+    max-width: 120px;
+}

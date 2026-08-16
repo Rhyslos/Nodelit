@@ -7,12 +7,41 @@ import { api } from '../../lib/api';
 // configuration constants
 const PRESET_COLORS = ['#c8502a', '#4a90d9', '#7ab648', '#e6a817', '#9b59b6', '#e84393', '#16a085'];
 const BOARD_REFRESH_EVENT = 'nodelit:board-refresh';
+const PUBLIC_SCOPE = 'public';
+const ACTIVE_TAB_STORAGE_PREFIX = 'nodelit:activetab:';
 const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+// utility functions
+function scopeKey(tag) {
+    if (tag.tabID) return `tab:${tag.tabID}`;
+    if (tag.groupID) return `group:${tag.groupID}`;
+    return PUBLIC_SCOPE;
+}
+
+function defaultScope(workspaceID, tabs) {
+    try {
+        const stored = localStorage.getItem(`${ACTIVE_TAB_STORAGE_PREFIX}${workspaceID}`);
+        if (stored && tabs.some(tab => tab.id === stored)) return `tab:${stored}`;
+    } catch {
+        return PUBLIC_SCOPE;
+    }
+
+    return tabs.length > 0 ? `tab:${tabs[0].id}` : PUBLIC_SCOPE;
+}
+
+function scopeBody(key) {
+    if (key.startsWith('tab:')) return { tabID: key.slice(4), groupID: null };
+    if (key.startsWith('group:')) return { tabID: null, groupID: key.slice(6) };
+    return { tabID: null, groupID: null };
+}
 
 // component functions
 export default function TagManager({ workspaceID, onClose }) {
     // state variables
     const [tags, setTags] = useState([]);
+    const [tabs, setTabs] = useState([]);
+    const [tabGroups, setTabGroups] = useState([]);
+    const [scope, setScope] = useState(PUBLIC_SCOPE);
     const [loading, setLoading] = useState(true);
     const [name, setName] = useState('');
     const [color, setColor] = useState(PRESET_COLORS[0]);
@@ -25,6 +54,11 @@ export default function TagManager({ workspaceID, onClose }) {
         try {
             const data = await api(`/api/kanban/tags/${workspaceID}`);
             setTags(data.tags);
+            const openTabs = (data.tabs ?? []).filter(tab => !tab.isArchived);
+
+            setTabs(openTabs);
+            setTabGroups(data.tabGroups ?? []);
+            setScope(current => current === PUBLIC_SCOPE ? defaultScope(workspaceID, openTabs) : current);
             setError('');
         } catch (err) {
             setError(err.message);
@@ -58,7 +92,7 @@ export default function TagManager({ workspaceID, onClose }) {
         try {
             const tag = await api('/api/kanban/tags', {
                 method: 'POST',
-                body: { workspaceID, name: name.trim(), color }
+                body: { workspaceID, name: name.trim(), color, ...scopeBody(scope) }
             });
 
             setTags(prev => [...prev, tag].sort((a, b) => a.name.localeCompare(b.name)));
@@ -78,6 +112,23 @@ export default function TagManager({ workspaceID, onClose }) {
             const updated = await api(`/api/kanban/tags/${tag.id}`, {
                 method: 'PUT',
                 body: { color: nextColor }
+            });
+
+            setTags(prev => prev.map(t => t.id === updated.id ? updated : t));
+            announceChange();
+        } catch (err) {
+            setError(err.message);
+            load();
+        }
+    }
+
+    async function handleRescope(tag, nextScope) {
+        if (nextScope === scopeKey(tag)) return;
+
+        try {
+            const updated = await api(`/api/kanban/tags/${tag.id}`, {
+                method: 'PUT',
+                body: { scope: scopeBody(nextScope) }
             });
 
             setTags(prev => prev.map(t => t.id === updated.id ? updated : t));
@@ -133,6 +184,35 @@ export default function TagManager({ workspaceID, onClose }) {
                         onChange={e => setName(e.target.value)}
                         autoFocus
                     />
+
+                    <div className="tag-scope-row">
+                        <label className="tag-color-label" htmlFor="tag-scope">Visible in</label>
+
+                        <select
+                            id="tag-scope"
+                            className="tag-manager-scope"
+                            value={scope}
+                            onChange={e => setScope(e.target.value)}
+                        >
+                            <option value={PUBLIC_SCOPE}>Everywhere (public)</option>
+
+                            {tabGroups.length > 0 && (
+                                <optgroup label="Tab groups">
+                                    {tabGroups.map(group => (
+                                        <option key={group.id} value={`group:${group.id}`}>{group.name}</option>
+                                    ))}
+                                </optgroup>
+                            )}
+
+                            {tabs.length > 0 && (
+                                <optgroup label="Tabs">
+                                    {tabs.map(tab => (
+                                        <option key={tab.id} value={`tab:${tab.id}`}>{tab.name}</option>
+                                    ))}
+                                </optgroup>
+                            )}
+                        </select>
+                    </div>
 
                     <div className="tag-color-row">
                         <span className="tag-color-label">Colour</span>
@@ -192,6 +272,23 @@ export default function TagManager({ workspaceID, onClose }) {
                                 onChange={e => setTags(prev => prev.map(t => t.id === tag.id ? { ...t, name: e.target.value } : t))}
                                 onBlur={e => handleRename(tag, e.target.value)}
                             />
+
+                            <select
+                                className="tag-manager-scope"
+                                value={scopeKey(tag)}
+                                onChange={e => handleRescope(tag, e.target.value)}
+                                title="Where this tag is visible"
+                            >
+                                <option value={PUBLIC_SCOPE}>Everywhere</option>
+
+                                {tabGroups.map(group => (
+                                    <option key={group.id} value={`group:${group.id}`}>{group.name}</option>
+                                ))}
+
+                                {tabs.map(tab => (
+                                    <option key={tab.id} value={`tab:${tab.id}`}>{tab.name}</option>
+                                ))}
+                            </select>
 
                             <input
                                 type="color"

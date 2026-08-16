@@ -3,6 +3,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { api } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
 
+// configuration constants
+const ACTIVE_TAB_STORAGE_PREFIX = 'nodelit:activetab:';
+
 // hook functions
 export function useTabs(workspaceID) {
     const { boardData, setBoardData, applyDelta, refresh } = useKanban();
@@ -28,6 +31,16 @@ export function useTabs(workspaceID) {
             setActiveTabId(tabs[0].id);
         }
     }, [tabs, activeTabId]);
+
+    useEffect(() => {
+        if (!workspaceID || !activeTabId) return;
+
+        try {
+            localStorage.setItem(`${ACTIVE_TAB_STORAGE_PREFIX}${workspaceID}`, activeTabId);
+        } catch {
+            return;
+        }
+    }, [workspaceID, activeTabId]);
 
     // mutation functions
     async function addTab(name = 'New Board', color) {
@@ -75,7 +88,7 @@ export function useTabs(workspaceID) {
         }
     }
 
-    async function reorderTabs(updates) {
+    async function reorderTabs(updates, combineTags = false) {
         if (!updates || updates.length === 0) return;
 
         setBoardData(prev => {
@@ -93,11 +106,16 @@ export function useTabs(workspaceID) {
         try {
             const result = await api('/api/kanban/tabs/reorder', {
                 method: 'PUT',
-                body: { updates }
+                body: { updates, combineTags }
             });
 
             setBoardData(prev => applyDelta(prev, {
-                upsert: { tabs: result.tabs },
+                upsert: {
+                    tabs: result.tabs,
+                    tags: result.tags,
+                    lists: result.lists,
+                    tasks: result.tasks
+                },
                 remove: result.removed
             }));
         } catch (error) {
@@ -106,17 +124,23 @@ export function useTabs(workspaceID) {
         }
     }
 
-    async function addTabGroup(tabIDs, name, color) {
+    async function addTabGroup(tabIDs, name, color, combineTags = false) {
         if (!tabIDs || tabIDs.length === 0) return null;
 
         try {
             const result = await api('/api/kanban/tab-groups', {
                 method: 'POST',
-                body: { workspaceID, tabIDs, name, color }
+                body: { workspaceID, tabIDs, name, color, combineTags }
             });
 
             setBoardData(prev => applyDelta(prev, {
-                upsert: { tabGroups: [result.group], tabs: result.tabs },
+                upsert: {
+                    tabGroups: [result.group],
+                    tabs: result.tabs,
+                    tags: result.tags,
+                    lists: result.lists,
+                    tasks: result.tasks
+                },
                 remove: result.removed
             }));
 
@@ -153,7 +177,12 @@ export function useTabs(workspaceID) {
             const result = await api(`/api/kanban/tab-groups/${groupID}`, { method: 'DELETE' });
 
             setBoardData(prev => applyDelta(prev, {
-                upsert: { tabs: result.tabs },
+                upsert: {
+                    tabs: result.tabs,
+                    tags: result.tags,
+                    lists: result.lists,
+                    tasks: result.tasks
+                },
                 remove: result.removed
             }));
         } catch (error) {

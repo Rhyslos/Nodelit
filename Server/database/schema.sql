@@ -269,3 +269,31 @@ ALTER TABLE tabs ADD CONSTRAINT tabs_group_id_fkey
     FOREIGN KEY (group_id) REFERENCES tab_groups(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS tabs_group_id_idx ON tabs (group_id);
+
+-- tag scope columns
+ALTER TABLE tags ADD COLUMN IF NOT EXISTS tab_id text;
+ALTER TABLE tags ADD COLUMN IF NOT EXISTS group_id text;
+
+ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_tab_id_fkey;
+
+ALTER TABLE tags ADD CONSTRAINT tags_tab_id_fkey
+    FOREIGN KEY (tab_id) REFERENCES tabs(id) ON DELETE CASCADE;
+
+ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_group_id_fkey;
+
+ALTER TABLE tags ADD CONSTRAINT tags_group_id_fkey
+    FOREIGN KEY (group_id) REFERENCES tab_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_single_scope_check;
+
+ALTER TABLE tags ADD CONSTRAINT tags_single_scope_check
+    CHECK (tab_id IS NULL OR group_id IS NULL);
+
+CREATE INDEX IF NOT EXISTS tags_tab_id_idx ON tags (tab_id);
+CREATE INDEX IF NOT EXISTS tags_group_id_idx ON tags (group_id);
+
+DROP INDEX IF EXISTS tags_workspace_named_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS tags_scope_named_key
+    ON tags (workspace_id, COALESCE(tab_id, ''), COALESCE(group_id, ''), lower(name))
+    WHERE name <> '';

@@ -16,6 +16,7 @@ import KanbanColumn from "../components/kanban/KanbanColumn";
 import KanbanTask from "../components/kanban/KanbanTask";
 import TaskModal from "../components/kanban/TaskModal";
 import DeleteDropZone from "../components/kanban/DeleteDropZone";
+import ConfirmModal from "../components/kanban/ConfirmModal";
 
 // page component
 export default function Kanban() {
@@ -46,10 +47,19 @@ export default function Kanban() {
 
     const listIDs = lists.map(l => l.id);
     const { tasks, addTask, updateTask, deleteTask, reorderTasks, setTaskTags } = useTasks(listIDs);
-    const tags = boardData.tags;
+
+    const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
+    const activeGroupID = activeTab?.groupID ?? null;
+
+    const tags = useMemo(() => boardData.tags.filter(tag => {
+        if (tag.tabID) return tag.tabID === activeTabId;
+        if (tag.groupID) return tag.groupID === activeGroupID;
+        return true;
+    }), [boardData.tags, activeTabId, activeGroupID]);
 
     // ui state
     const [activeTask, setActiveTask] = useState(null);
+    const [pendingCombine, setPendingCombine] = useState(null);
     const [focusedListId, setFocusedListId] = useState(null);
     const [focusedTaskId, setFocusedTaskId] = useState(null);
 
@@ -62,6 +72,51 @@ export default function Kanban() {
     
     const { triggerRemoval: triggerTaskRemoval, isRemoving: isTaskRemoving } = useAnimatedRemoval(deleteTask);
     const { triggerRemoval: triggerListRemoval, isRemoving: isListRemoving } = useAnimatedRemoval(handleDeleteList);
+
+    // tag scope handlers
+    function privateTagCount(tabIDs) {
+        const scope = new Set(tabIDs);
+        return boardData.tags.filter(tag => tag.tabID && scope.has(tag.tabID)).length;
+    }
+
+    function handleCreateGroup(tabIDs) {
+        const count = privateTagCount(tabIDs);
+
+        if (count === 0) {
+            addTabGroup(tabIDs, undefined, undefined, false);
+            return;
+        }
+
+        setPendingCombine({ kind: 'create', tabIDs, count });
+    }
+
+    function handleReorderTabs(updates) {
+        const joining = updates
+            .filter(update => update.groupID)
+            .filter(update => tabs.find(t => t.id === update.id)?.groupID !== update.groupID)
+            .map(update => update.id);
+
+        const count = joining.length > 0 ? privateTagCount(joining) : 0;
+
+        if (count === 0) {
+            reorderTabs(updates, false);
+            return;
+        }
+
+        setPendingCombine({ kind: 'reorder', updates, count });
+    }
+
+    function resolveCombine(combineTags) {
+        if (!pendingCombine) return;
+
+        if (pendingCombine.kind === 'create') {
+            addTabGroup(pendingCombine.tabIDs, undefined, undefined, combineTags);
+        } else {
+            reorderTabs(pendingCombine.updates, combineTags);
+        }
+
+        setPendingCombine(null);
+    }
 
     // layout handlers
     async function handleReorderLists(updates) {
@@ -206,8 +261,8 @@ export default function Kanban() {
                 onUpdate={updateTab}
                 onArchive={archiveTab}
                 onDelete={deleteTab}
-                onReorder={reorderTabs}
-                onCreateGroup={addTabGroup}
+                onReorder={handleReorderTabs}
+                onCreateGroup={handleCreateGroup}
                 onUpdateGroup={updateTabGroup}
                 onDeleteGroup={deleteTabGroup}
             />
@@ -321,6 +376,21 @@ export default function Kanban() {
                 visible={isDragging}
                 isOver={isOverDeleteZone}
                 registerDeleteZone={registerDeleteZone}
+            />
+
+            <ConfirmModal
+                open={!!pendingCombine}
+                title="Combine tags?"
+                message={
+                    pendingCombine
+                        ? `${pendingCombine.count} private tag${pendingCombine.count === 1 ? '' : 's'} belong to the tab${pendingCombine.kind === 'create' && pendingCombine.tabIDs.length === 1 ? '' : 's'} joining this group. Share them with the whole group, or keep them private to their own tab? Public tags are not affected.`
+                        : ''
+                }
+                confirmLabel="Combine tags"
+                cancelLabel="Keep private"
+                destructive={false}
+                onConfirm={() => resolveCombine(true)}
+                onCancel={() => resolveCombine(false)}
             />
 
             {activeTask && (
