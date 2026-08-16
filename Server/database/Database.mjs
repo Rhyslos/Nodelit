@@ -941,6 +941,40 @@ class Database {
     }
 
     // workspace functions
+    async getUpcomingDeadlines(userID, days, limit) {
+        const { rows } = await query(
+            `SELECT k.id,
+                    k.title,
+                    to_char(k.deadline, 'YYYY-MM-DD') AS deadline,
+                    (k.deadline - CURRENT_DATE)::int AS "daysRemaining",
+                    w.id AS "workspaceID",
+                    w.name AS "workspaceName",
+                    t.id AS "tabID",
+                    t.name AS "tabName",
+                    t.color AS "tabColor",
+                    EXISTS (
+                        SELECT 1 FROM task_assignees ta
+                        WHERE ta.task_id = k.id AND ta.user_id = $1
+                    ) AS "isMine"
+             FROM tasks k
+             JOIN lists l ON l.id = k.list_id
+             JOIN board_columns c ON c.id = l.column_id
+             JOIN tabs t ON t.id = c.tab_id
+             JOIN workspaces w ON w.id = t.workspace_id
+             JOIN memberships m ON m.workspace_id = w.id AND m.user_id = $1
+             WHERE k.deadline IS NOT NULL
+               AND k.is_completed = false
+               AND t.is_archived = false
+               AND w.deleted_at IS NULL
+               AND k.deadline <= CURRENT_DATE + $2::int
+             ORDER BY k.deadline, w.name, k.title
+             LIMIT $3`,
+            [userID, days, limit]
+        );
+
+        return rows;
+    }
+
     async getWorkspacesForUser(userID) {
         const { rows } = await query(
             `SELECT ${WORKSPACE_SELECT},

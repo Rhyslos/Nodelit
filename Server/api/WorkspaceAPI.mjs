@@ -3,6 +3,11 @@ import { Router } from 'express';
 import db from '../database/Database.mjs';
 import { requireText, requireID, optionalID, optionalColor, requireMemberRole } from '../modules/Validation.mjs';
 
+// configuration constants
+const DEADLINE_WINDOW_DAYS = 7;
+const DEADLINE_MAX_DAYS = 30;
+const DEADLINE_LIMIT = 25;
+
 // router configuration
 export default function createWorkspaceRouter(authz) {
     const router = Router();
@@ -44,6 +49,22 @@ export default function createWorkspaceRouter(authz) {
             ]);
 
             res.json({ workspaces, categories });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.get('/deadlines', async (req, res, next) => {
+        try {
+            const requested = Number.parseInt(req.query?.days, 10);
+
+            const days = Number.isInteger(requested)
+                ? Math.min(Math.max(requested, 1), DEADLINE_MAX_DAYS)
+                : DEADLINE_WINDOW_DAYS;
+
+            const deadlines = await db.getUpcomingDeadlines(req.user.id, days, DEADLINE_LIMIT);
+
+            res.json({ deadlines, days });
         } catch (error) {
             next(error);
         }
