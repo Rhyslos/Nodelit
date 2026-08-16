@@ -891,7 +891,7 @@ class Database {
             query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} ORDER BY c.tab_id, c.column_index`),
             query(`SELECT ${LIST_SELECT} ${LIST_FROM} ORDER BY l.column_id, l.list_order`),
             query(`SELECT ${TASK_SELECT} ${TASK_FROM} ORDER BY k.list_id, k.task_order`),
-            query('SELECT id, workspace_id AS "workspaceID", name, color FROM tags ORDER BY workspace_id, name'),
+            query(`SELECT ${TAG_SELECT} FROM tags tg ORDER BY tg.workspace_id, tg.name`),
             query(`SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g ORDER BY g.workspace_id, g.group_order`),
             query(`SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p ORDER BY p.workspace_id, p.page_order`)
         ]);
@@ -1131,7 +1131,7 @@ class Database {
             query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE t.workspace_id = $1 ORDER BY c.column_index`, [workspaceID]),
             query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE t.workspace_id = $1 ORDER BY l.list_order`, [workspaceID]),
             query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE t.workspace_id = $1 ORDER BY k.task_order`, [workspaceID]),
-            query('SELECT id, workspace_id AS "workspaceID", name, color FROM tags WHERE workspace_id = $1 ORDER BY name', [workspaceID])
+            query(`SELECT ${TAG_SELECT} FROM tags tg WHERE tg.workspace_id = $1 ORDER BY tg.name`, [workspaceID])
         ]);
 
         return {
