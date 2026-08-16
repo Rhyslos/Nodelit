@@ -1,11 +1,24 @@
 // component imports
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check } from 'lucide-react';
+import { Check, Globe, Users, Lock } from 'lucide-react';
 
 // configuration constants
 const MENU_MARGIN = 8;
 const MENU_WIDTH = 210;
+
+// utility functions
+function scopeBadge(tag) {
+    if (tag.tabID) {
+        return <Lock size={11} strokeWidth={2} className="tag-picker-scope" title="Private to this tab" />;
+    }
+
+    if (tag.groupID) {
+        return <Users size={11} strokeWidth={2} className="tag-picker-scope" title="Shared with this tab group" />;
+    }
+
+    return <Globe size={11} strokeWidth={2} className="tag-picker-scope" title="Public across every tab" />;
+}
 
 // component functions
 export default function TagPicker({ anchorRect, tags, selected = [], onToggle, onClose }) {
@@ -80,6 +93,7 @@ export default function TagPicker({ anchorRect, tags, selected = [], onToggle, o
                     >
                         <span className="tag-picker-swatch" style={{ background: tag.color }} />
                         <span className={`tag-picker-name ${tag.name ? '' : 'is-unnamed'}`}>{tag.name || 'Unnamed'}</span>
+                        {scopeBadge(tag)}
                         {selected.includes(tag.id) && <Check size={13} strokeWidth={2.5} />}
                     </button>
                 ))}

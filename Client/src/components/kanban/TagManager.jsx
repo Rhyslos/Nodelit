@@ -1,7 +1,7 @@
 // component imports
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Globe, Users, Lock } from 'lucide-react';
 import { api } from '../../lib/api';
 
 // configuration constants
@@ -12,6 +12,65 @@ const ACTIVE_TAB_STORAGE_PREFIX = 'nodelit:activetab:';
 const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 // utility functions
+function buildSections(tags, tabs, tabGroups) {
+    const sections = [];
+    const placed = new Set();
+
+    const publicTags = tags.filter(tag => !tag.tabID && !tag.groupID);
+
+    if (publicTags.length > 0) {
+        sections.push({
+            key: PUBLIC_SCOPE,
+            label: 'Public — every tab',
+            icon: <Globe size={12} strokeWidth={2} />,
+            tags: publicTags
+        });
+
+        for (const tag of publicTags) placed.add(tag.id);
+    }
+
+    for (const group of tabGroups) {
+        const groupTags = tags.filter(tag => tag.groupID === group.id);
+        if (groupTags.length === 0) continue;
+
+        sections.push({
+            key: `group:${group.id}`,
+            label: group.name,
+            icon: <Users size={12} strokeWidth={2} />,
+            tags: groupTags
+        });
+
+        for (const tag of groupTags) placed.add(tag.id);
+    }
+
+    for (const tab of tabs) {
+        const tabTags = tags.filter(tag => tag.tabID === tab.id);
+        if (tabTags.length === 0) continue;
+
+        sections.push({
+            key: `tab:${tab.id}`,
+            label: tab.name,
+            icon: <Lock size={12} strokeWidth={2} />,
+            tags: tabTags
+        });
+
+        for (const tag of tabTags) placed.add(tag.id);
+    }
+
+    const orphans = tags.filter(tag => !placed.has(tag.id));
+
+    if (orphans.length > 0) {
+        sections.push({
+            key: 'orphaned',
+            label: 'Archived tabs',
+            icon: <Lock size={12} strokeWidth={2} />,
+            tags: orphans
+        });
+    }
+
+    return sections;
+}
+
 function scopeKey(tag) {
     if (tag.tabID) return `tab:${tag.tabID}`;
     if (tag.groupID) return `group:${tag.groupID}`;
@@ -169,6 +228,64 @@ export default function TagManager({ workspaceID, onClose }) {
         }
     }
 
+    // render functions
+    function renderTagRow(tag) {
+        return (
+            <div className="tag-manager-row" key={tag.id}>
+                <span
+                    className={`tag-chip ${tag.name ? '' : 'tag-chip--blank'}`}
+                    style={{ background: tag.color }}
+                >
+                    {tag.name}
+                </span>
+
+                <input
+                    className="tag-manager-rename"
+                    value={tag.name}
+                    placeholder="No name"
+                    onChange={e => setTags(prev => prev.map(t => t.id === tag.id ? { ...t, name: e.target.value } : t))}
+                    onBlur={e => handleRename(tag, e.target.value)}
+                />
+
+                <select
+                    className="tag-manager-scope"
+                    value={scopeKey(tag)}
+                    onChange={e => handleRescope(tag, e.target.value)}
+                    title="Where this tag is visible"
+                >
+                    <option value={PUBLIC_SCOPE}>Everywhere</option>
+
+                    {tabGroups.map(group => (
+                        <option key={group.id} value={`group:${group.id}`}>{group.name}</option>
+                    ))}
+
+                    {tabs.map(tab => (
+                        <option key={tab.id} value={`tab:${tab.id}`}>{tab.name}</option>
+                    ))}
+                </select>
+
+                <input
+                    type="color"
+                    className="tag-color-input"
+                    value={tag.color}
+                    onChange={e => handleRecolor(tag, e.target.value)}
+                    title="Change colour"
+                />
+
+                <button
+                    className="tag-manager-delete"
+                    onClick={() => handleDelete(tag)}
+                    aria-label="Delete tag"
+                >
+                    <Trash2 size={14} strokeWidth={2} />
+                </button>
+            </div>
+        );
+    }
+
+    // derived variables
+    const sections = buildSections(tags, tabs, tabGroups);
+
     return createPortal(
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal tag-manager" onClick={e => e.stopPropagation()}>
@@ -256,55 +373,15 @@ export default function TagManager({ workspaceID, onClose }) {
                 <div className="tag-manager-list">
                     {loading && <p className="admin-empty">Loading…</p>}
 
-                    {tags.map(tag => (
-                        <div className="tag-manager-row" key={tag.id}>
-                            <span
-                                className={`tag-chip ${tag.name ? '' : 'tag-chip--blank'}`}
-                                style={{ background: tag.color }}
-                            >
-                                {tag.name}
+                    {sections.map(section => (
+                        <div className="tag-manager-section" key={section.key}>
+                            <span className="tag-manager-section-title">
+                                {section.icon}
+                                {section.label}
+                                <span className="tag-manager-section-count">{section.tags.length}</span>
                             </span>
 
-                            <input
-                                className="tag-manager-rename"
-                                value={tag.name}
-                                placeholder="No name"
-                                onChange={e => setTags(prev => prev.map(t => t.id === tag.id ? { ...t, name: e.target.value } : t))}
-                                onBlur={e => handleRename(tag, e.target.value)}
-                            />
-
-                            <select
-                                className="tag-manager-scope"
-                                value={scopeKey(tag)}
-                                onChange={e => handleRescope(tag, e.target.value)}
-                                title="Where this tag is visible"
-                            >
-                                <option value={PUBLIC_SCOPE}>Everywhere</option>
-
-                                {tabGroups.map(group => (
-                                    <option key={group.id} value={`group:${group.id}`}>{group.name}</option>
-                                ))}
-
-                                {tabs.map(tab => (
-                                    <option key={tab.id} value={`tab:${tab.id}`}>{tab.name}</option>
-                                ))}
-                            </select>
-
-                            <input
-                                type="color"
-                                className="tag-color-input"
-                                value={tag.color}
-                                onChange={e => handleRecolor(tag, e.target.value)}
-                                title="Change colour"
-                            />
-
-                            <button
-                                className="tag-manager-delete"
-                                onClick={() => handleDelete(tag)}
-                                aria-label="Delete tag"
-                            >
-                                <Trash2 size={14} strokeWidth={2} />
-                            </button>
+                            {section.tags.map(tag => renderTagRow(tag))}
                         </div>
                     ))}
 
