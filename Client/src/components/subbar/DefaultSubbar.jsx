@@ -1,55 +1,72 @@
 // component imports
-import { useState } from 'react';
+import { Mail } from 'lucide-react';
 import Subbar from './Subbar';
 
 // configuration constants
-const MAX_VISIBLE = 5;
-
-const SECTIONS = [
-    { key: 'recent', label: 'Recent', placeholder: 'No recent workspaces' },
-    { key: 'deadlines', label: 'Deadlines', placeholder: 'No upcoming deadlines' },
-    { key: 'activity', label: 'Activity', placeholder: 'No recent activity' }
-];
+const MAX_VISIBLE = 8;
 
 // utility functions
-function deadlineLabel(daysRemaining) {
+function parseDeadline(value) {
+    const [year, month, day] = String(value).split('-').map(Number);
+    if (!year || !month || !day) return null;
+
+    return new Date(year, month - 1, day);
+}
+
+function urgencyLabel(daysRemaining) {
     if (daysRemaining < 0) return `${Math.abs(daysRemaining)}d late`;
     if (daysRemaining === 0) return 'Today';
     if (daysRemaining === 1) return 'Tomorrow';
-    return `${daysRemaining}d`;
+
+    return `in ${daysRemaining}d`;
 }
 
-function deadlineTone(daysRemaining) {
+function dateLabel(value) {
+    const date = parseDeadline(value);
+    if (!date) return '';
+
+    return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function urgencyTone(daysRemaining) {
     if (daysRemaining < 0) return 'is-overdue';
     if (daysRemaining <= 1) return 'is-urgent';
+
     return '';
 }
 
 // component functions
-export default function DefaultSubbar({ deadlines = [], deadlinesLoading = false, onOpenWorkspace }) {
-    // state variables
-    const [expanded, setExpanded] = useState(false);
+export default function DefaultSubbar({ deadlines = [], deadlinesLoading = false, onOpenDeadline }) {
+    // derived variables
+    const visible = deadlines.slice(0, MAX_VISIBLE);
+    const overflow = deadlines.length - visible.length;
 
-    // render functions
-    function renderDeadlines() {
-        if (deadlinesLoading) {
-            return <div className="subbar-placeholder">Loading…</div>;
-        }
+    return (
+        <Subbar>
+            <button
+                type="button"
+                className="subbar-notify-btn"
+                title="Notifications"
+                aria-label="Notifications"
+            >
+                <Mail size={18} strokeWidth={2} />
+            </button>
 
-        if (deadlines.length === 0) {
-            return <div className="subbar-placeholder">Nothing due in the next 7 days</div>;
-        }
+            <span className="subbar-divider" />
 
-        return (
-            <div className="subbar-deadline-list">
-                {deadlines.slice(0, MAX_VISIBLE).map(item => (
+            <div className="subbar-content">
+                {!deadlinesLoading && visible.map(item => (
                     <button
                         key={item.id}
-                        className={`subbar-deadline ${deadlineTone(item.daysRemaining)}`}
-                        onClick={() => onOpenWorkspace?.(item.workspaceID)}
-                        title={`${item.title || 'Untitled task'} — due ${item.deadline} in ${item.workspaceName} / ${item.tabName}`}
+                        type="button"
+                        className={`subbar-deadline ${urgencyTone(item.daysRemaining)}`}
+                        onClick={() => onOpenDeadline?.(item)}
+                        title={`${item.title || 'Untitled task'} — due ${dateLabel(item.deadline)} in ${item.workspaceName} / ${item.tabName}`}
                     >
-                        <span className="subbar-deadline-when">{deadlineLabel(item.daysRemaining)}</span>
+                        <span className="subbar-deadline-head">
+                            <span className="subbar-deadline-when">{urgencyLabel(item.daysRemaining)}</span>
+                            <span className="subbar-deadline-date">{dateLabel(item.deadline)}</span>
+                        </span>
 
                         <span className="subbar-deadline-title">
                             {item.isMine && <span className="subbar-deadline-mine" title="Assigned to you" />}
@@ -57,48 +74,15 @@ export default function DefaultSubbar({ deadlines = [], deadlinesLoading = false
                         </span>
 
                         <span className="subbar-deadline-where" style={{ '--tab-color': item.tabColor }}>
-                            {item.workspaceName}
+                            {item.workspaceName} · {item.tabName}
                         </span>
                     </button>
                 ))}
 
-                {deadlines.length > MAX_VISIBLE && (
-                    <span className="subbar-deadline-more">
-                        +{deadlines.length - MAX_VISIBLE} more
-                    </span>
+                {!deadlinesLoading && overflow > 0 && (
+                    <span className="subbar-deadline-more">+{overflow} more</span>
                 )}
             </div>
-        );
-    }
-
-    function renderSection(section) {
-        if (section.key === 'deadlines') return renderDeadlines();
-        return <div className="subbar-placeholder">{section.placeholder}</div>;
-    }
-
-    return (
-        <Subbar>
-            {SECTIONS.map(section => (
-                <div className="subbar-section" key={section.key}>
-                    <span className="subbar-label">{section.label}</span>
-                    {renderSection(section)}
-                </div>
-            ))}
-
-            <button className="subbar-collapse-btn" onClick={() => setExpanded(open => !open)}>
-                {expanded ? '▲ Hide' : '☰ Overview'}
-            </button>
-
-            {expanded && (
-                <div className="subbar-collapsed-dropdown">
-                    {SECTIONS.map(section => (
-                        <div className="subbar-collapsed-section" key={section.key}>
-                            <span className="subbar-label">{section.label}</span>
-                            {renderSection(section)}
-                        </div>
-                    ))}
-                </div>
-            )}
         </Subbar>
     );
 }

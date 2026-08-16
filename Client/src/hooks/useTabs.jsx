@@ -1,5 +1,6 @@
 // hook imports
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
 
@@ -12,6 +13,7 @@ export function useTabs(workspaceID) {
 
     // state variables
     const [activeTabId, setActiveTabId] = useState(null);
+    const [searchParams, setSearchParams] = useSearchParams();
 
     const tabs = useMemo(
         () => boardData.tabs.filter(t => !t.isArchived).sort((a, b) => a.tabOrder - b.tabOrder),
@@ -20,6 +22,18 @@ export function useTabs(workspaceID) {
 
     const tabGroups = useMemo(() => boardData.tabGroups ?? [], [boardData.tabGroups]);
 
+    // selection functions
+    const selectTab = useCallback(tabID => {
+        setActiveTabId(tabID);
+
+        const next = new URLSearchParams(searchParams);
+
+        if (tabID) next.set('tab', tabID);
+        else next.delete('tab');
+
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams]);
+
     // lifecycle functions
     useEffect(() => {
         if (tabs.length === 0) {
@@ -27,10 +41,17 @@ export function useTabs(workspaceID) {
             return;
         }
 
+        const requested = searchParams.get('tab');
+
+        if (requested && requested !== activeTabId && tabs.some(t => t.id === requested)) {
+            setActiveTabId(requested);
+            return;
+        }
+
         if (!tabs.some(t => t.id === activeTabId)) {
             setActiveTabId(tabs[0].id);
         }
-    }, [tabs, activeTabId]);
+    }, [tabs, activeTabId, searchParams]);
 
     useEffect(() => {
         if (!workspaceID || !activeTabId) return;
@@ -51,7 +72,7 @@ export function useTabs(workspaceID) {
             });
 
             setBoardData(prev => applyDelta(prev, { upsert: { tabs: [tab] } }));
-            setActiveTabId(tab.id);
+            selectTab(tab.id);
             return tab.id;
         } catch {
             refresh();
@@ -195,7 +216,7 @@ export function useTabs(workspaceID) {
         tabs,
         tabGroups,
         activeTabId,
-        setActiveTabId,
+        setActiveTabId: selectTab,
         addTab,
         updateTab,
         archiveTab,

@@ -54,7 +54,7 @@ export default function Dashboard() {
             <DefaultSubbar
                 deadlines={deadlines}
                 deadlinesLoading={deadlinesLoading}
-                onOpenWorkspace={workspaceID => navigate(`/workspace/${workspaceID}/kanban`)}
+                onOpenDeadline={item => navigate(`/workspace/${item.workspaceID}/kanban?tab=${item.tabID}`)}
             />
             <main className="dashboard-main">
                 {error && <div className="grid-error">Your workspaces could not be loaded. Refresh to try again.</div>}
