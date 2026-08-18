@@ -11,8 +11,9 @@ import ConfirmModal from '../components/kanban/ConfirmModal';
 // configuration constants
 const SLOT_MINUTES = 30;
 const SLOT_MS = SLOT_MINUTES * 60 * 1000;
-const DAY_START_HOUR = 7;
+const DAY_START_HOUR = 9;
 const DAY_END_HOUR = 21;
+const MAX_AVATARS = 5;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // utility functions
@@ -53,6 +54,17 @@ function formatRange(start, end) {
     return `${formatTime(start)} – ${formatTime(end)}`;
 }
 
+function avatarLetter(member) {
+    if (member?.displayName) return member.displayName.charAt(0).toUpperCase();
+    if (member?.username) return member.username.charAt(0).toUpperCase();
+
+    return '?';
+}
+
+function avatarColor(member) {
+    return member?.cursorColor || 'var(--muted)';
+}
+
 // component functions
 export default function Calendar() {
     const { workspaceID } = useParams();
@@ -70,6 +82,8 @@ export default function Calendar() {
     // drag references
     const paintRef = useRef(null);
     const [pending, setPending] = useState({ added: new Set(), removed: new Set() });
+    const pendingRef = useRef(pending);
+    pendingRef.current = pending;
 
     // range variables
     const range = useMemo(() => {
@@ -94,6 +108,11 @@ export default function Calendar() {
 
     // derived variables
     const memberCount = Math.max(members.length, 1);
+
+    const memberByID = useMemo(
+        () => new Map(members.map(member => [member.id, member])),
+        [members]
+    );
 
     const days = useMemo(() => {
         const count = view === 'week' ? 7 : 42;
@@ -147,18 +166,25 @@ export default function Calendar() {
 
             paintRef.current = null;
 
-            setPending(current => {
-                const added = [...current.added];
-                const removed = [...current.removed];
+            const added = [...pendingRef.current.added];
+            const removed = [...pendingRef.current.removed];
 
-                if (added.length > 0 || removed.length > 0) setAvailability(added, removed);
+            setPending({ added: new Set(), removed: new Set() });
 
-                return { added: new Set(), removed: new Set() };
-            });
+            if (added.length > 0 || removed.length > 0) setAvailability(added, removed);
+        }
+
+        function handleCancel() {
+            paintRef.current = null;
         }
 
         window.addEventListener('mouseup', handleUp);
-        return () => window.removeEventListener('mouseup', handleUp);
+        window.addEventListener('dragstart', handleCancel);
+
+        return () => {
+            window.removeEventListener('mouseup', handleUp);
+            window.removeEventListener('dragstart', handleCancel);
+        };
     }, [setAvailability]);
 
     // slot helpers
@@ -204,8 +230,10 @@ export default function Calendar() {
         });
     }
 
-    function handleSlotDown(date) {
-        if (!canEdit) return;
+    function handleSlotDown(e, date) {
+        if (!canEdit || e.button !== 0) return;
+
+        e.preventDefault();
 
         const mine = slotUsers(date).includes(user?.id);
 
@@ -283,25 +311,66 @@ export default function Calendar() {
                                 const meeting = meetingAt(date);
                                 const ratio = users.length / memberCount;
 
+                                const everyone = members.length > 0 && users.length >= members.length;
+
                                 return (
                                     <div
                                         key={date.getTime()}
                                         className={[
                                             'calendar-slot',
                                             mine ? 'is-mine' : '',
+                                            everyone ? 'is-full' : '',
                                             meeting ? 'is-booked' : '',
                                             selection === slotKey(date) ? 'is-selected' : ''
                                         ].filter(Boolean).join(' ')}
                                         style={{ '--fill': ratio }}
                                         title={meeting
                                             ? `${meeting.title} · ${formatRange(new Date(meeting.startsAt), new Date(meeting.endsAt))}`
-                                            : `${users.length}/${memberCount} free · ${formatTime(date)}`}
-                                        onMouseDown={() => handleSlotDown(date)}
+                                            : `${formatTime(date)} · ${users.length}/${memberCount} free`}
+                                        draggable={false}
+                                        onMouseDown={e => handleSlotDown(e, date)}
                                         onMouseEnter={() => handleSlotEnter(date)}
-                                        onClick={() => setSelection(slotKey(date))}
                                     >
-                                        {users.length > 0 && (
-                                            <span className="calendar-slot-count">{users.length}</span>
+                                        {meeting && (
+                                            <span className="calendar-slot-meeting">{meeting.title}</span>
+                                        )}
+
+                                        {!meeting && users.length > 0 && (
+                                            <span className="calendar-slot-avatars">
+                                                {users.slice(0, MAX_AVATARS).map(id => {
+                                                    const member = memberByID.get(id);
+
+                                                    return (
+                                                        <span
+                                                            key={id}
+                                                            className={`calendar-avatar ${id === user?.id ? 'is-me' : ''}`}
+                                                            style={{ background: avatarColor(member) }}
+                                                            title={member?.displayName ?? 'Member'}
+                                                        >
+                                                            {avatarLetter(member)}
+                                                        </span>
+                                                    );
+                                                })}
+
+                                                {users.length > MAX_AVATARS && (
+                                                    <span className="calendar-avatar is-more">
+                                                        +{users.length - MAX_AVATARS}
+                                                    </span>
+                                                )}
+                                            </span>
+                                        )}
+
+                                        {canEdit && !meeting && users.length > 0 && (
+                                            <button
+                                                type="button"
+                                                className="calendar-slot-book"
+                                                title="Book a meeting at this time"
+                                                aria-label="Book a meeting at this time"
+                                                onMouseDown={e => e.stopPropagation()}
+                                                onClick={e => { e.stopPropagation(); setSelection(slotKey(date)); }}
+                                            >
+                                                <CalendarPlus size={12} strokeWidth={2.5} />
+                                            </button>
                                         )}
                                     </div>
                                 );

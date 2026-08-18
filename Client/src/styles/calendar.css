@@ -57,7 +57,7 @@
 
 .calendar-period {
     margin-left: 8px;
-    font-family: 'DM Serif Display', serif;
+    font-family: 'Noto Sans', sans-serif;
     font-size: 18px;
     color: var(--ink);
 }
@@ -93,6 +93,8 @@
 .calendar-week {
     display: flex;
     flex-direction: column;
+    user-select: none;
+    -webkit-user-select: none;
     border: 1px solid var(--border);
     border-radius: 12px;
     background: var(--panel);
@@ -106,6 +108,10 @@
 }
 
 .calendar-week-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--panel);
     border-bottom: 1px solid var(--border);
 }
 
@@ -136,8 +142,9 @@
 }
 
 .calendar-week-body {
-    max-height: 60vh;
+    max-height: 62vh;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .calendar-gutter {
@@ -147,54 +154,128 @@
 
 .calendar-gutter-label {
     position: absolute;
-    top: -6px;
+    top: 4px;
     right: 6px;
     font-size: 10px;
+    font-weight: 600;
     color: var(--muted);
 }
 
 .calendar-slot {
     position: relative;
-    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1 / 1;
+    min-height: 54px;
+    max-height: 88px;
+    padding: 4px;
     border-left: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
-    background: color-mix(in srgb, var(--accent) calc(var(--fill, 0) * 55%), transparent);
+    background: color-mix(in srgb, var(--accent) calc(var(--fill, 0) * 30%), transparent);
     cursor: pointer;
     user-select: none;
-    transition: background 0.1s;
+    transition: background 0.12s;
 }
 
 .calendar-slot:hover {
-    outline: 1px solid var(--accent);
-    outline-offset: -1px;
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    z-index: 1;
 }
 
 .calendar-slot.is-mine {
-    box-shadow: inset 3px 0 0 var(--ink);
+    box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.calendar-slot.is-full {
+    background: var(--accent-lt);
+    box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .calendar-slot.is-booked {
     background: var(--ink);
+    box-shadow: none;
 }
 
 .calendar-slot.is-selected {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+    z-index: 1;
 }
 
-.calendar-slot-count {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 9px;
-    font-weight: 600;
-    color: var(--muted);
+/* avatar styles */
+.calendar-slot-avatars {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
     pointer-events: none;
 }
 
-.calendar-slot.is-booked .calendar-slot-count {
+.calendar-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid transparent;
+    font-size: 10px;
+    font-weight: 700;
+    color: #FFFFFF;
+}
+
+.calendar-avatar.is-me {
+    border-color: var(--ink);
+}
+
+.calendar-avatar.is-more {
+    background: var(--panel);
+    border-color: var(--border);
+    color: var(--muted);
+    font-size: 9px;
+}
+
+.calendar-slot-meeting {
+    font-size: 11px;
+    font-weight: 600;
     color: var(--on-ink);
+    text-align: center;
+    padding: 0 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendar-slot-book {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.calendar-slot:hover .calendar-slot-book,
+.calendar-slot.is-full .calendar-slot-book {
+    opacity: 1;
+}
+
+.calendar-slot-book:hover {
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 /* month styles */
@@ -227,6 +308,7 @@
 
 .calendar-month-day {
     display: flex;
+    font-family: 'Noto Sans', sans-serif;
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
