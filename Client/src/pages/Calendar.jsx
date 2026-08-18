@@ -19,6 +19,8 @@ const ROW_STORAGE_KEY = 'nodelit:calendarrowheight';
 const ROW_MIN = 20;
 const ROW_MAX = 72;
 const ROW_DEFAULT = 32;
+const COMPACT_HEIGHT = 46;
+const COMPACT_AVATARS = 3;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // utility functions
@@ -455,10 +457,12 @@ export default function Calendar() {
         return blocks;
     }
 
-    function renderAvatars(userIDs) {
+    function renderAvatars(userIDs, compact) {
+        const limit = compact ? COMPACT_AVATARS : MAX_AVATARS;
+
         return (
             <span className="calendar-block-avatars">
-                {userIDs.slice(0, MAX_AVATARS).map(id => {
+                {userIDs.slice(0, limit).map(id => {
                     const member = memberByID.get(id);
 
                     return (
@@ -473,8 +477,8 @@ export default function Calendar() {
                     );
                 })}
 
-                {userIDs.length > MAX_AVATARS && (
-                    <span className="calendar-avatar is-more">+{userIDs.length - MAX_AVATARS}</span>
+                {userIDs.length > limit && (
+                    <span className="calendar-avatar is-more">+{userIDs.length - limit}</span>
                 )}
             </span>
         );
@@ -500,12 +504,14 @@ export default function Calendar() {
                     const start = slotDate(day, times[segment.startIndex]);
                     const end = new Date(start.getTime() + segment.span * SLOT_MS);
                     const everyone = members.length > 0 && segment.userIDs.length >= members.length;
+                    const compact = segment.span * rowHeight < COMPACT_HEIGHT;
 
                     return (
                         <div
                             key={`${segment.startIndex}-${segment.key}`}
                             className={[
                                 'calendar-block',
+                                compact ? 'is-compact' : '',
                                 everyone ? 'is-full' : '',
                                 segment.userIDs.includes(user?.id) ? 'is-mine' : '',
                                 draft && draftRange(draft)?.start.getTime() === start.getTime() ? 'is-selected' : ''
@@ -519,7 +525,7 @@ export default function Calendar() {
                         >
                             <span className="calendar-block-time">{formatRange(start, end)}</span>
 
-                            {renderAvatars(segment.userIDs)}
+                            {renderAvatars(segment.userIDs, compact)}
 
                             {canEdit && (
                                 <button
@@ -543,7 +549,7 @@ export default function Calendar() {
                 {blocks.map(({ meeting, startIndex, span }) => (
                     <div
                         key={meeting.id}
-                        className="calendar-meeting-block"
+                        className={`calendar-meeting-block ${span * rowHeight < COMPACT_HEIGHT ? 'is-compact' : ''}`}
                         style={{
                             top: `calc(var(--slot-h) * ${startIndex})`,
                             height: `calc(var(--slot-h) * ${span} - 2px)`
