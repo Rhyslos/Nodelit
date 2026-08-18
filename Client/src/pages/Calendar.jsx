@@ -15,6 +15,7 @@ const DAY_START_HOUR = 9;
 const DAY_END_HOUR = 21;
 const MAX_AVATARS = 5;
 const SLOT_PX = 24;
+const DURATIONS = [30, 60, 90, 120, 180];
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // utility functions
@@ -66,6 +67,35 @@ function avatarColor(member) {
     return member?.cursorColor || 'var(--muted)';
 }
 
+function blockBackground(userIDs, memberByID) {
+    const colors = userIDs.map(id => avatarColor(memberByID.get(id)));
+    if (colors.length === 0) return undefined;
+
+    const tint = color => `color-mix(in srgb, ${color} 26%, var(--panel))`;
+
+    if (colors.length === 1) return tint(colors[0]);
+
+    const step = 100 / colors.length;
+    const stops = colors.map((color, index) => `${tint(color)} ${index * step}% ${(index + 1) * step}%`);
+
+    return `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+
+function toDateValue(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function toTimeValue(date) {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatDuration(minutes) {
+    if (minutes < 60) return `${minutes} min`;
+    if (minutes % 60 === 0) return `${minutes / 60} hr`;
+
+    return `${Math.floor(minutes / 60)} hr ${minutes % 60} min`;
+}
+
 // component functions
 export default function Calendar() {
     const { workspaceID } = useParams();
@@ -76,9 +106,8 @@ export default function Calendar() {
     // state variables
     const [view, setView] = useState('week');
     const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
-    const [selection, setSelection] = useState(null);
+    const [draft, setDraft] = useState(null);
     const [confirmMeeting, setConfirmMeeting] = useState(null);
-    const [meetingTitle, setMeetingTitle] = useState('');
 
     // drag references
     const paintRef = useRef(null);
@@ -246,17 +275,58 @@ export default function Calendar() {
         if (paintRef.current === 'remove' && mine) markSlot(slotKey(date), false);
     }
 
+    function draftRange(entry) {
+        if (!entry) return null;
+
+        const [year, month, day] = entry.date.split('-').map(Number);
+        const [hour, minute] = entry.time.split(':').map(Number);
+
+        const start = new Date(year, month - 1, day, hour, minute);
+
+        return { start, end: new Date(start.getTime() + entry.minutes * 60000) };
+    }
+
+    function draftOverlap(entry) {
+        const range = draftRange(entry);
+        if (!range) return [];
+
+        let common = null;
+
+        for (let time = range.start.getTime(); time < range.end.getTime(); time += SLOT_MS) {
+            const users = new Set(slots[new Date(time).toISOString()] ?? []);
+
+            common = common === null
+                ? users
+                : new Set([...common].filter(id => users.has(id)));
+        }
+
+        return [...(common ?? [])];
+    }
+
+    function openDraft(start, minutes) {
+        const base = start ?? new Date(
+            anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), DAY_START_HOUR, 0
+        );
+
+        setDraft({
+            date: toDateValue(base),
+            time: toTimeValue(base),
+            minutes: minutes ?? SLOT_MINUTES,
+            title: ''
+        });
+    }
+
     function handleBookMeeting() {
-        if (!selection) return;
+        const range = draftRange(draft);
+        if (!range) return;
 
         createMeeting({
-            title: meetingTitle.trim() || 'Meeting',
-            startsAt: selection.start,
-            endsAt: selection.end
+            title: draft.title.trim() || 'Meeting',
+            startsAt: range.start.toISOString(),
+            endsAt: range.end.toISOString()
         });
 
-        setSelection(null);
-        setMeetingTitle('');
+        setDraft(null);
     }
 
     function shiftAnchor(direction) {
@@ -371,12 +441,12 @@ export default function Calendar() {
                                 'calendar-block',
                                 everyone ? 'is-full' : '',
                                 segment.userIDs.includes(user?.id) ? 'is-mine' : '',
-                                selection?.start === start.toISOString() ? 'is-selected' : ''
+                                draft && draftRange(draft)?.start.getTime() === start.getTime() ? 'is-selected' : ''
                             ].filter(Boolean).join(' ')}
                             style={{
                                 top: segment.startIndex * SLOT_PX,
                                 height: segment.span * SLOT_PX - 2,
-                                '--fill': segment.userIDs.length / memberCount
+                                background: blockBackground(segment.userIDs, memberByID)
                             }}
                             title={`${formatRange(start, end)} · ${segment.userIDs.length}/${memberCount} free`}
                         >
@@ -393,11 +463,7 @@ export default function Calendar() {
                                     onMouseDown={e => e.stopPropagation()}
                                     onClick={e => {
                                         e.stopPropagation();
-                                        setSelection({
-                                            start: start.toISOString(),
-                                            end: end.toISOString(),
-                                            userIDs: segment.userIDs
-                                        });
+                                        openDraft(start, segment.span * SLOT_MINUTES);
                                     }}
                                 >
                                     <CalendarPlus size={13} strokeWidth={2.5} />
@@ -529,6 +595,13 @@ export default function Calendar() {
                 </div>
 
                 <div className="calendar-views">
+                    {canEdit && (
+                        <button className="calendar-set-btn" onClick={() => openDraft()}>
+                            <CalendarPlus size={14} strokeWidth={2} />
+                            Set meeting
+                        </button>
+                    )}
+
                     <button
                         className={`calendar-view-btn ${view === 'week' ? 'active' : ''}`}
                         onClick={() => setView('week')}
@@ -549,32 +622,70 @@ export default function Calendar() {
 
             {view === 'week' ? renderWeek() : renderMonth()}
 
-            {view === 'week' && selection && canEdit && (
+            {draft && canEdit && (
                 <div className="calendar-booking">
-                    <div className="calendar-booking-info">
-                        <span className="calendar-booking-time">
-                            {formatRange(new Date(selection.start), new Date(selection.end))}
-                        </span>
-                        <span className="calendar-booking-overlap">
-                            {selection.userIDs.length}/{memberCount} free
-                        </span>
+                    <div className="calendar-booking-fields">
+                        <label className="calendar-field">
+                            <span className="calendar-field-label">Date</span>
+                            <input
+                                type="date"
+                                className="calendar-field-input"
+                                value={draft.date}
+                                onChange={e => setDraft({ ...draft, date: e.target.value })}
+                            />
+                        </label>
+
+                        <label className="calendar-field">
+                            <span className="calendar-field-label">Start</span>
+                            <select
+                                className="calendar-field-input"
+                                value={draft.time}
+                                onChange={e => setDraft({ ...draft, time: e.target.value })}
+                            >
+                                {times.map(time => {
+                                    const value = `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`;
+                                    return <option key={value} value={value}>{value}</option>;
+                                })}
+                            </select>
+                        </label>
+
+                        <label className="calendar-field">
+                            <span className="calendar-field-label">Length</span>
+                            <select
+                                className="calendar-field-input"
+                                value={draft.minutes}
+                                onChange={e => setDraft({ ...draft, minutes: Number(e.target.value) })}
+                            >
+                                {DURATIONS.map(minutes => (
+                                    <option key={minutes} value={minutes}>{formatDuration(minutes)}</option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <label className="calendar-field calendar-field--grow">
+                            <span className="calendar-field-label">Title</span>
+                            <input
+                                className="calendar-field-input"
+                                placeholder="Meeting title"
+                                value={draft.title}
+                                onChange={e => setDraft({ ...draft, title: e.target.value })}
+                            />
+                        </label>
                     </div>
 
-                    <input
-                        className="calendar-booking-title"
-                        placeholder="Meeting title"
-                        value={meetingTitle}
-                        onChange={e => setMeetingTitle(e.target.value)}
-                    />
+                    <div className="calendar-booking-actions">
+                        <span className="calendar-booking-overlap">
+                            {draftOverlap(draft).length}/{memberCount} free for the whole slot
+                        </span>
 
-                    <button className="calendar-booking-submit" onClick={handleBookMeeting}>
-                        <CalendarPlus size={14} strokeWidth={2} />
-                        Book meeting
-                    </button>
+                        <button className="calendar-booking-submit" onClick={handleBookMeeting}>
+                            Set meeting
+                        </button>
 
-                    <button className="calendar-booking-cancel" onClick={() => setSelection(null)}>
-                        Cancel
-                    </button>
+                        <button className="calendar-booking-cancel" onClick={() => setDraft(null)}>
+                            Cancel
+                        </button>
+                    </div>
                 </div>
             )}
 
