@@ -1,7 +1,7 @@
 // component imports
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, CalendarPlus, Trash2, Rows3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useKanban } from '../contexts/KanbanContext';
 import { useWorkspacePresence } from '../hooks/useWorkspacePresence';
@@ -385,11 +385,6 @@ export default function Calendar() {
         }
     }
 
-    function handleRowHeight(value) {
-        setRowHeight(value);
-        persistRowHeight(value);
-    }
-
     function handleResizeDown(e) {
         if (e.button !== 0) return;
 
@@ -665,23 +660,7 @@ export default function Calendar() {
     return (
         <div className="calendar-root" style={{ '--slot-h': `${rowHeight}px` }}>
             <div className="calendar-toolbar">
-                <div className="calendar-toolbar-side">
-                    {view === 'week' && (
-                        <label className="calendar-zoom" title="Row height">
-                            <Rows3 size={14} strokeWidth={2} />
-                            <input
-                                type="range"
-                                className="calendar-zoom-input"
-                                min={ROW_MIN}
-                                max={ROW_MAX}
-                                step={2}
-                                value={rowHeight}
-                                onChange={e => handleRowHeight(Number(e.target.value))}
-                                aria-label="Row height"
-                            />
-                        </label>
-                    )}
-                </div>
+                <div className="calendar-toolbar-side" />
 
                 <div className="calendar-nav">
                     <button className="calendar-nav-btn" onClick={() => shiftAnchor(-1)} aria-label="Previous period">

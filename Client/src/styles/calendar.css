@@ -76,25 +76,6 @@
     color: var(--accent);
 }
 
-/* row height styles */
-.calendar-zoom {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 32px;
-    padding: 0 12px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--panel);
-    color: var(--muted);
-}
-
-.calendar-zoom-input {
-    width: 108px;
-    accent-color: var(--accent);
-    cursor: ew-resize;
-}
-
 .calendar-period {
     min-width: 210px;
     text-align: center;
