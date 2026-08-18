@@ -1,7 +1,7 @@
 // component imports
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarPlus, Trash2, Rows3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useKanban } from '../contexts/KanbanContext';
 import { useWorkspacePresence } from '../hooks/useWorkspacePresence';
@@ -15,6 +15,10 @@ const DAY_START_HOUR = 9;
 const DAY_END_HOUR = 21;
 const MAX_AVATARS = 5;
 const DURATIONS = [30, 60, 90, 120, 180];
+const ROW_STORAGE_KEY = 'nodelit:calendarrowheight';
+const ROW_MIN = 20;
+const ROW_MAX = 72;
+const ROW_DEFAULT = 32;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // utility functions
@@ -70,12 +74,25 @@ function blockBackground(userIDs, memberByID) {
     const colors = userIDs.map(id => avatarColor(memberByID.get(id)));
     if (colors.length === 0) return undefined;
 
-    if (colors.length === 1) return colors[0];
+    const soften = color => `color-mix(in srgb, ${color} 55%, var(--panel))`;
+
+    if (colors.length === 1) return soften(colors[0]);
 
     const step = 100 / colors.length;
-    const stops = colors.map((color, index) => `${color} ${index * step}% ${(index + 1) * step}%`);
+    const stops = colors.map((color, index) => `${soften(color)} ${index * step}% ${(index + 1) * step}%`);
 
     return `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+
+function readRowHeight() {
+    try {
+        const stored = Number(localStorage.getItem(ROW_STORAGE_KEY));
+        if (stored >= ROW_MIN && stored <= ROW_MAX) return stored;
+    } catch {
+        return ROW_DEFAULT;
+    }
+
+    return ROW_DEFAULT;
 }
 
 function toDateValue(date) {
@@ -104,6 +121,7 @@ export default function Calendar() {
     const [view, setView] = useState('week');
     const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
     const [draft, setDraft] = useState(null);
+    const [rowHeight, setRowHeight] = useState(readRowHeight);
     const [confirmMeeting, setConfirmMeeting] = useState(null);
 
     // drag references
@@ -324,6 +342,16 @@ export default function Calendar() {
         });
 
         setDraft(null);
+    }
+
+    function handleRowHeight(value) {
+        setRowHeight(value);
+
+        try {
+            localStorage.setItem(ROW_STORAGE_KEY, String(value));
+        } catch {
+            return;
+        }
     }
 
     function shiftAnchor(direction) {
@@ -576,12 +604,24 @@ export default function Calendar() {
         : anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
     return (
-        <div className="calendar-root">
+        <div className="calendar-root" style={{ '--slot-h': `${rowHeight}px` }}>
             <div className="calendar-toolbar">
                 <div className="calendar-toolbar-side">
-                    <button className="calendar-today-btn" onClick={() => setAnchor(startOfDay(new Date()))}>
-                        Today
-                    </button>
+                    {view === 'week' && (
+                        <label className="calendar-zoom" title="Row height">
+                            <Rows3 size={14} strokeWidth={2} />
+                            <input
+                                type="range"
+                                className="calendar-zoom-input"
+                                min={ROW_MIN}
+                                max={ROW_MAX}
+                                step={2}
+                                value={rowHeight}
+                                onChange={e => handleRowHeight(Number(e.target.value))}
+                                aria-label="Row height"
+                            />
+                        </label>
+                    )}
                 </div>
 
                 <div className="calendar-nav">
@@ -605,6 +645,15 @@ export default function Calendar() {
                     )}
 
                     <span className="calendar-views">
+                        <button
+                            className="calendar-view-btn calendar-view-btn--action"
+                            onClick={() => setAnchor(startOfDay(new Date()))}
+                        >
+                            Today
+                        </button>
+
+                        <span className="calendar-views-divider" />
+
                         <button
                             className={`calendar-view-btn ${view === 'week' ? 'active' : ''}`}
                             onClick={() => setView('week')}

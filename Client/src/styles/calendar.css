@@ -1,6 +1,6 @@
 /* layout styles */
 .calendar-root {
-    --slot-h: clamp(22px, calc((100vh - 300px) / 24), 56px);
+    --slot-h: 32px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -40,32 +40,59 @@
     flex: 0 0 auto;
 }
 
-.calendar-nav-btn,
-.calendar-today-btn {
+.calendar-nav-btn {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 32px;
     height: 32px;
-    padding: 0 12px;
+    padding: 0;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--panel);
     color: var(--ink);
-    font-family: 'Noto Sans', sans-serif;
-    font-size: 13px;
     cursor: pointer;
     transition: border-color 0.15s, color 0.15s;
 }
 
-.calendar-nav-btn {
-    width: 32px;
-    padding: 0;
-}
-
-.calendar-nav-btn:hover,
-.calendar-today-btn:hover {
+.calendar-nav-btn:hover {
     border-color: var(--accent);
     color: var(--accent);
+}
+
+.calendar-views-divider {
+    width: 1px;
+    align-self: stretch;
+    margin: 3px 2px;
+    background: var(--border);
+}
+
+.calendar-view-btn--action {
+    color: var(--ink);
+}
+
+.calendar-view-btn--action:hover {
+    background: var(--accent-lt);
+    color: var(--accent);
+}
+
+/* row height styles */
+.calendar-zoom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--muted);
+}
+
+.calendar-zoom-input {
+    width: 108px;
+    accent-color: var(--accent);
+    cursor: ew-resize;
 }
 
 .calendar-period {
@@ -215,7 +242,7 @@
     flex-direction: column;
     gap: 3px;
     padding: 4px 6px;
-    border: 1px solid rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: 8px;
     overflow: hidden;
     pointer-events: none;
@@ -239,8 +266,8 @@
 .calendar-block-time {
     font-size: 10px;
     font-weight: 700;
-    color: #FFFFFF;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+    color: var(--ink);
+    opacity: 0.75;
     white-space: nowrap;
 }
 
@@ -264,7 +291,7 @@
 }
 
 .calendar-avatar {
-    border-color: rgba(255, 255, 255, 0.85);
+    border-color: var(--panel);
 }
 
 .calendar-avatar.is-me {
