@@ -297,3 +297,27 @@ DROP INDEX IF EXISTS tags_workspace_named_key;
 CREATE UNIQUE INDEX IF NOT EXISTS tags_scope_named_key
     ON tags (workspace_id, COALESCE(tab_id, ''), COALESCE(group_id, ''), lower(name))
     WHERE name <> '';
+
+-- calendar tables
+CREATE TABLE IF NOT EXISTS availability_slots (
+    workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id      text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    slot_start   timestamptz(3) NOT NULL,
+    PRIMARY KEY (workspace_id, user_id, slot_start)
+);
+
+CREATE INDEX IF NOT EXISTS availability_slots_workspace_start_idx
+    ON availability_slots (workspace_id, slot_start);
+
+CREATE TABLE IF NOT EXISTS meetings (
+    id           text PRIMARY KEY,
+    workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    title        text NOT NULL DEFAULT 'Meeting',
+    description  text NOT NULL DEFAULT '',
+    starts_at    timestamptz(3) NOT NULL,
+    ends_at      timestamptz(3) NOT NULL,
+    created_by   text REFERENCES users(id) ON DELETE SET NULL,
+    updated_at   timestamptz(3) NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS meetings_workspace_start_idx ON meetings (workspace_id, starts_at);

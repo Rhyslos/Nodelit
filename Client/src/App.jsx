@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Kanban from './pages/Kanban';
 import Notation from './pages/Notation';
+import Calendar from './pages/Calendar';
 import Admin from './pages/Admin';
 import Profile from './pages/Profile';
 
@@ -86,6 +87,7 @@ function AppLayout() {
                     <Route path="/workspace/:workspaceID" element={<WorkspaceLayout />}>
                         <Route index element={<Navigate to="kanban" replace />} />
                         <Route path="kanban" element={<Kanban />} />
+                        <Route path="calendar" element={<Calendar />} />
 
                         <Route element={<NotationLayout />}>
                             <Route path="notation" element={<Notation />} />

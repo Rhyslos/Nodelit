@@ -12,6 +12,7 @@ const resolvers = {
     column: field => async req => db.getWorkspaceIDForColumn(req.params[field] ?? req.body?.[field]),
     list: field => async req => db.getWorkspaceIDForList(req.params[field] ?? req.body?.[field]),
     task: field => async req => db.getWorkspaceIDForTask(req.params[field] ?? req.body?.[field]),
+    meeting: field => async req => db.getWorkspaceIDForMeeting(req.params[field] ?? req.body?.[field]),
     tabGroup: field => async req => db.getWorkspaceIDForTabGroup(req.params[field] ?? req.body?.[field]),
     notationGroup: field => async req => db.getWorkspaceIDForNotationGroup(req.params[field] ?? req.body?.[field]),
     notationPage: field => async req => db.getWorkspaceIDForNotationPage(req.params[field] ?? req.body?.[field])
@@ -111,6 +112,18 @@ class Authorization {
 
     workspaceBodyEdit(field = 'workspaceID') {
         return this.requireEditor(resolvers.body(field));
+    }
+
+    workspaceParamEdit(field = 'workspaceID') {
+        return this.requireEditor(resolvers.param(field));
+    }
+
+    meetingAccess(field = 'id') {
+        return this.requireMembership(resolvers.meeting(field));
+    }
+
+    meetingEdit(field = 'id') {
+        return this.requireEditor(resolvers.meeting(field));
     }
 
     workspaceOwnerParam(field = 'workspaceID') {

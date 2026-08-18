@@ -157,6 +157,47 @@ export function optionalBoolean(value, field) {
     return Boolean(value);
 }
 
+const SLOT_ALIGNMENT_MS = 15 * 60 * 1000;
+
+export function requireTimestamp(value, field) {
+    if (typeof value !== 'string') {
+        throw new ValidationError(`${field} must be an ISO timestamp`);
+    }
+
+    const parsed = Date.parse(value);
+
+    if (Number.isNaN(parsed)) {
+        throw new ValidationError(`${field} must be a valid ISO timestamp`);
+    }
+
+    return new Date(parsed).toISOString();
+}
+
+export function optionalTimestamp(value, field) {
+    if (value === undefined || value === null || value === '') return undefined;
+    return requireTimestamp(value, field);
+}
+
+export function requireSlotList(value, field, slotMinutes, max = 400) {
+    const list = requireArray(value, field);
+
+    if (list.length > max) {
+        throw new ValidationError(`${field} cannot contain more than ${max} slots`);
+    }
+
+    const parsed = list.map(entry => {
+        const iso = requireTimestamp(entry, field);
+
+        if (Date.parse(iso) % SLOT_ALIGNMENT_MS !== 0) {
+            throw new ValidationError(`${field} must align to ${slotMinutes} minute boundaries`);
+        }
+
+        return iso;
+    });
+
+    return [...new Set(parsed)];
+}
+
 export function requireArray(value, field) {
     if (!Array.isArray(value)) {
         throw new ValidationError(`${field} must be a list`);

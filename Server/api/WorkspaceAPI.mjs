@@ -4,9 +4,9 @@ import db from '../database/Database.mjs';
 import { requireText, requireID, optionalID, optionalColor, requireMemberRole } from '../modules/Validation.mjs';
 
 // configuration constants
-const DEADLINE_WINDOW_DAYS = 7;
-const DEADLINE_MAX_DAYS = 30;
-const DEADLINE_LIMIT = 25;
+const UPCOMING_WINDOW_DAYS = 7;
+const UPCOMING_MAX_DAYS = 30;
+const UPCOMING_LIMIT = 25;
 
 // router configuration
 export default function createWorkspaceRouter(authz) {
@@ -54,17 +54,25 @@ export default function createWorkspaceRouter(authz) {
         }
     });
 
-    router.get('/deadlines', async (req, res, next) => {
+    router.get('/upcoming', async (req, res, next) => {
         try {
             const requested = Number.parseInt(req.query?.days, 10);
 
             const days = Number.isInteger(requested)
-                ? Math.min(Math.max(requested, 1), DEADLINE_MAX_DAYS)
-                : DEADLINE_WINDOW_DAYS;
+                ? Math.min(Math.max(requested, 1), UPCOMING_MAX_DAYS)
+                : UPCOMING_WINDOW_DAYS;
 
-            const deadlines = await db.getUpcomingDeadlines(req.user.id, days, DEADLINE_LIMIT);
+            const [deadlines, meetings] = await Promise.all([
+                db.getUpcomingDeadlines(req.user.id, days, UPCOMING_LIMIT),
+                db.getUpcomingMeetings(req.user.id, days, UPCOMING_LIMIT)
+            ]);
 
-            res.json({ deadlines, days });
+            const items = [
+                ...deadlines.map(entry => ({ ...entry, kind: 'task' })),
+                ...meetings.map(entry => ({ ...entry, kind: 'meeting' }))
+            ];
+
+            res.json({ items, days });
         } catch (error) {
             next(error);
         }

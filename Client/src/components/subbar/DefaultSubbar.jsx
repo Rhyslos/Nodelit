@@ -1,5 +1,5 @@
 // component imports
-import { Mail } from 'lucide-react';
+import { Mail, CalendarClock } from 'lucide-react';
 import Subbar from './Subbar';
 
 // configuration constants
@@ -28,6 +28,27 @@ function dateLabel(value) {
     return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+function itemDate(item) {
+    if (item.kind !== 'meeting') return dateLabel(item.deadline);
+
+    const start = new Date(item.startsAt);
+
+    return `${start.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} ${start.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function itemWhere(item) {
+    if (item.kind === 'meeting') return item.workspaceName;
+    return `${item.workspaceName} · ${item.tabName}`;
+}
+
+function itemTooltip(item) {
+    if (item.kind === 'meeting') {
+        return `${item.title || 'Meeting'} — ${itemDate(item)} in ${item.workspaceName}`;
+    }
+
+    return `${item.title || 'Untitled task'} — due ${dateLabel(item.deadline)} in ${item.workspaceName} / ${item.tabName}`;
+}
+
 function urgencyTone(daysRemaining) {
     if (daysRemaining < 0) return 'is-overdue';
     if (daysRemaining <= 1) return 'is-urgent';
@@ -36,10 +57,10 @@ function urgencyTone(daysRemaining) {
 }
 
 // component functions
-export default function DefaultSubbar({ deadlines = [], deadlinesLoading = false, onOpenDeadline }) {
+export default function DefaultSubbar({ items = [], itemsLoading = false, onOpenItem }) {
     // derived variables
-    const visible = deadlines.slice(0, MAX_VISIBLE);
-    const overflow = deadlines.length - visible.length;
+    const visible = items.slice(0, MAX_VISIBLE);
+    const overflow = items.length - visible.length;
 
     return (
         <Subbar>
@@ -55,31 +76,33 @@ export default function DefaultSubbar({ deadlines = [], deadlinesLoading = false
             <span className="subbar-divider" />
 
             <div className="subbar-content">
-                {!deadlinesLoading && visible.map(item => (
+                {!itemsLoading && visible.map(item => (
                     <button
-                        key={item.id}
+                        key={`${item.kind}-${item.id}`}
                         type="button"
-                        className={`subbar-deadline ${urgencyTone(item.daysRemaining)}`}
-                        onClick={() => onOpenDeadline?.(item)}
-                        title={`${item.title || 'Untitled task'} — due ${dateLabel(item.deadline)} in ${item.workspaceName} / ${item.tabName}`}
+                        className={`subbar-deadline ${urgencyTone(item.daysRemaining)} ${item.kind === 'meeting' ? 'is-meeting' : ''}`}
+                        onClick={() => onOpenItem?.(item)}
+                        title={itemTooltip(item)}
                     >
                         <span className="subbar-deadline-head">
                             <span className="subbar-deadline-when">{urgencyLabel(item.daysRemaining)}</span>
-                            <span className="subbar-deadline-date">{dateLabel(item.deadline)}</span>
+                            <span className="subbar-deadline-date">{itemDate(item)}</span>
                         </span>
 
                         <span className="subbar-deadline-title">
-                            {item.isMine && <span className="subbar-deadline-mine" title="Assigned to you" />}
-                            {item.title || 'Untitled task'}
+                            {item.kind === 'meeting'
+                                ? <CalendarClock size={12} strokeWidth={2} className="subbar-deadline-icon" />
+                                : item.isMine && <span className="subbar-deadline-mine" title="Assigned to you" />}
+                            {item.title || (item.kind === 'meeting' ? 'Meeting' : 'Untitled task')}
                         </span>
 
                         <span className="subbar-deadline-where" style={{ '--tab-color': item.tabColor }}>
-                            {item.workspaceName} · {item.tabName}
+                            {itemWhere(item)}
                         </span>
                     </button>
                 ))}
 
-                {!deadlinesLoading && overflow > 0 && (
+                {!itemsLoading && overflow > 0 && (
                     <span className="subbar-deadline-more">+{overflow} more</span>
                 )}
             </div>

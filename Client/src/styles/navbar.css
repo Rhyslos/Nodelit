@@ -345,6 +345,15 @@
     text-overflow: ellipsis;
 }
 
+.subbar-deadline.is-meeting {
+    border-color: var(--ink);
+}
+
+.subbar-deadline-icon {
+    flex: 0 0 auto;
+    color: var(--muted);
+}
+
 .subbar-deadline-more {
     flex: 0 0 auto;
     padding: 2px 8px;

@@ -72,6 +72,17 @@ const TAB_SELECT = `
     t.updated_at AS "updatedAt"
 `;
 
+const MEETING_SELECT = `
+    mt.id,
+    mt.workspace_id AS "workspaceID",
+    mt.title,
+    mt.description,
+    to_char(mt.starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt",
+    to_char(mt.ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
+    mt.created_by AS "createdBy",
+    mt.updated_at AS "updatedAt"
+`;
+
 const TAG_SELECT = `
     tg.id,
     tg.workspace_id AS "workspaceID",
@@ -941,6 +952,146 @@ class Database {
     }
 
     // workspace functions
+    // calendar functions
+    async getCalendarRange(workspaceID, fromISO, toISO) {
+        const [slots, meetings] = await Promise.all([
+            query(
+                `SELECT to_char(a.slot_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "slotStart",
+                        array_agg(a.user_id ORDER BY a.user_id) AS "userIDs"
+                 FROM availability_slots a
+                 WHERE a.workspace_id = $1 AND a.slot_start >= $2 AND a.slot_start < $3
+                 GROUP BY a.slot_start
+                 ORDER BY a.slot_start`,
+                [workspaceID, fromISO, toISO]
+            ),
+            query(
+                `SELECT ${MEETING_SELECT}
+                 FROM meetings mt
+                 WHERE mt.workspace_id = $1 AND mt.starts_at < $3 AND mt.ends_at > $2
+                 ORDER BY mt.starts_at`,
+                [workspaceID, fromISO, toISO]
+            )
+        ]);
+
+        return { slots: slots.rows, meetings: meetings.rows };
+    }
+
+    async setAvailability(workspaceID, userID, added, removed) {
+        return withTransaction(async client => {
+            if (removed.length > 0) {
+                await client.query(
+                    `DELETE FROM availability_slots
+                     WHERE workspace_id = $1 AND user_id = $2 AND slot_start = ANY($3::timestamptz[])`,
+                    [workspaceID, userID, removed]
+                );
+            }
+
+            if (added.length > 0) {
+                await client.query(
+                    `INSERT INTO availability_slots (workspace_id, user_id, slot_start)
+                     SELECT $1, $2, unnest($3::timestamptz[])
+                     ON CONFLICT DO NOTHING`,
+                    [workspaceID, userID, added]
+                );
+            }
+
+            const touched = [...added, ...removed];
+
+            if (touched.length === 0) return { slots: [], cleared: [] };
+
+            const { rows } = await client.query(
+                `SELECT to_char(a.slot_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "slotStart",
+                        array_agg(a.user_id ORDER BY a.user_id) AS "userIDs"
+                 FROM availability_slots a
+                 WHERE a.workspace_id = $1 AND a.slot_start = ANY($2::timestamptz[])
+                 GROUP BY a.slot_start`,
+                [workspaceID, touched]
+            );
+
+            const present = new Set(rows.map(row => row.slotStart));
+            const cleared = touched
+                .map(iso => new Date(iso).toISOString())
+                .filter(iso => !present.has(iso));
+
+            return { slots: rows, cleared: [...new Set(cleared)] };
+        });
+    }
+
+    async getMeeting(meetingID) {
+        return queryOne(`SELECT ${MEETING_SELECT} FROM meetings mt WHERE mt.id = $1`, [meetingID]);
+    }
+
+    async getWorkspaceIDForMeeting(meetingID) {
+        const row = await queryOne('SELECT workspace_id AS "workspaceID" FROM meetings WHERE id = $1', [meetingID]);
+        return row?.workspaceID ?? null;
+    }
+
+    async createMeeting(workspaceID, userID, fields) {
+        return queryOne(
+            `INSERT INTO meetings (id, workspace_id, title, description, starts_at, ends_at, created_by)
+             VALUES ($1, $2, COALESCE($3, 'Meeting'), COALESCE($4, ''), $5, $6, $7)
+             RETURNING id, workspace_id AS "workspaceID", title, description,
+                       to_char(starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt",
+                       to_char(ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
+                       created_by AS "createdBy",
+                       updated_at AS "updatedAt"`,
+            [newID('meeting'), workspaceID, fields.title ?? null, fields.description ?? null,
+             fields.startsAt, fields.endsAt, userID]
+        );
+    }
+
+    async updateMeeting(meetingID, changes) {
+        const assignments = [];
+        const values = [];
+
+        for (const [field, column] of [['title', 'title'], ['description', 'description'],
+                                       ['startsAt', 'starts_at'], ['endsAt', 'ends_at']]) {
+            if (changes[field] === undefined) continue;
+            assignments.push(`${column} = $${assignments.length + 1}`);
+            values.push(changes[field]);
+        }
+
+        if (assignments.length === 0) return this.getMeeting(meetingID);
+
+        return queryOne(
+            `UPDATE meetings SET ${assignments.join(', ')}, updated_at = now()
+             WHERE id = $${values.length + 1}
+             RETURNING id, workspace_id AS "workspaceID", title, description,
+                       to_char(starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt",
+                       to_char(ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
+                       created_by AS "createdBy",
+                       updated_at AS "updatedAt"`,
+            [...values, meetingID]
+        );
+    }
+
+    async deleteMeeting(meetingID) {
+        const { rowCount } = await query('DELETE FROM meetings WHERE id = $1', [meetingID]);
+        return rowCount > 0;
+    }
+
+    async getUpcomingMeetings(userID, days, limit) {
+        const { rows } = await query(
+            `SELECT mt.id,
+                    mt.title,
+                    to_char(mt.starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt",
+                    to_char(mt.ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
+                    w.id AS "workspaceID",
+                    w.name AS "workspaceName"
+             FROM meetings mt
+             JOIN workspaces w ON w.id = mt.workspace_id
+             JOIN memberships m ON m.workspace_id = w.id AND m.user_id = $1
+             WHERE w.deleted_at IS NULL
+               AND mt.ends_at >= now()
+               AND mt.starts_at < now() + ($2::int * INTERVAL '1 day')
+             ORDER BY mt.starts_at
+             LIMIT $3`,
+            [userID, days, limit]
+        );
+
+        return rows;
+    }
+
     async getUpcomingDeadlines(userID, days, limit) {
         const { rows } = await query(
             `SELECT k.id,
