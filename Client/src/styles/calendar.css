@@ -233,6 +233,37 @@
     background: var(--accent-lt);
 }
 
+/* resize handle styles */
+.calendar-resize {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 14px;
+    flex: 0 0 auto;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    cursor: ns-resize;
+    transition: background 0.12s;
+}
+
+.calendar-resize:hover,
+.calendar-resize.is-active {
+    background: var(--accent-lt);
+}
+
+.calendar-resize-grip {
+    width: 42px;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--border);
+    transition: background 0.12s;
+}
+
+.calendar-resize:hover .calendar-resize-grip,
+.calendar-resize.is-active .calendar-resize-grip {
+    background: var(--accent);
+}
+
 /* availability block styles */
 .calendar-block {
     position: absolute;

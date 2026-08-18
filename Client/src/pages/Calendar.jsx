@@ -122,10 +122,14 @@ export default function Calendar() {
     const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
     const [draft, setDraft] = useState(null);
     const [rowHeight, setRowHeight] = useState(readRowHeight);
+    const [resizing, setResizing] = useState(false);
     const [confirmMeeting, setConfirmMeeting] = useState(null);
 
     // drag references
     const paintRef = useRef(null);
+    const resizeRef = useRef(null);
+    const rowHeightRef = useRef(rowHeight);
+    rowHeightRef.current = rowHeight;
     const [pending, setPending] = useState({ added: new Set(), removed: new Set() });
     const pendingRef = useRef(pending);
     pendingRef.current = pending;
@@ -210,6 +214,33 @@ export default function Calendar() {
     }, [meetings]);
 
     // lifecycle functions
+    useEffect(() => {
+        function handleResizeMove(e) {
+            if (!resizeRef.current) return;
+
+            const { startY, startHeight } = resizeRef.current;
+            const next = startHeight + (e.clientY - startY) / times.length;
+
+            setRowHeight(Math.min(Math.max(Math.round(next), ROW_MIN), ROW_MAX));
+        }
+
+        function handleResizeUp() {
+            if (!resizeRef.current) return;
+
+            resizeRef.current = null;
+            setResizing(false);
+            persistRowHeight(rowHeightRef.current);
+        }
+
+        window.addEventListener('mousemove', handleResizeMove);
+        window.addEventListener('mouseup', handleResizeUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleResizeMove);
+            window.removeEventListener('mouseup', handleResizeUp);
+        };
+    }, [times.length]);
+
     useEffect(() => {
         function handleUp() {
             if (!paintRef.current) return;
@@ -344,14 +375,25 @@ export default function Calendar() {
         setDraft(null);
     }
 
-    function handleRowHeight(value) {
-        setRowHeight(value);
-
+    function persistRowHeight(value) {
         try {
             localStorage.setItem(ROW_STORAGE_KEY, String(value));
         } catch {
             return;
         }
+    }
+
+    function handleRowHeight(value) {
+        setRowHeight(value);
+        persistRowHeight(value);
+    }
+
+    function handleResizeDown(e) {
+        if (e.button !== 0) return;
+
+        e.preventDefault();
+        resizeRef.current = { startY: e.clientY, startHeight: rowHeightRef.current };
+        setResizing(true);
     }
 
     function shiftAnchor(direction) {
@@ -542,6 +584,17 @@ export default function Calendar() {
                     </div>
 
                     {days.map(day => renderDayColumn(day))}
+                </div>
+
+                <div
+                    className={`calendar-resize ${resizing ? 'is-active' : ''}`}
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Drag to resize rows"
+                    title="Drag to resize rows"
+                    onMouseDown={handleResizeDown}
+                >
+                    <span className="calendar-resize-grip" />
                 </div>
             </div>
         );
