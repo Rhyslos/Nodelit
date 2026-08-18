@@ -14,6 +14,7 @@ const SLOT_MS = SLOT_MINUTES * 60 * 1000;
 const DAY_START_HOUR = 9;
 const DAY_END_HOUR = 21;
 const MAX_AVATARS = 5;
+const SLOT_PX = 24;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // utility functions
@@ -131,6 +132,11 @@ export default function Calendar() {
         return result;
     }, []);
 
+    const hours = useMemo(
+        () => Array.from({ length: DAY_END_HOUR - DAY_START_HOUR }, (_, index) => DAY_START_HOUR + index),
+        []
+    );
+
     const dayStats = useMemo(() => {
         const stats = {};
 
@@ -202,16 +208,6 @@ export default function Calendar() {
         return base;
     }
 
-    function meetingAt(date) {
-        const time = date.getTime();
-
-        return meetings.find(meeting => {
-            const start = new Date(meeting.startsAt).getTime();
-            const end = new Date(meeting.endsAt).getTime();
-            return time >= start && time < end;
-        }) ?? null;
-    }
-
     // event handlers
     function markSlot(iso, present) {
         setPending(current => {
@@ -253,13 +249,10 @@ export default function Calendar() {
     function handleBookMeeting() {
         if (!selection) return;
 
-        const start = new Date(selection);
-        const end = new Date(start.getTime() + SLOT_MS);
-
         createMeeting({
             title: meetingTitle.trim() || 'Meeting',
-            startsAt: start.toISOString(),
-            endsAt: end.toISOString()
+            startsAt: selection.start,
+            endsAt: selection.end
         });
 
         setSelection(null);
@@ -276,11 +269,163 @@ export default function Calendar() {
     }
 
     // render functions
+    function daySegments(day) {
+        const result = [];
+        let current = null;
+
+        times.forEach((time, index) => {
+            const users = slotUsers(slotDate(day, time));
+
+            if (users.length === 0) {
+                current = null;
+                return;
+            }
+
+            const sorted = [...users].sort();
+            const key = sorted.join(',');
+
+            if (current && current.key === key) {
+                current.span += 1;
+                return;
+            }
+
+            current = { key, userIDs: sorted, startIndex: index, span: 1 };
+            result.push(current);
+        });
+
+        return result;
+    }
+
+    function dayMeetingBlocks(day) {
+        const dayStart = slotDate(day, times[0]).getTime();
+        const blocks = [];
+
+        for (const meeting of meetings) {
+            const startIndex = Math.round((new Date(meeting.startsAt).getTime() - dayStart) / SLOT_MS);
+            const endIndex = Math.round((new Date(meeting.endsAt).getTime() - dayStart) / SLOT_MS);
+
+            if (endIndex <= 0 || startIndex >= times.length) continue;
+
+            const clampedStart = Math.max(0, startIndex);
+
+            blocks.push({
+                meeting,
+                startIndex: clampedStart,
+                span: Math.min(times.length, endIndex) - clampedStart
+            });
+        }
+
+        return blocks;
+    }
+
+    function renderAvatars(userIDs) {
+        return (
+            <span className="calendar-block-avatars">
+                {userIDs.slice(0, MAX_AVATARS).map(id => {
+                    const member = memberByID.get(id);
+
+                    return (
+                        <span
+                            key={id}
+                            className={`calendar-avatar ${id === user?.id ? 'is-me' : ''}`}
+                            style={{ background: avatarColor(member) }}
+                            title={member?.displayName ?? 'Member'}
+                        >
+                            {avatarLetter(member)}
+                        </span>
+                    );
+                })}
+
+                {userIDs.length > MAX_AVATARS && (
+                    <span className="calendar-avatar is-more">+{userIDs.length - MAX_AVATARS}</span>
+                )}
+            </span>
+        );
+    }
+
+    function renderDayColumn(day) {
+        const segments = daySegments(day);
+        const blocks = dayMeetingBlocks(day);
+
+        return (
+            <div className="calendar-day-col" key={day.getTime()}>
+                {times.map((time, index) => (
+                    <div
+                        key={index}
+                        className={`calendar-slot ${time.minute === 0 ? 'is-hour' : ''}`}
+                        draggable={false}
+                        onMouseDown={e => handleSlotDown(e, slotDate(day, time))}
+                        onMouseEnter={() => handleSlotEnter(slotDate(day, time))}
+                    />
+                ))}
+
+                {segments.map(segment => {
+                    const start = slotDate(day, times[segment.startIndex]);
+                    const end = new Date(start.getTime() + segment.span * SLOT_MS);
+                    const everyone = members.length > 0 && segment.userIDs.length >= members.length;
+
+                    return (
+                        <div
+                            key={`${segment.startIndex}-${segment.key}`}
+                            className={[
+                                'calendar-block',
+                                everyone ? 'is-full' : '',
+                                segment.userIDs.includes(user?.id) ? 'is-mine' : '',
+                                selection?.start === start.toISOString() ? 'is-selected' : ''
+                            ].filter(Boolean).join(' ')}
+                            style={{
+                                top: segment.startIndex * SLOT_PX,
+                                height: segment.span * SLOT_PX - 2,
+                                '--fill': segment.userIDs.length / memberCount
+                            }}
+                            title={`${formatRange(start, end)} · ${segment.userIDs.length}/${memberCount} free`}
+                        >
+                            <span className="calendar-block-time">{formatRange(start, end)}</span>
+
+                            {renderAvatars(segment.userIDs)}
+
+                            {canEdit && (
+                                <button
+                                    type="button"
+                                    className="calendar-block-book"
+                                    title="Lock this range as a meeting"
+                                    aria-label="Lock this range as a meeting"
+                                    onMouseDown={e => e.stopPropagation()}
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        setSelection({
+                                            start: start.toISOString(),
+                                            end: end.toISOString(),
+                                            userIDs: segment.userIDs
+                                        });
+                                    }}
+                                >
+                                    <CalendarPlus size={13} strokeWidth={2.5} />
+                                </button>
+                            )}
+                        </div>
+                    );
+                })}
+
+                {blocks.map(({ meeting, startIndex, span }) => (
+                    <div
+                        key={meeting.id}
+                        className="calendar-meeting-block"
+                        style={{ top: startIndex * SLOT_PX, height: span * SLOT_PX - 2 }}
+                        title={`${meeting.title} · ${formatRange(new Date(meeting.startsAt), new Date(meeting.endsAt))}`}
+                    >
+                        <span className="calendar-meeting-block-title">{meeting.title}</span>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
     function renderWeek() {
         return (
-            <div className="calendar-week">
+            <div className="calendar-week" style={{ '--slot-h': `${SLOT_PX}px` }}>
                 <div className="calendar-week-head">
-                    <div className="calendar-gutter" />
+                    <div className="calendar-gutter-head" />
 
                     {days.map(day => (
                         <div
@@ -294,89 +439,15 @@ export default function Calendar() {
                 </div>
 
                 <div className="calendar-week-body">
-                    {times.map(time => (
-                        <div className="calendar-row" key={`${time.hour}:${time.minute}`}>
-                            <div className="calendar-gutter">
-                                {time.minute === 0 && (
-                                    <span className="calendar-gutter-label">
-                                        {String(time.hour).padStart(2, '0')}:00
-                                    </span>
-                                )}
-                            </div>
+                    <div className="calendar-gutter">
+                        {hours.map(hour => (
+                            <span className="calendar-hour" key={hour}>
+                                {String(hour).padStart(2, '0')}:00
+                            </span>
+                        ))}
+                    </div>
 
-                            {days.map(day => {
-                                const date = slotDate(day, time);
-                                const users = slotUsers(date);
-                                const mine = users.includes(user?.id);
-                                const meeting = meetingAt(date);
-                                const ratio = users.length / memberCount;
-
-                                const everyone = members.length > 0 && users.length >= members.length;
-
-                                return (
-                                    <div
-                                        key={date.getTime()}
-                                        className={[
-                                            'calendar-slot',
-                                            mine ? 'is-mine' : '',
-                                            everyone ? 'is-full' : '',
-                                            meeting ? 'is-booked' : '',
-                                            selection === slotKey(date) ? 'is-selected' : ''
-                                        ].filter(Boolean).join(' ')}
-                                        style={{ '--fill': ratio }}
-                                        title={meeting
-                                            ? `${meeting.title} · ${formatRange(new Date(meeting.startsAt), new Date(meeting.endsAt))}`
-                                            : `${formatTime(date)} · ${users.length}/${memberCount} free`}
-                                        draggable={false}
-                                        onMouseDown={e => handleSlotDown(e, date)}
-                                        onMouseEnter={() => handleSlotEnter(date)}
-                                    >
-                                        {meeting && (
-                                            <span className="calendar-slot-meeting">{meeting.title}</span>
-                                        )}
-
-                                        {!meeting && users.length > 0 && (
-                                            <span className="calendar-slot-avatars">
-                                                {users.slice(0, MAX_AVATARS).map(id => {
-                                                    const member = memberByID.get(id);
-
-                                                    return (
-                                                        <span
-                                                            key={id}
-                                                            className={`calendar-avatar ${id === user?.id ? 'is-me' : ''}`}
-                                                            style={{ background: avatarColor(member) }}
-                                                            title={member?.displayName ?? 'Member'}
-                                                        >
-                                                            {avatarLetter(member)}
-                                                        </span>
-                                                    );
-                                                })}
-
-                                                {users.length > MAX_AVATARS && (
-                                                    <span className="calendar-avatar is-more">
-                                                        +{users.length - MAX_AVATARS}
-                                                    </span>
-                                                )}
-                                            </span>
-                                        )}
-
-                                        {canEdit && !meeting && users.length > 0 && (
-                                            <button
-                                                type="button"
-                                                className="calendar-slot-book"
-                                                title="Book a meeting at this time"
-                                                aria-label="Book a meeting at this time"
-                                                onMouseDown={e => e.stopPropagation()}
-                                                onClick={e => { e.stopPropagation(); setSelection(slotKey(date)); }}
-                                            >
-                                                <CalendarPlus size={12} strokeWidth={2.5} />
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ))}
+                    {days.map(day => renderDayColumn(day))}
                 </div>
             </div>
         );
@@ -438,8 +509,6 @@ export default function Calendar() {
         ? `${range.from.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${addDays(range.from, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
         : anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
-    const selectedUsers = selection ? (slots[selection] ?? []) : [];
-
     return (
         <div className="calendar-root">
             <div className="calendar-toolbar">
@@ -484,10 +553,10 @@ export default function Calendar() {
                 <div className="calendar-booking">
                     <div className="calendar-booking-info">
                         <span className="calendar-booking-time">
-                            {formatRange(new Date(selection), new Date(new Date(selection).getTime() + SLOT_MS))}
+                            {formatRange(new Date(selection.start), new Date(selection.end))}
                         </span>
                         <span className="calendar-booking-overlap">
-                            {selectedUsers.length}/{memberCount} free
+                            {selection.userIDs.length}/{memberCount} free
                         </span>
                     </div>
 
