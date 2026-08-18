@@ -1,9 +1,10 @@
 /* layout styles */
 .calendar-root {
+    --slot-h: clamp(22px, calc((100vh - 300px) / 24), 56px);
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding: 24px;
+    padding: 20px 24px 24px;
     min-height: 0;
 }
 
@@ -16,15 +17,27 @@
 .calendar-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 16px;
-    flex-wrap: wrap;
+}
+
+.calendar-toolbar-side {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.calendar-toolbar-side--end {
+    justify-content: flex-end;
 }
 
 .calendar-nav {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    gap: 12px;
+    flex: 0 0 auto;
 }
 
 .calendar-nav-btn,
@@ -56,10 +69,13 @@
 }
 
 .calendar-period {
-    margin-left: 8px;
+    min-width: 210px;
+    text-align: center;
     font-family: 'Noto Sans', sans-serif;
-    font-size: 18px;
+    font-size: 17px;
+    font-weight: 600;
     color: var(--ink);
+    white-space: nowrap;
 }
 
 .calendar-views {
@@ -91,6 +107,8 @@
 
 /* week styles */
 .calendar-week {
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     user-select: none;
@@ -109,6 +127,12 @@
 .calendar-week-body {
     display: grid;
     grid-template-columns: 56px repeat(7, 1fr);
+}
+
+.calendar-week-body {
+    align-content: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .calendar-week-head {
@@ -191,7 +215,7 @@
     flex-direction: column;
     gap: 3px;
     padding: 4px 6px;
-    border: 1px solid var(--border);
+    border: 1px solid rgba(0, 0, 0, 0.18);
     border-radius: 8px;
     overflow: hidden;
     pointer-events: none;
@@ -214,8 +238,9 @@
 
 .calendar-block-time {
     font-size: 10px;
-    font-weight: 600;
-    color: var(--muted);
+    font-weight: 700;
+    color: #FFFFFF;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
     white-space: nowrap;
 }
 
@@ -236,6 +261,10 @@
     font-size: 9px;
     font-weight: 700;
     color: #FFFFFF;
+}
+
+.calendar-avatar {
+    border-color: rgba(255, 255, 255, 0.85);
 }
 
 .calendar-avatar.is-me {

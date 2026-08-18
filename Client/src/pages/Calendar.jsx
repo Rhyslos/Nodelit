@@ -14,7 +14,6 @@ const SLOT_MS = SLOT_MINUTES * 60 * 1000;
 const DAY_START_HOUR = 9;
 const DAY_END_HOUR = 21;
 const MAX_AVATARS = 5;
-const SLOT_PX = 24;
 const DURATIONS = [30, 60, 90, 120, 180];
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -71,12 +70,10 @@ function blockBackground(userIDs, memberByID) {
     const colors = userIDs.map(id => avatarColor(memberByID.get(id)));
     if (colors.length === 0) return undefined;
 
-    const tint = color => `color-mix(in srgb, ${color} 26%, var(--panel))`;
-
-    if (colors.length === 1) return tint(colors[0]);
+    if (colors.length === 1) return colors[0];
 
     const step = 100 / colors.length;
-    const stops = colors.map((color, index) => `${tint(color)} ${index * step}% ${(index + 1) * step}%`);
+    const stops = colors.map((color, index) => `${color} ${index * step}% ${(index + 1) * step}%`);
 
     return `linear-gradient(90deg, ${stops.join(', ')})`;
 }
@@ -444,8 +441,8 @@ export default function Calendar() {
                                 draft && draftRange(draft)?.start.getTime() === start.getTime() ? 'is-selected' : ''
                             ].filter(Boolean).join(' ')}
                             style={{
-                                top: segment.startIndex * SLOT_PX,
-                                height: segment.span * SLOT_PX - 2,
+                                top: `calc(var(--slot-h) * ${segment.startIndex})`,
+                                height: `calc(var(--slot-h) * ${segment.span} - 2px)`,
                                 background: blockBackground(segment.userIDs, memberByID)
                             }}
                             title={`${formatRange(start, end)} · ${segment.userIDs.length}/${memberCount} free`}
@@ -477,7 +474,10 @@ export default function Calendar() {
                     <div
                         key={meeting.id}
                         className="calendar-meeting-block"
-                        style={{ top: startIndex * SLOT_PX, height: span * SLOT_PX - 2 }}
+                        style={{
+                            top: `calc(var(--slot-h) * ${startIndex})`,
+                            height: `calc(var(--slot-h) * ${span} - 2px)`
+                        }}
                         title={`${meeting.title} · ${formatRange(new Date(meeting.startsAt), new Date(meeting.endsAt))}`}
                     >
                         <span className="calendar-meeting-block-title">{meeting.title}</span>
@@ -489,7 +489,7 @@ export default function Calendar() {
 
     function renderWeek() {
         return (
-            <div className="calendar-week" style={{ '--slot-h': `${SLOT_PX}px` }}>
+            <div className="calendar-week">
                 <div className="calendar-week-head">
                     <div className="calendar-gutter-head" />
 
@@ -578,23 +578,25 @@ export default function Calendar() {
     return (
         <div className="calendar-root">
             <div className="calendar-toolbar">
-                <div className="calendar-nav">
-                    <button className="calendar-nav-btn" onClick={() => shiftAnchor(-1)} aria-label="Previous">
-                        <ChevronLeft size={16} strokeWidth={2} />
-                    </button>
-
+                <div className="calendar-toolbar-side">
                     <button className="calendar-today-btn" onClick={() => setAnchor(startOfDay(new Date()))}>
                         Today
                     </button>
+                </div>
 
-                    <button className="calendar-nav-btn" onClick={() => shiftAnchor(1)} aria-label="Next">
-                        <ChevronRight size={16} strokeWidth={2} />
+                <div className="calendar-nav">
+                    <button className="calendar-nav-btn" onClick={() => shiftAnchor(-1)} aria-label="Previous period">
+                        <ChevronLeft size={16} strokeWidth={2} />
                     </button>
 
                     <span className="calendar-period">{periodLabel}</span>
+
+                    <button className="calendar-nav-btn" onClick={() => shiftAnchor(1)} aria-label="Next period">
+                        <ChevronRight size={16} strokeWidth={2} />
+                    </button>
                 </div>
 
-                <div className="calendar-views">
+                <div className="calendar-toolbar-side calendar-toolbar-side--end">
                     {canEdit && (
                         <button className="calendar-set-btn" onClick={() => openDraft()}>
                             <CalendarPlus size={14} strokeWidth={2} />
@@ -602,19 +604,21 @@ export default function Calendar() {
                         </button>
                     )}
 
-                    <button
-                        className={`calendar-view-btn ${view === 'week' ? 'active' : ''}`}
-                        onClick={() => setView('week')}
-                    >
-                        Week
-                    </button>
+                    <span className="calendar-views">
+                        <button
+                            className={`calendar-view-btn ${view === 'week' ? 'active' : ''}`}
+                            onClick={() => setView('week')}
+                        >
+                            Week
+                        </button>
 
-                    <button
-                        className={`calendar-view-btn ${view === 'month' ? 'active' : ''}`}
-                        onClick={() => setView('month')}
-                    >
-                        Month
-                    </button>
+                        <button
+                            className={`calendar-view-btn ${view === 'month' ? 'active' : ''}`}
+                            onClick={() => setView('month')}
+                        >
+                            Month
+                        </button>
+                    </span>
                 </div>
             </div>
 
