@@ -179,13 +179,17 @@ export function optionalTimestamp(value, field) {
 }
 
 export function requireSlotList(value, field, slotMinutes, max = 400) {
-    const list = requireArray(value, field);
+    if (value === undefined || value === null) return [];
 
-    if (list.length > max) {
+    if (!Array.isArray(value)) {
+        throw new ValidationError(`${field} must be a list`);
+    }
+
+    if (value.length > max) {
         throw new ValidationError(`${field} cannot contain more than ${max} slots`);
     }
 
-    const parsed = list.map(entry => {
+    const parsed = value.map(entry => {
         const iso = requireTimestamp(entry, field);
 
         if (Date.parse(iso) % SLOT_ALIGNMENT_MS !== 0) {
