@@ -321,3 +321,38 @@ CREATE TABLE IF NOT EXISTS meetings (
 );
 
 CREATE INDEX IF NOT EXISTS meetings_workspace_start_idx ON meetings (workspace_id, starts_at);
+
+-- colour normalisation
+UPDATE users SET cursor_color = lower(cursor_color) WHERE cursor_color <> lower(cursor_color);
+UPDATE categories SET color = lower(color) WHERE color <> lower(color);
+UPDATE tabs SET color = lower(color) WHERE color <> lower(color);
+UPDATE tab_groups SET color = lower(color) WHERE color <> lower(color);
+UPDATE tags SET color = lower(color) WHERE color <> lower(color);
+UPDATE notation_groups SET color = lower(color) WHERE color IS NOT NULL AND color <> lower(color);
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_cursor_color_check;
+ALTER TABLE users ADD CONSTRAINT users_cursor_color_check
+    CHECK (cursor_color ~ '^#[0-9a-f]{6}$') NOT VALID;
+
+ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_color_check;
+ALTER TABLE categories ADD CONSTRAINT categories_color_check
+    CHECK (color ~ '^#[0-9a-f]{6}$') NOT VALID;
+
+ALTER TABLE tabs DROP CONSTRAINT IF EXISTS tabs_color_check;
+ALTER TABLE tabs ADD CONSTRAINT tabs_color_check
+    CHECK (color ~ '^#[0-9a-f]{6}$') NOT VALID;
+
+ALTER TABLE tab_groups DROP CONSTRAINT IF EXISTS tab_groups_color_check;
+ALTER TABLE tab_groups ADD CONSTRAINT tab_groups_color_check
+    CHECK (color ~ '^#[0-9a-f]{6}$') NOT VALID;
+
+ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_color_check;
+ALTER TABLE tags ADD CONSTRAINT tags_color_check
+    CHECK (color ~ '^#[0-9a-f]{6}$') NOT VALID;
+
+ALTER TABLE notation_groups DROP CONSTRAINT IF EXISTS notation_groups_color_check;
+ALTER TABLE notation_groups ADD CONSTRAINT notation_groups_color_check
+    CHECK (color IS NULL OR color ~ '^#[0-9a-f]{6}$') NOT VALID;
+
+-- saved palette columns
+ALTER TABLE users ADD COLUMN IF NOT EXISTS palette jsonb NOT NULL DEFAULT '[]'::jsonb;

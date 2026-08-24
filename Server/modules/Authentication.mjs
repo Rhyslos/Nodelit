@@ -2,7 +2,7 @@
 import crypto from 'crypto';
 import { promisify } from 'node:util';
 import db, { SCRYPT_OPTIONS } from '../database/Database.mjs';
-import { requirePassword, requireText, optionalColor, optionalTheme } from './Validation.mjs';
+import { requirePassword, requireText, optionalColor, optionalTheme, optionalPalette } from './Validation.mjs';
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -215,7 +215,8 @@ class Authentication {
                     ? undefined
                     : requireText(req.body.displayName, 'displayName', 80),
                 cursorColor: optionalColor(req.body?.cursorColor, 'cursorColor'),
-                theme: optionalTheme(req.body?.theme, 'theme')
+                theme: optionalTheme(req.body?.theme, 'theme'),
+                palette: optionalPalette(req.body?.palette, 'palette')
             };
 
             const user = await db.updateProfile(req.user.id, changes);

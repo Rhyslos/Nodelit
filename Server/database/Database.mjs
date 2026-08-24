@@ -50,7 +50,8 @@ const USER_SELECT = `
     display_name AS "displayName",
     role,
     cursor_color AS "cursorColor",
-    theme
+    theme,
+    palette
 `;
 
 const WORKSPACE_SELECT = `
@@ -664,6 +665,11 @@ class Database {
         if (changes.theme !== undefined) {
             assignments.push(`theme = $${assignments.length + 1}::jsonb`);
             values.push(JSON.stringify(changes.theme));
+        }
+
+        if (changes.palette !== undefined) {
+            assignments.push(`palette = $${assignments.length + 1}::jsonb`);
+            values.push(JSON.stringify(changes.palette));
         }
 
         if (assignments.length === 0) return this.getUserByID(userID);

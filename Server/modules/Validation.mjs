@@ -1,6 +1,8 @@
 // configuration constants
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,80}$/;
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+const SHORT_HEX_PATTERN = /^#[0-9a-fA-F]{3}$/;
+const MAX_PALETTE_COLORS = 12;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BATCH_SIZE = 200;
 const MAX_SUBTASKS = 50;
@@ -73,11 +75,38 @@ export function optionalText(value, field, maxLength = 200) {
 export function optionalColor(value, field) {
     if (value === undefined || value === null || value === '') return undefined;
 
-    if (typeof value !== 'string' || !HEX_COLOR_PATTERN.test(value)) {
+    if (typeof value !== 'string') {
         throw new ValidationError(`${field} must be a hex colour such as #c8502a`);
     }
 
-    return value;
+    let hex = value.trim();
+    if (!hex.startsWith('#')) hex = `#${hex}`;
+
+    if (SHORT_HEX_PATTERN.test(hex)) {
+        hex = `#${hex.slice(1).split('').map(part => part + part).join('')}`;
+    }
+
+    if (!HEX_COLOR_PATTERN.test(hex)) {
+        throw new ValidationError(`${field} must be a hex colour such as #c8502a`);
+    }
+
+    return hex.toLowerCase();
+}
+
+export function optionalPalette(value, field = 'palette') {
+    if (value === undefined || value === null) return undefined;
+
+    if (!Array.isArray(value)) {
+        throw new ValidationError(`${field} must be a list of hex colours`);
+    }
+
+    if (value.length > MAX_PALETTE_COLORS) {
+        throw new ValidationError(`${field} cannot hold more than ${MAX_PALETTE_COLORS} colours`);
+    }
+
+    const parsed = value.map(entry => requireColor(entry, field));
+
+    return [...new Set(parsed)];
 }
 
 export function optionalDate(value, field) {
