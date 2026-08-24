@@ -1,6 +1,16 @@
 // configuration constants
 export const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
+export const PALETTE = [
+    '#c8502a', '#e07a3f', '#e6a817', '#7ab648', '#16a085', '#4a90d9',
+    '#6c8ebf', '#5b6bbf', '#9b59b6', '#e84393', '#7a6a58', '#3f4650'
+];
+
+export const PASTEL_PALETTE = [
+    '#ffb3b3', '#ffd0a8', '#fff0a8', '#b8f0c8', '#a8e6e0', '#b3d8ff',
+    '#c3ccf5', '#e8b3ff', '#ffb3d9', '#e6d9c7', '#d8dde3', '#ffffff'
+];
+
 // utility functions
 export function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
