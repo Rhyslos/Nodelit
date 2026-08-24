@@ -1,6 +1,6 @@
 // component imports
 import { useState, useEffect, useRef } from 'react';
-import { CircleDot, Triangle, Plus, X } from 'lucide-react';
+import { CircleDot, Triangle, Plus, X, Copy, Check } from 'lucide-react';
 import ColorWheel from './ColorWheel';
 import ColorHexGrid from './ColorHexGrid';
 import {
@@ -17,6 +17,7 @@ import {
 const SHAPE_STORAGE_KEY = 'nodelit:pickershape';
 const MODE_STORAGE_KEY = 'nodelit:pickermode';
 const COMMIT_DELAY = 260;
+const COPY_FEEDBACK = 1200;
 const RGB_CHANNELS = [
     { key: 'r', label: 'R' },
     { key: 'g', label: 'G' },
@@ -57,12 +58,14 @@ export default function ColorPicker({
     const [shape, setShape] = useState(() => readPreference(SHAPE_STORAGE_KEY, ['circle', 'triangle'], 'circle'));
     const [hsv, setHsv] = useState(() => rgbToHsv(hexToRgb(value)));
     const [hexDraft, setHexDraft] = useState(() => normalizeHex(value) ?? '#000000');
+    const [copied, setCopied] = useState(null);
 
     // sync references
     const lastEmitted = useRef(normalizeHex(value) ?? '#000000');
     const commitRef = useRef(null);
     const commitHandler = useRef(onCommit);
     commitHandler.current = onCommit;
+    const copyRef = useRef(null);
 
     // lifecycle functions
     useEffect(() => {
@@ -77,6 +80,7 @@ export default function ColorPicker({
     useEffect(() => {
         return () => {
             if (commitRef.current) clearTimeout(commitRef.current);
+            if (copyRef.current) clearTimeout(copyRef.current);
         };
     }, []);
 
@@ -119,6 +123,15 @@ export default function ColorPicker({
         emitRgb(rgb);
     }
 
+    function copyValue(text, key) {
+        navigator.clipboard?.writeText(text).catch(() => undefined);
+
+        setCopied(key);
+
+        if (copyRef.current) clearTimeout(copyRef.current);
+        copyRef.current = setTimeout(() => setCopied(null), COPY_FEEDBACK);
+    }
+
     function handleMode(next) {
         setMode(next);
         persistPreference(MODE_STORAGE_KEY, next);
@@ -134,7 +147,7 @@ export default function ColorPicker({
     const rgb = hexToRgb(hex);
 
     return (
-        <div className={`color-picker ${mode === 'grid' ? 'is-grid' : ''}`}>
+        <div className="color-picker">
             <div className="color-picker-head">
                 <div className="color-picker-modes">
                     <button
@@ -239,39 +252,67 @@ export default function ColorPicker({
             )}
 
             <div className="color-picker-readout">
-                <span
-                    className="color-picker-preview"
-                    style={{ background: hex, color: readableTextOn(hex) }}
-                >
-                    Aa
-                </span>
+                <div className="color-picker-line">
+                    <span
+                        className="color-picker-preview"
+                        style={{ background: hex, color: readableTextOn(hex) }}
+                    >
+                        Aa
+                    </span>
 
-                <label className="color-field color-field--hex">
-                    <span className="color-field-label">Hex</span>
-                    <input
-                        className="color-field-input"
-                        value={hexDraft}
-                        maxLength={7}
-                        spellCheck={false}
-                        onChange={event => handleHexInput(event.target.value)}
-                        onBlur={commitHexDraft}
-                        onKeyDown={event => { if (event.key === 'Enter') commitHexDraft(); }}
-                    />
-                </label>
-
-                {RGB_CHANNELS.map(channel => (
-                    <label className="color-field" key={channel.key}>
-                        <span className="color-field-label">{channel.label}</span>
+                    <label className="color-field color-field--hex">
+                        <span className="color-field-label">Hex</span>
                         <input
-                            type="number"
                             className="color-field-input"
-                            min={0}
-                            max={255}
-                            value={rgb[channel.key]}
-                            onChange={event => handleRgbChannel(channel.key, event.target.value)}
+                            value={hexDraft}
+                            maxLength={7}
+                            spellCheck={false}
+                            onChange={event => handleHexInput(event.target.value)}
+                            onBlur={commitHexDraft}
+                            onKeyDown={event => { if (event.key === 'Enter') commitHexDraft(); }}
                         />
                     </label>
-                ))}
+
+                    <button
+                        type="button"
+                        className="color-copy"
+                        title="Copy hex"
+                        aria-label="Copy hex"
+                        onClick={() => copyValue(hex, 'hex')}
+                    >
+                        {copied === 'hex'
+                            ? <Check size={13} strokeWidth={2.5} />
+                            : <Copy size={13} strokeWidth={2} />}
+                    </button>
+                </div>
+
+                <div className="color-picker-line">
+                    {RGB_CHANNELS.map(channel => (
+                        <label className="color-field color-field--channel" key={channel.key}>
+                            <span className="color-field-label">{channel.label}</span>
+                            <input
+                                type="number"
+                                className="color-field-input"
+                                min={0}
+                                max={255}
+                                value={rgb[channel.key]}
+                                onChange={event => handleRgbChannel(channel.key, event.target.value)}
+                            />
+                        </label>
+                    ))}
+
+                    <button
+                        type="button"
+                        className="color-copy"
+                        title="Copy RGB"
+                        aria-label="Copy RGB"
+                        onClick={() => copyValue(`rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`, 'rgb')}
+                    >
+                        {copied === 'rgb'
+                            ? <Check size={13} strokeWidth={2.5} />
+                            : <Copy size={13} strokeWidth={2} />}
+                    </button>
+                </div>
             </div>
 
             {onClear && (

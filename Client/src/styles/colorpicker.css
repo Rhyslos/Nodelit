@@ -3,8 +3,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    width: 264px;
-    transition: width 0.15s;
+    width: 424px;
     padding: 12px;
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -59,10 +58,6 @@
 .color-picker-shape.active {
     background: var(--accent-lt);
     color: var(--accent);
-}
-
-.color-picker.is-grid {
-    width: 424px;
 }
 
 .color-picker-body {
@@ -240,10 +235,37 @@
 /* readout styles */
 .color-picker-readout {
     display: flex;
-    align-items: flex-end;
-    gap: 6px;
+    flex-direction: column;
+    gap: 8px;
     padding-top: 10px;
     border-top: 1px solid var(--border);
+}
+
+.color-picker-line {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.color-copy {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s;
+}
+
+.color-copy:hover {
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .color-picker-preview {
@@ -292,8 +314,13 @@
     outline: none;
 }
 
-.color-field:not(.color-field--hex) .color-field-input {
-    width: 42px;
+.color-field--channel {
+    flex: 1;
+    max-width: 92px;
+}
+
+.color-picker-line .color-copy {
+    margin-left: auto;
 }
 
 .color-field-input:focus {
