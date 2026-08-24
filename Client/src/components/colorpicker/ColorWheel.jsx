@@ -155,7 +155,7 @@ export default function ColorWheel({ hsv, shape, size = 220, onChange }) {
             <div
                 className="color-wheel-ring"
                 style={{
-                    background: `conic-gradient(from -90deg, ${HUE_STOPS})`,
+                    background: `conic-gradient(from 0deg, ${HUE_STOPS})`,
                     '--ring-inner': `${((size / 2 - ringWidth) / (size / 2)) * 100}%`
                 }}
                 onMouseDown={event => startDrag('hue', event)}
