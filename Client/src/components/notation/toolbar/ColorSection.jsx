@@ -1,12 +1,16 @@
 // import modules
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useEditorState } from '@tiptap/react';
 import { TEXT_COLORS, HIGHLIGHT_COLORS } from '../Constants';
-import ColorPicker from '../ColorPicker';
+import ColorPickerPopover from '../../colorpicker/ColorPickerPopover';
+import { usePalette } from '../../../hooks/usePalette';
 
 // component functions
 export default function ColorSection({ editor }) {
+    const { palette, saveColor, forgetColor } = usePalette();
+
     const [activePicker, setActivePicker] = useState(null);
+    const [anchorRect, setAnchorRect] = useState(null);
     const containerRef = useRef(null);
 
     const state = useEditorState({
@@ -18,23 +22,25 @@ export default function ColorSection({ editor }) {
         })
     });
 
-    useEffect(() => {
-        if (!activePicker) return undefined;
+    function togglePicker(kind, event) {
+        setAnchorRect(event.currentTarget.getBoundingClientRect());
+        setActivePicker(current => (current === kind ? null : kind));
+    }
 
-        function dismiss(event) {
-            if (containerRef.current?.contains(event.target)) return;
-            setActivePicker(null);
-        }
+    function applyHighlight(color) {
+        editor.chain().focus().toggleHighlight({ color }).run();
+    }
 
-        document.addEventListener('mousedown', dismiss);
-        return () => document.removeEventListener('mousedown', dismiss);
-    }, [activePicker]);
+    function clearHighlight() {
+        editor.chain().focus().unsetHighlight().run();
+        setActivePicker(null);
+    }
 
     return (
         <div className="subbar-section" ref={containerRef} style={{ position: 'relative' }}>
             <button
                 className={`tiptap-color-btn ${state.isHighlight ? 'active' : ''}`}
-                onClick={() => setActivePicker(current => (current === 'highlight' ? null : 'highlight'))}
+                onClick={event => togglePicker('highlight', event)}
                 title="Highlight"
             >
                 <span style={{ fontSize: '13px' }}>Highlight</span>
@@ -42,19 +48,22 @@ export default function ColorSection({ editor }) {
             </button>
 
             {activePicker === 'highlight' && (
-                <ColorPicker
-                    colors={HIGHLIGHT_COLORS}
-                    onSelect={color => {
-                        if (color === '#FFFFFF') editor.chain().focus().unsetHighlight().run();
-                        else editor.chain().focus().toggleHighlight({ color }).run();
-                        setActivePicker(null);
-                    }}
+                <ColorPickerPopover
+                    anchorRect={anchorRect}
+                    value={state.highlight ?? '#fff0a8'}
+                    presets={HIGHLIGHT_COLORS}
+                    saved={palette}
+                    onCommit={applyHighlight}
+                    onSave={saveColor}
+                    onForget={forgetColor}
+                    onClear={clearHighlight}
+                    onClose={() => setActivePicker(null)}
                 />
             )}
 
             <button
                 className="tiptap-color-btn"
-                onClick={() => setActivePicker(current => (current === 'text' ? null : 'text'))}
+                onClick={event => togglePicker('text', event)}
                 title="Text colour"
             >
                 <span style={{ fontSize: '13px', fontWeight: 'bold' }}>A</span>
@@ -62,18 +71,20 @@ export default function ColorSection({ editor }) {
             </button>
 
             {activePicker === 'text' && (
-                <ColorPicker
-                    colors={TEXT_COLORS}
-                    onSelect={color => {
-                        editor.chain().focus().setColor(color).run();
+                <ColorPickerPopover
+                    anchorRect={anchorRect}
+                    align="right"
+                    value={state.color ?? '#141414'}
+                    presets={TEXT_COLORS}
+                    saved={palette}
+                    onCommit={color => editor.chain().focus().setColor(color).run()}
+                    onSave={saveColor}
+                    onForget={forgetColor}
+                    onClear={() => {
+                        editor.chain().focus().unsetColor().run();
                         setActivePicker(null);
                     }}
-                    style={{
-                        right: 0,
-                        left: 'auto',
-                        transform: 'none',
-                        gridTemplateColumns: 'repeat(5, 1fr)'
-                    }}
+                    onClose={() => setActivePicker(null)}
                 />
             )}
         </div>

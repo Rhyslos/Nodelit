@@ -1,6 +1,6 @@
 // component imports
 import { useState, useEffect, useRef } from 'react';
-import { CircleDot, Triangle } from 'lucide-react';
+import { CircleDot, Triangle, Plus, X } from 'lucide-react';
 import ColorWheel from './ColorWheel';
 import ColorHexGrid from './ColorHexGrid';
 import {
@@ -16,6 +16,7 @@ import {
 // configuration constants
 const SHAPE_STORAGE_KEY = 'nodelit:pickershape';
 const MODE_STORAGE_KEY = 'nodelit:pickermode';
+const COMMIT_DELAY = 260;
 const RGB_CHANNELS = [
     { key: 'r', label: 'R' },
     { key: 'g', label: 'G' },
@@ -41,7 +42,16 @@ function persistPreference(key, value) {
 }
 
 // component functions
-export default function ColorPicker({ value, presets = [], onChange, onCommit }) {
+export default function ColorPicker({
+    value,
+    presets = [],
+    saved = [],
+    onChange,
+    onCommit,
+    onSave,
+    onForget,
+    onClear
+}) {
     // state variables
     const [mode, setMode] = useState(() => readPreference(MODE_STORAGE_KEY, ['wheel', 'grid'], 'wheel'));
     const [shape, setShape] = useState(() => readPreference(SHAPE_STORAGE_KEY, ['circle', 'triangle'], 'circle'));
@@ -50,6 +60,9 @@ export default function ColorPicker({ value, presets = [], onChange, onCommit })
 
     // sync references
     const lastEmitted = useRef(normalizeHex(value) ?? '#000000');
+    const commitRef = useRef(null);
+    const commitHandler = useRef(onCommit);
+    commitHandler.current = onCommit;
 
     // lifecycle functions
     useEffect(() => {
@@ -61,7 +74,20 @@ export default function ColorPicker({ value, presets = [], onChange, onCommit })
         setHexDraft(incoming);
     }, [value]);
 
+    useEffect(() => {
+        return () => {
+            if (commitRef.current) clearTimeout(commitRef.current);
+        };
+    }, []);
+
     // mutation functions
+    function scheduleCommit(hex) {
+        if (!commitHandler.current) return;
+
+        if (commitRef.current) clearTimeout(commitRef.current);
+        commitRef.current = setTimeout(() => commitHandler.current?.(hex), COMMIT_DELAY);
+    }
+
     function emit(nextHsv) {
         const hex = hsvToHex(nextHsv);
 
@@ -69,6 +95,7 @@ export default function ColorPicker({ value, presets = [], onChange, onCommit })
         setHsv(nextHsv);
         setHexDraft(hex);
         onChange?.(hex);
+        scheduleCommit(hex);
     }
 
     function emitRgb(rgb) {
@@ -175,6 +202,42 @@ export default function ColorPicker({ value, presets = [], onChange, onCommit })
                 </div>
             )}
 
+            {onSave && (
+                <div className="color-picker-saved">
+                    {saved.map(entry => (
+                        <span className="color-picker-slot" key={entry}>
+                            <button
+                                type="button"
+                                className={`color-picker-preset ${entry.toLowerCase() === hex ? 'selected' : ''}`}
+                                style={{ background: entry }}
+                                title={entry}
+                                onClick={() => handleHexInput(entry)}
+                            />
+
+                            <button
+                                type="button"
+                                className="color-picker-forget"
+                                title="Remove from saved"
+                                aria-label="Remove from saved"
+                                onClick={() => onForget?.(entry)}
+                            >
+                                <X size={8} strokeWidth={3} />
+                            </button>
+                        </span>
+                    ))}
+
+                    <button
+                        type="button"
+                        className="color-picker-save"
+                        title="Save this colour"
+                        aria-label="Save this colour"
+                        onClick={() => onSave(hex)}
+                    >
+                        <Plus size={12} strokeWidth={2.5} />
+                    </button>
+                </div>
+            )}
+
             <div className="color-picker-readout">
                 <span
                     className="color-picker-preview"
@@ -211,10 +274,10 @@ export default function ColorPicker({ value, presets = [], onChange, onCommit })
                 ))}
             </div>
 
-            {onCommit && (
+            {onClear && (
                 <div className="color-picker-actions">
-                    <button type="button" className="color-picker-apply" onClick={() => onCommit(hex)}>
-                        Use colour
+                    <button type="button" className="color-picker-clear" onClick={onClear}>
+                        No colour
                     </button>
                 </div>
             )}

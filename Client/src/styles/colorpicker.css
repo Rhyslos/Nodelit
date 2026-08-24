@@ -307,3 +307,116 @@
     font-size: 12px;
     cursor: pointer;
 }
+
+/* popover styles */
+.color-picker-popover {
+    position: fixed;
+    z-index: 10000;
+    animation: kanbanPop 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.color-picker-popover .color-picker {
+    box-shadow: 0 8px 32px var(--shadow);
+}
+
+/* saved palette styles */
+.color-picker-saved {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.color-picker-slot {
+    position: relative;
+    display: flex;
+    width: 20px;
+    height: 20px;
+}
+
+.color-picker-forget {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s, color 0.12s;
+}
+
+.color-picker-slot:hover .color-picker-forget {
+    opacity: 1;
+}
+
+.color-picker-forget:hover {
+    color: var(--accent);
+}
+
+.color-picker-save {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px dashed var(--border);
+    border-radius: 50%;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s;
+}
+
+.color-picker-save:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.color-picker-clear {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.color-picker-clear:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* call site styles */
+.tag-color-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tag-manager-swatch {
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.modal-color-hint {
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+}

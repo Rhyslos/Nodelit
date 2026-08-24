@@ -3,13 +3,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, Globe, Users, Lock } from 'lucide-react';
 import { api } from '../../lib/api';
+import { PALETTE } from '../../lib/color';
+import { usePalette } from '../../hooks/usePalette';
+import ColorPicker from '../colorpicker/ColorPicker';
+import ColorPickerPopover from '../colorpicker/ColorPickerPopover';
 
 // configuration constants
-const PRESET_COLORS = ['#c8502a', '#4a90d9', '#7ab648', '#e6a817', '#9b59b6', '#e84393', '#16a085'];
 const BOARD_REFRESH_EVENT = 'nodelit:board-refresh';
 const PUBLIC_SCOPE = 'public';
 const ACTIVE_TAB_STORAGE_PREFIX = 'nodelit:activetab:';
-const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 // utility functions
 function buildSections(tags, tabs, tabGroups) {
@@ -96,6 +98,8 @@ function scopeBody(key) {
 
 // component functions
 export default function TagManager({ workspaceID, onClose }) {
+    const { palette, saveColor, forgetColor } = usePalette();
+
     // state variables
     const [tags, setTags] = useState([]);
     const [tabs, setTabs] = useState([]);
@@ -103,8 +107,8 @@ export default function TagManager({ workspaceID, onClose }) {
     const [scope, setScope] = useState(PUBLIC_SCOPE);
     const [loading, setLoading] = useState(true);
     const [name, setName] = useState('');
-    const [color, setColor] = useState(PRESET_COLORS[0]);
-    const [hexDraft, setHexDraft] = useState(PRESET_COLORS[0]);
+    const [color, setColor] = useState(PALETTE[0]);
+    const [rowPicker, setRowPicker] = useState(null);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
 
@@ -133,16 +137,6 @@ export default function TagManager({ workspaceID, onClose }) {
         window.dispatchEvent(new Event(BOARD_REFRESH_EVENT));
     }
 
-    function pickColor(value) {
-        setColor(value);
-        setHexDraft(value);
-    }
-
-    function commitHexDraft() {
-        if (HEX_PATTERN.test(hexDraft)) setColor(hexDraft.toLowerCase());
-        else setHexDraft(color);
-    }
-
     async function handleCreate(e) {
         e.preventDefault();
         setError('');
@@ -165,7 +159,7 @@ export default function TagManager({ workspaceID, onClose }) {
     }
 
     async function handleRecolor(tag, nextColor) {
-        if (!HEX_PATTERN.test(nextColor) || nextColor === tag.color) return;
+        if (nextColor === tag.color) return;
 
         try {
             const updated = await api(`/api/kanban/tags/${tag.id}`, {
@@ -264,12 +258,13 @@ export default function TagManager({ workspaceID, onClose }) {
                     ))}
                 </select>
 
-                <input
-                    type="color"
-                    className="tag-color-input"
-                    value={tag.color}
-                    onChange={e => handleRecolor(tag, e.target.value)}
+                <button
+                    type="button"
+                    className="tag-manager-swatch"
+                    style={{ background: tag.color }}
                     title="Change colour"
+                    aria-label="Change colour"
+                    onClick={e => setRowPicker({ id: tag.id, color: tag.color, rect: e.currentTarget.getBoundingClientRect() })}
                 />
 
                 <button
@@ -331,37 +326,16 @@ export default function TagManager({ workspaceID, onClose }) {
                         </select>
                     </div>
 
-                    <div className="tag-color-row">
+                    <div className="tag-color-block">
                         <span className="tag-color-label">Colour</span>
 
-                        {PRESET_COLORS.map(preset => (
-                            <button
-                                key={preset}
-                                type="button"
-                                className={`tag-manager-dot ${color === preset ? 'selected' : ''}`}
-                                style={{ background: preset }}
-                                onClick={() => pickColor(preset)}
-                                aria-label={`Use colour ${preset}`}
-                            />
-                        ))}
-
-                        <input
-                            type="color"
-                            className="tag-color-input"
+                        <ColorPicker
                             value={color}
-                            onChange={e => pickColor(e.target.value)}
-                            title="Pick any colour"
-                        />
-
-                        <input
-                            type="text"
-                            className="tag-color-hex"
-                            value={hexDraft}
-                            maxLength={7}
-                            spellCheck={false}
-                            onChange={e => setHexDraft(e.target.value)}
-                            onBlur={commitHexDraft}
-                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitHexDraft(); } }}
+                            presets={PALETTE}
+                            saved={palette}
+                            onChange={setColor}
+                            onSave={saveColor}
+                            onForget={forgetColor}
                         />
                     </div>
 
@@ -393,6 +367,21 @@ export default function TagManager({ workspaceID, onClose }) {
                 <div className="modal-actions">
                     <button className="modal-cancel" onClick={onClose}>Done</button>
                 </div>
+
+                {rowPicker && (
+                    <ColorPickerPopover
+                        anchorRect={rowPicker.rect}
+                        align="right"
+                        value={rowPicker.color}
+                        presets={PALETTE}
+                        saved={palette}
+                        onChange={next => setRowPicker(current => ({ ...current, color: next }))}
+                        onCommit={next => handleRecolor({ id: rowPicker.id, color: rowPicker.color }, next)}
+                        onSave={saveColor}
+                        onForget={forgetColor}
+                        onClose={() => setRowPicker(null)}
+                    />
+                )}
             </div>
         </div>,
         document.body

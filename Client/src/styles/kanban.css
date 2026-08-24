@@ -142,113 +142,6 @@
 }
 
 /* colour picker styles */
-.kanban-tab-color-picker {
-    position: fixed;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 8px 28px var(--shadow);
-    z-index: 10000;
-    animation: kanbanPop 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.kanban-tab-color-swatch {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    border: 2px solid transparent;
-    cursor: pointer;
-    transition: transform 0.12s, border-color 0.12s;
-}
-
-.kanban-tab-color-swatch:hover {
-    transform: scale(1.15);
-}
-
-.kanban-tab-color-swatch.selected {
-    border-color: var(--ink);
-    transform: scale(1.15);
-}
-
-.kanban-tab-color-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 22px;
-}
-
-.kanban-tab-color-row--custom {
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
-}
-
-.kanban-tab-color-slot {
-    position: relative;
-    display: flex;
-    width: 22px;
-    height: 22px;
-}
-
-.kanban-tab-color-remove {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    padding: 0;
-    border: 1px solid var(--border);
-    border-radius: 50%;
-    background: var(--panel);
-    color: var(--muted);
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.12s, color 0.12s;
-}
-
-.kanban-tab-color-slot:hover .kanban-tab-color-remove {
-    opacity: 1;
-}
-
-.kanban-tab-color-remove:hover {
-    color: var(--accent);
-}
-
-.kanban-tab-color-add {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: 1px dashed var(--border);
-    border-radius: 50%;
-    background: none;
-    color: var(--muted);
-    cursor: pointer;
-    transition: border-color 0.12s, color 0.12s;
-}
-
-.kanban-tab-color-add:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-}
-
-.kanban-tab-color-input {
-    position: absolute;
-    width: 0;
-    height: 0;
-    padding: 0;
-    border: none;
-    opacity: 0;
-    pointer-events: none;
-}
 
 @keyframes kanbanPop {
     from { opacity: 0; transform: translateY(-4px) scale(0.96); }
@@ -1195,7 +1088,6 @@
     .kanban-modal,
     .kanban-modal-overlay,
     .kanban-context-menu,
-    .kanban-tab-color-picker,
     .animated-removal,
     .kanban-insertion-indicator,
     .kanban-list-insertion-indicator {

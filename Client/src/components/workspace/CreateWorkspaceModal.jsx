@@ -1,16 +1,20 @@
 // component imports
 import { useState } from 'react';
+import { PALETTE } from '../../lib/color';
+import { usePalette } from '../../hooks/usePalette';
+import ColorPickerPopover from '../colorpicker/ColorPickerPopover';
 
 // configuration constants
-const PRESET_COLORS = ['#c8502a', '#4a90d9', '#7ab648', '#e6a817', '#9b59b6', '#e84393'];
-
 // component functions
 export default function CreateWorkspaceModal({ categories, onConfirm, onClose, onCreateCategory }) {
+    const { palette, saveColor, forgetColor } = usePalette();
+
     // state variables
     const [name, setName] = useState('');
     const [categoryID, setCategoryID] = useState('');
     const [newCatName, setNewCatName] = useState('');
-    const [newCatColor, setNewCatColor] = useState(PRESET_COLORS[0]);
+    const [newCatColor, setNewCatColor] = useState(PALETTE[0]);
+    const [colorRect, setColorRect] = useState(null);
     const [showNewCat, setShowNewCat] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -101,16 +105,15 @@ export default function CreateWorkspaceModal({ categories, onConfirm, onClose, o
                             />
 
                             <div className="modal-colors">
-                                {PRESET_COLORS.map(color => (
-                                    <button
-                                        key={color}
-                                        type="button"
-                                        className={`modal-color-dot ${newCatColor === color ? 'selected' : ''}`}
-                                        style={{ background: color }}
-                                        onClick={() => setNewCatColor(color)}
-                                        aria-label={`Use colour ${color}`}
-                                    />
-                                ))}
+                                <button
+                                    type="button"
+                                    className="modal-color-dot selected"
+                                    style={{ background: newCatColor }}
+                                    title="Choose a colour"
+                                    aria-label="Choose a colour"
+                                    onClick={e => setColorRect(e.currentTarget.getBoundingClientRect())}
+                                />
+                                <span className="modal-color-hint">{newCatColor}</span>
                             </div>
 
                             <button type="button" className="modal-create-cat-btn" onClick={handleCreateCategory}>
@@ -120,6 +123,19 @@ export default function CreateWorkspaceModal({ categories, onConfirm, onClose, o
                     )}
 
                     {error && <p className="modal-error">{error}</p>}
+
+                    {colorRect && (
+                        <ColorPickerPopover
+                            anchorRect={colorRect}
+                            value={newCatColor}
+                            presets={PALETTE}
+                            saved={palette}
+                            onChange={setNewCatColor}
+                            onSave={saveColor}
+                            onForget={forgetColor}
+                            onClose={() => setColorRect(null)}
+                        />
+                    )}
 
                     <div className="modal-actions">
                         <button type="button" className="modal-cancel" onClick={onClose}>Cancel</button>

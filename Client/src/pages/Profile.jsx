@@ -3,6 +3,9 @@ import { useState } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { THEME_KEYS, THEME_LABELS, THEME_PRESETS, resolveTheme } from '../contexts/ThemeContext';
+import { PALETTE } from '../lib/color';
+import { usePalette } from '../hooks/usePalette';
+import ColorPickerPopover from '../components/colorpicker/ColorPickerPopover';
 
 // configuration constants
 const MODES = [
@@ -11,13 +14,13 @@ const MODES = [
     { value: 'custom', label: 'Custom', hint: 'Pick every colour yourself' }
 ];
 
-const CURSOR_PRESETS = ['#c8502a', '#4a90d9', '#7ab648', '#e6a817', '#9b59b6', '#e84393', '#16a085'];
-
 // component functions
 export default function Profile() {
     const { user, updateUser } = useAuth();
+    const { palette, saveColor, forgetColor } = usePalette();
 
     // state variables
+    const [picker, setPicker] = useState(null);
     const [displayName, setDisplayName] = useState(user?.displayName ?? '');
     const [cursorColor, setCursorColor] = useState(user?.cursorColor ?? '#c8502a');
     const [mode, setMode] = useState(user?.theme?.mode ?? 'default');
@@ -131,24 +134,20 @@ export default function Profile() {
                             <label>Cursor colour</label>
 
                             <div className="profile-color-row">
-                                {CURSOR_PRESETS.map(preset => (
-                                    <button
-                                        key={preset}
-                                        type="button"
-                                        className={`profile-swatch ${cursorColor === preset ? 'selected' : ''}`}
-                                        style={{ background: preset }}
-                                        onClick={() => setCursorColor(preset)}
-                                        aria-label={`Use ${preset}`}
-                                    />
-                                ))}
-
-                                <input
-                                    type="color"
-                                    className="tag-color-input"
-                                    value={cursorColor}
-                                    onChange={e => setCursorColor(e.target.value)}
-                                    title="Pick any colour"
+                                <button
+                                    type="button"
+                                    className="profile-swatch selected"
+                                    style={{ background: cursorColor }}
+                                    title="Choose a colour"
+                                    aria-label="Choose a colour"
+                                    onClick={e => setPicker({
+                                        kind: 'cursor',
+                                        value: cursorColor,
+                                        rect: e.currentTarget.getBoundingClientRect()
+                                    })}
                                 />
+
+                                <span className="profile-custom-hex">{cursorColor}</span>
                             </div>
                         </div>
 
@@ -180,11 +179,18 @@ export default function Profile() {
                             <div className="profile-custom-row" key={key}>
                                 <span className="profile-custom-label">{THEME_LABELS[key]}</span>
 
-                                <input
-                                    type="color"
-                                    className="tag-color-input"
-                                    value={custom[key]}
-                                    onChange={e => handleCustomColor(key, e.target.value)}
+                                <button
+                                    type="button"
+                                    className="profile-swatch"
+                                    style={{ background: custom[key] }}
+                                    title={`Choose ${THEME_LABELS[key]}`}
+                                    aria-label={`Choose ${THEME_LABELS[key]}`}
+                                    onClick={e => setPicker({
+                                        kind: 'theme',
+                                        key,
+                                        value: custom[key],
+                                        rect: e.currentTarget.getBoundingClientRect()
+                                    })}
                                 />
 
                                 <span className="profile-custom-hex">{custom[key]}</span>
@@ -244,6 +250,26 @@ export default function Profile() {
                     </form>
                 </section>
             </div>
+
+            {picker && (
+                <ColorPickerPopover
+                    anchorRect={picker.rect}
+                    value={picker.value}
+                    presets={PALETTE}
+                    saved={palette}
+                    onChange={next => {
+                        setPicker(current => ({ ...current, value: next }));
+                        if (picker.kind === 'cursor') setCursorColor(next);
+                        else setCustom(current => ({ ...current, [picker.key]: next }));
+                    }}
+                    onCommit={next => {
+                        if (picker.kind === 'theme') handleCustomColor(picker.key, next);
+                    }}
+                    onSave={saveColor}
+                    onForget={forgetColor}
+                    onClose={() => setPicker(null)}
+                />
+            )}
         </div>
     );
 }
