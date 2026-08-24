@@ -1,13 +1,15 @@
 // component imports
 import { useState, useRef, useEffect, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, ListFilter } from 'lucide-react';
+import TabVisibilityMenu from './TabVisibilityMenu';
 import TabContextMenu from './TabContextMenu';
 import ConfirmModal from './ConfirmModal';
 import { useTabDrag, buildTabSlots } from '../../hooks/useTabDrag';
 
 // configuration constants
 const GROUP_STORAGE_PREFIX = 'nodelit:tabgroups:';
+const HIDDEN_STORAGE_PREFIX = 'nodelit:hiddentabs:';
 
 const PRESET_COLORS = [
     { color: '#ffb3b3', label: 'Red' },
@@ -28,6 +30,27 @@ function readCollapsedGroups(workspaceID) {
         return new Set(stored ? JSON.parse(stored) : []);
     } catch {
         return new Set();
+    }
+}
+
+function readHiddenTabs(workspaceID) {
+    if (!workspaceID) return new Set();
+
+    try {
+        const stored = localStorage.getItem(`${HIDDEN_STORAGE_PREFIX}${workspaceID}`);
+        return new Set(stored ? JSON.parse(stored) : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function persistHiddenTabs(workspaceID, tabIDs) {
+    if (!workspaceID) return;
+
+    try {
+        localStorage.setItem(`${HIDDEN_STORAGE_PREFIX}${workspaceID}`, JSON.stringify([...tabIDs]));
+    } catch {
+        return;
     }
 }
 
@@ -59,6 +82,9 @@ export default function KanbanTabs({
 }) {
     // state variables
     const [collapsedGroups, setCollapsedGroups] = useState(() => readCollapsedGroups(workspaceID));
+    const [hiddenTabs, setHiddenTabs] = useState(() => readHiddenTabs(workspaceID));
+    const [revealAll, setRevealAll] = useState(false);
+    const [visibilityRect, setVisibilityRect] = useState(null);
     const [editingId, setEditingId] = useState(null);
     const [editingColor, setEditingColor] = useState(null);
     const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
@@ -70,9 +96,15 @@ export default function KanbanTabs({
     const nameRefs = useRef({});
     const colorBtnRefs = useRef({});
     const groupElements = useRef({});
+    const visibilityBtnRef = useRef(null);
 
     // derived variables
-    const slots = buildTabSlots(tabs, tabGroups);
+    const visibleTabs = revealAll
+        ? tabs
+        : tabs.filter(tab => !hiddenTabs.has(tab.id) || tab.id === activeTabId);
+    const hiddenCount = tabs.filter(tab => hiddenTabs.has(tab.id)).length;
+
+    const slots = buildTabSlots(visibleTabs, tabGroups);
 
     const {
         visibleSlots,
@@ -83,11 +115,13 @@ export default function KanbanTabs({
         registerClone,
         startDrag,
         wasDragging
-    } = useTabDrag({ slots, collapsedGroups, onReorder });
+    } = useTabDrag({ slots, allTabs: tabs, collapsedGroups, onReorder });
 
     // lifecycle functions
     useEffect(() => {
         setCollapsedGroups(readCollapsedGroups(workspaceID));
+        setHiddenTabs(readHiddenTabs(workspaceID));
+        setRevealAll(false);
     }, [workspaceID]);
 
     useEffect(() => {
@@ -117,6 +151,43 @@ export default function KanbanTabs({
             window.removeEventListener('resize', handleClose);
         };
     }, [editingColor]);
+
+    // visibility handlers
+    function commitHidden(next) {
+        setHiddenTabs(next);
+        persistHiddenTabs(workspaceID, next);
+    }
+
+    function toggleTabVisibility(tabID) {
+        const next = new Set(hiddenTabs);
+
+        if (next.has(tabID)) next.delete(tabID);
+        else next.add(tabID);
+
+        commitHidden(next);
+    }
+
+    function toggleGroupVisibility(groupID) {
+        const members = tabs.filter(tab => tab.groupID === groupID);
+        const allHidden = members.every(tab => hiddenTabs.has(tab.id));
+        const next = new Set(hiddenTabs);
+
+        for (const tab of members) {
+            if (allHidden) next.delete(tab.id);
+            else next.add(tab.id);
+        }
+
+        commitHidden(next);
+    }
+
+    function showAllTabs() {
+        commitHidden(new Set());
+        setRevealAll(false);
+    }
+
+    function openVisibilityMenu() {
+        setVisibilityRect(visibilityRect ? null : visibilityBtnRef.current.getBoundingClientRect());
+    }
 
     // group handlers
     function toggleGroup(groupID) {
@@ -278,7 +349,11 @@ export default function KanbanTabs({
         return (
             <div
                 ref={el => registerTab(tab.id, el)}
-                className={`kanban-tab ${activeTabId === tab.id ? 'active' : ''}`}
+                className={[
+                    'kanban-tab',
+                    activeTabId === tab.id ? 'active' : '',
+                    hiddenTabs.has(tab.id) ? 'is-revealed' : ''
+                ].filter(Boolean).join(' ')}
                 onMouseDown={e => handleTabMouseDown(e, tab)}
                 onClick={() => {
                     if (wasDragging() || editingId === tab.id) return;
@@ -421,7 +496,49 @@ export default function KanbanTabs({
                 <button className="kanban-tab-add-btn" onClick={() => onAdd()} title="New tab">
                     +
                 </button>
+
+                <div className="kanban-tabs-tools">
+                    {hiddenCount > 0 && !revealAll && (
+                        <span className="kanban-tabs-hidden-count">{hiddenCount} hidden</span>
+                    )}
+
+                    <button
+                        type="button"
+                        className={`kanban-tabs-tool ${revealAll ? 'active' : ''}`}
+                        title={revealAll ? 'Back to your tabs' : 'Reveal every tab'}
+                        aria-label={revealAll ? 'Back to your tabs' : 'Reveal every tab'}
+                        onClick={() => setRevealAll(open => !open)}
+                    >
+                        {revealAll
+                            ? <EyeOff size={14} strokeWidth={2} />
+                            : <Eye size={14} strokeWidth={2} />}
+                    </button>
+
+                    <button
+                        ref={visibilityBtnRef}
+                        type="button"
+                        className={`kanban-tabs-tool ${visibilityRect ? 'active' : ''}`}
+                        title="Choose visible tabs"
+                        aria-label="Choose visible tabs"
+                        onClick={openVisibilityMenu}
+                    >
+                        <ListFilter size={14} strokeWidth={2} />
+                    </button>
+                </div>
             </div>
+
+            {visibilityRect && (
+                <TabVisibilityMenu
+                    anchorRect={visibilityRect}
+                    tabs={tabs}
+                    tabGroups={tabGroups}
+                    hidden={hiddenTabs}
+                    onToggleTab={toggleTabVisibility}
+                    onToggleGroup={toggleGroupVisibility}
+                    onShowAll={showAllTabs}
+                    onClose={() => setVisibilityRect(null)}
+                />
+            )}
 
             {dragging && createPortal(
                 <div ref={registerClone} className="kanban-tab-drag-clone">

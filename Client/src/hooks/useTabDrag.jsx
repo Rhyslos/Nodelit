@@ -88,21 +88,6 @@ function flattenSlots(slots) {
     return order;
 }
 
-function originalPositions(slots) {
-    const positions = new Map();
-
-    for (const slot of slots) {
-        if (slot.type === 'tab') {
-            positions.set(slot.id, { groupID: null, tabOrder: slot.tab.tabOrder });
-            continue;
-        }
-
-        for (const tab of slot.tabs) positions.set(tab.id, { groupID: slot.id, tabOrder: tab.tabOrder });
-    }
-
-    return positions;
-}
-
 function indexFromPoint(elements, cx) {
     let index = elements.length;
 
@@ -122,7 +107,7 @@ function indexFromPoint(elements, cx) {
 }
 
 // hook functions
-export function useTabDrag({ slots, collapsedGroups, onReorder }) {
+export function useTabDrag({ slots, allTabs = [], collapsedGroups, onReorder }) {
     // state variables
     const [dragging, setDragging] = useState(null);
     const [dropTarget, setDropTarget] = useState(null);
@@ -140,11 +125,13 @@ export function useTabDrag({ slots, collapsedGroups, onReorder }) {
 
     // callback references
     const slotsRef = useRef(slots);
+    const allTabsRef = useRef(allTabs);
     const collapsedRef = useRef(collapsedGroups);
     const onReorderRef = useRef(onReorder);
 
     // lifecycle functions
     useEffect(() => { slotsRef.current = slots; }, [slots]);
+    useEffect(() => { allTabsRef.current = allTabs; }, [allTabs]);
     useEffect(() => { collapsedRef.current = collapsedGroups; }, [collapsedGroups]);
     useEffect(() => { onReorderRef.current = onReorder; }, [onReorder]);
 
@@ -200,14 +187,33 @@ export function useTabDrag({ slots, collapsedGroups, onReorder }) {
     function commit(current, target) {
         const working = removeEntity(slotsRef.current, current);
         const order = flattenSlots(insertEntity(working, target, current));
-        const positions = originalPositions(slotsRef.current);
 
-        const updates = order
-            .map((entry, index) => ({ id: entry.id, groupID: entry.groupID, tabOrder: index }))
+        const everyTab = allTabsRef.current;
+        const tabByID = new Map(everyTab.map(tab => [tab.id, tab]));
+        const movedGroup = new Map(order.map(entry => [entry.id, entry.groupID]));
+
+        const sequence = everyTab.map(tab => tab.id);
+        const slotIndexes = [];
+
+        sequence.forEach((id, index) => {
+            if (movedGroup.has(id)) slotIndexes.push(index);
+        });
+
+        const merged = [...sequence];
+        order.forEach((entry, index) => {
+            if (slotIndexes[index] !== undefined) merged[slotIndexes[index]] = entry.id;
+        });
+
+        const updates = merged
+            .map((id, index) => ({
+                id,
+                groupID: movedGroup.has(id) ? movedGroup.get(id) : (tabByID.get(id)?.groupID ?? null),
+                tabOrder: index
+            }))
             .filter(update => {
-                const original = positions.get(update.id);
+                const original = tabByID.get(update.id);
                 return !original
-                    || original.groupID !== update.groupID
+                    || (original.groupID ?? null) !== update.groupID
                     || original.tabOrder !== update.tabOrder;
             });
 
