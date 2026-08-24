@@ -385,6 +385,36 @@
 }
 
 /* booked meeting styles */
+.calendar-meeting-block-edit {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: auto;
+    transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.calendar-meeting-block:hover .calendar-meeting-block-edit {
+    opacity: 1;
+}
+
+.calendar-meeting-block-edit:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 .calendar-meeting-block {
     position: absolute;
     left: 3px;
@@ -506,6 +536,14 @@
     font-family: 'Noto Sans', sans-serif;
     font-size: 13px;
     cursor: pointer;
+}
+
+.calendar-booking-head {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
 }
 
 .calendar-booking {
@@ -634,6 +672,7 @@
     text-overflow: ellipsis;
 }
 
+.calendar-meeting-edit,
 .calendar-meeting-delete {
     border: none;
     background: none;
@@ -642,6 +681,7 @@
     padding: 4px;
 }
 
+.calendar-meeting-edit:hover,
 .calendar-meeting-delete:hover {
     color: var(--accent);
 }

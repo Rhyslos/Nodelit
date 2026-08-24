@@ -1,7 +1,7 @@
 // component imports
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, CalendarPlus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarPlus, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useKanban } from '../contexts/KanbanContext';
 import { useWorkspacePresence } from '../hooks/useWorkspacePresence';
@@ -154,6 +154,7 @@ export default function Calendar() {
         slotMinutes,
         setAvailability,
         createMeeting,
+        updateMeeting,
         deleteMeeting
     } = useCalendar(workspaceID, range.from, range.to, user?.id);
 
@@ -181,6 +182,23 @@ export default function Calendar() {
 
         return result;
     }, []);
+
+    const timeOptions = useMemo(() => {
+        const base = times.map(time =>
+            `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`);
+
+        if (draft?.time && !base.includes(draft.time)) return [...base, draft.time].sort();
+
+        return base;
+    }, [times, draft?.time]);
+
+    const durationOptions = useMemo(() => {
+        if (draft && !DURATIONS.includes(draft.minutes)) {
+            return [...DURATIONS, draft.minutes].sort((a, b) => a - b);
+        }
+
+        return DURATIONS;
+    }, [draft?.minutes]);
 
     const hours = useMemo(
         () => Array.from({ length: DAY_END_HOUR - DAY_START_HOUR }, (_, index) => DAY_START_HOUR + index),
@@ -364,15 +382,31 @@ export default function Calendar() {
         });
     }
 
+    function openEdit(meeting) {
+        const start = new Date(meeting.startsAt);
+        const end = new Date(meeting.endsAt);
+
+        setDraft({
+            id: meeting.id,
+            date: toDateValue(start),
+            time: toTimeValue(start),
+            minutes: Math.max(SLOT_MINUTES, Math.round((end.getTime() - start.getTime()) / 60000)),
+            title: meeting.title
+        });
+    }
+
     function handleBookMeeting() {
         const range = draftRange(draft);
         if (!range) return;
 
-        createMeeting({
+        const payload = {
             title: draft.title.trim() || 'Meeting',
             startsAt: range.start.toISOString(),
             endsAt: range.end.toISOString()
-        });
+        };
+
+        if (draft.id) updateMeeting(draft.id, payload);
+        else createMeeting(payload);
 
         setDraft(null);
     }
@@ -552,6 +586,19 @@ export default function Calendar() {
                         title={`${meeting.title} · ${formatRange(new Date(meeting.startsAt), new Date(meeting.endsAt))}`}
                     >
                         <span className="calendar-meeting-block-title">{meeting.title}</span>
+
+                        {canEdit && (
+                            <button
+                                type="button"
+                                className="calendar-meeting-block-edit"
+                                title="Edit meeting"
+                                aria-label="Edit meeting"
+                                onMouseDown={e => e.stopPropagation()}
+                                onClick={e => { e.stopPropagation(); openEdit(meeting); }}
+                            >
+                                <Pencil size={12} strokeWidth={2.5} />
+                            </button>
+                        )}
                     </div>
                 ))}
             </div>
@@ -715,6 +762,10 @@ export default function Calendar() {
 
             {draft && canEdit && (
                 <div className="calendar-booking">
+                    <span className="calendar-booking-head">
+                        {draft.id ? 'Edit meeting' : 'New meeting'}
+                    </span>
+
                     <div className="calendar-booking-fields">
                         <label className="calendar-field">
                             <span className="calendar-field-label">Date</span>
@@ -733,10 +784,9 @@ export default function Calendar() {
                                 value={draft.time}
                                 onChange={e => setDraft({ ...draft, time: e.target.value })}
                             >
-                                {times.map(time => {
-                                    const value = `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`;
-                                    return <option key={value} value={value}>{value}</option>;
-                                })}
+                                {timeOptions.map(value => (
+                                    <option key={value} value={value}>{value}</option>
+                                ))}
                             </select>
                         </label>
 
@@ -747,7 +797,7 @@ export default function Calendar() {
                                 value={draft.minutes}
                                 onChange={e => setDraft({ ...draft, minutes: Number(e.target.value) })}
                             >
-                                {DURATIONS.map(minutes => (
+                                {durationOptions.map(minutes => (
                                     <option key={minutes} value={minutes}>{formatDuration(minutes)}</option>
                                 ))}
                             </select>
@@ -770,7 +820,7 @@ export default function Calendar() {
                         </span>
 
                         <button className="calendar-booking-submit" onClick={handleBookMeeting}>
-                            Set meeting
+                            {draft.id ? 'Save changes' : 'Set meeting'}
                         </button>
 
                         <button className="calendar-booking-cancel" onClick={() => setDraft(null)}>
@@ -793,6 +843,17 @@ export default function Calendar() {
                             </span>
 
                             <span className="calendar-meeting-title">{meeting.title}</span>
+
+                            {canEdit && (
+                                <button
+                                    className="calendar-meeting-edit"
+                                    onClick={() => openEdit(meeting)}
+                                    aria-label="Edit meeting"
+                                    title="Edit meeting"
+                                >
+                                    <Pencil size={13} strokeWidth={2} />
+                                </button>
+                            )}
 
                             {canEdit && (
                                 <button

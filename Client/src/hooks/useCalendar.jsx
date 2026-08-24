@@ -145,6 +145,29 @@ export function useCalendar(workspaceID, rangeStart, rangeEnd, userID) {
         }
     }
 
+    async function updateMeeting(meetingID, fields) {
+        setMeetings(current => current
+            .map(meeting => meeting.id === meetingID ? { ...meeting, ...fields } : meeting)
+            .sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
+
+        try {
+            const meeting = await api(`/api/calendar/meetings/${meetingID}`, {
+                method: 'PUT',
+                body: fields
+            });
+
+            setMeetings(current => current
+                .map(entry => entry.id === meeting.id ? meeting : entry)
+                .sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
+
+            return meeting;
+        } catch (err) {
+            console.error('updateMeeting failed:', err);
+            refresh();
+            return null;
+        }
+    }
+
     async function deleteMeeting(meetingID) {
         setMeetings(current => current.filter(meeting => meeting.id !== meetingID));
 
@@ -167,6 +190,7 @@ export function useCalendar(workspaceID, rangeStart, rangeEnd, userID) {
         refresh,
         setAvailability,
         createMeeting,
+        updateMeeting,
         deleteMeeting
     };
 }
