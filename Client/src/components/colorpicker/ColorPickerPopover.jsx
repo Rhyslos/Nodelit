@@ -5,7 +5,7 @@ import ColorPicker from './ColorPicker';
 
 // configuration constants
 const MENU_MARGIN = 8;
-const MENU_WIDTH = 288;
+const FALLBACK_WIDTH = 288;
 
 // component functions
 export default function ColorPickerPopover({ anchorRect, align = 'left', onClose, ...pickerProps }) {
@@ -16,16 +16,18 @@ export default function ColorPickerPopover({ anchorRect, align = 'left', onClose
     const [pos, setPos] = useState({ top: 0, left: 0 });
 
     // layout functions
-    useLayoutEffect(() => {
+    function place() {
         if (!anchorRect) return;
 
-        const height = ref.current ? ref.current.getBoundingClientRect().height : 0;
+        const rect = ref.current ? ref.current.getBoundingClientRect() : null;
+        const height = rect ? rect.height : 0;
+        const width = rect && rect.width > 0 ? rect.width : FALLBACK_WIDTH;
 
-        let left = align === 'right' ? anchorRect.right - MENU_WIDTH : anchorRect.left;
+        let left = align === 'right' ? anchorRect.right - width : anchorRect.left;
         let top = anchorRect.bottom + 6;
 
-        if (left + MENU_WIDTH + MENU_MARGIN > window.innerWidth) {
-            left = window.innerWidth - MENU_WIDTH - MENU_MARGIN;
+        if (left + width + MENU_MARGIN > window.innerWidth) {
+            left = window.innerWidth - width - MENU_MARGIN;
         }
 
         if (top + height + MENU_MARGIN > window.innerHeight) {
@@ -33,6 +35,18 @@ export default function ColorPickerPopover({ anchorRect, align = 'left', onClose
         }
 
         setPos({ top, left: Math.max(MENU_MARGIN, left) });
+    }
+
+    useLayoutEffect(() => {
+        place();
+
+        const element = ref.current;
+        if (!element || typeof ResizeObserver === 'undefined') return;
+
+        const observer = new ResizeObserver(() => place());
+        observer.observe(element);
+
+        return () => observer.disconnect();
     }, [anchorRect, align]);
 
     // lifecycle functions

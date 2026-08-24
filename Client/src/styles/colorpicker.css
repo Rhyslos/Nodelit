@@ -4,6 +4,7 @@
     flex-direction: column;
     gap: 12px;
     width: 264px;
+    transition: width 0.15s;
     padding: 12px;
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -58,6 +59,10 @@
 .color-picker-shape.active {
     background: var(--accent-lt);
     color: var(--accent);
+}
+
+.color-picker.is-grid {
+    width: 424px;
 }
 
 .color-picker-body {
@@ -130,7 +135,7 @@
 .color-grid-cells {
     flex: 1;
     min-width: 0;
-    max-height: 190px;
+    max-height: 330px;
 }
 
 .color-grid-cell {
@@ -145,14 +150,18 @@
 }
 
 .color-grid-value {
-    display: flex;
-    align-items: center;
-    flex: 0 0 auto;
+    position: relative;
+    flex: 0 0 30px;
+    width: 30px;
 }
 
 .color-grid-value-input {
-    width: 150px;
-    transform: rotate(270deg);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 240px;
+    margin: 0;
+    transform: translate(-50%, -50%) rotate(270deg);
     accent-color: var(--accent);
     cursor: pointer;
 }

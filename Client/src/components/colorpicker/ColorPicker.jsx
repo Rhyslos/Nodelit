@@ -134,7 +134,7 @@ export default function ColorPicker({
     const rgb = hexToRgb(hex);
 
     return (
-        <div className="color-picker">
+        <div className={`color-picker ${mode === 'grid' ? 'is-grid' : ''}`}>
             <div className="color-picker-head">
                 <div className="color-picker-modes">
                     <button
