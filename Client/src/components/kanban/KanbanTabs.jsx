@@ -1,7 +1,7 @@
 // component imports
 import { useState, useRef, useEffect, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronRight, Eye, EyeOff, ListFilter } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, ListFilter, Plus, X } from 'lucide-react';
 import TabVisibilityMenu from './TabVisibilityMenu';
 import TabContextMenu from './TabContextMenu';
 import ConfirmModal from './ConfirmModal';
@@ -10,6 +10,9 @@ import { useTabDrag, buildTabSlots } from '../../hooks/useTabDrag';
 // configuration constants
 const GROUP_STORAGE_PREFIX = 'nodelit:tabgroups:';
 const HIDDEN_STORAGE_PREFIX = 'nodelit:hiddentabs:';
+const CUSTOM_STORAGE_PREFIX = 'nodelit:tabcolors:';
+const MAX_CUSTOM_COLORS = 7;
+const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 const PRESET_COLORS = [
     { color: '#ffb3b3', label: 'Red' },
@@ -30,6 +33,31 @@ function readCollapsedGroups(workspaceID) {
         return new Set(stored ? JSON.parse(stored) : []);
     } catch {
         return new Set();
+    }
+}
+
+function readCustomColors(workspaceID) {
+    if (!workspaceID) return [];
+
+    try {
+        const stored = localStorage.getItem(`${CUSTOM_STORAGE_PREFIX}${workspaceID}`);
+        const parsed = stored ? JSON.parse(stored) : [];
+
+        return Array.isArray(parsed)
+            ? parsed.filter(value => HEX_PATTERN.test(value)).slice(0, MAX_CUSTOM_COLORS)
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+function persistCustomColors(workspaceID, colors) {
+    if (!workspaceID) return;
+
+    try {
+        localStorage.setItem(`${CUSTOM_STORAGE_PREFIX}${workspaceID}`, JSON.stringify(colors));
+    } catch {
+        return;
     }
 }
 
@@ -85,6 +113,7 @@ export default function KanbanTabs({
     const [hiddenTabs, setHiddenTabs] = useState(() => readHiddenTabs(workspaceID));
     const [revealAll, setRevealAll] = useState(false);
     const [visibilityRect, setVisibilityRect] = useState(null);
+    const [customColors, setCustomColors] = useState(() => readCustomColors(workspaceID));
     const [editingId, setEditingId] = useState(null);
     const [editingColor, setEditingColor] = useState(null);
     const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
@@ -97,6 +126,8 @@ export default function KanbanTabs({
     const colorBtnRefs = useRef({});
     const groupElements = useRef({});
     const visibilityBtnRef = useRef(null);
+    const customInputRef = useRef(null);
+    const pendingCustomRef = useRef(null);
 
     // derived variables
     const visibleTabs = revealAll
@@ -121,8 +152,18 @@ export default function KanbanTabs({
     useEffect(() => {
         setCollapsedGroups(readCollapsedGroups(workspaceID));
         setHiddenTabs(readHiddenTabs(workspaceID));
+        setCustomColors(readCustomColors(workspaceID));
         setRevealAll(false);
     }, [workspaceID]);
+
+    useEffect(() => {
+        if (editingColor) return;
+
+        const pending = pendingCustomRef.current;
+        pendingCustomRef.current = null;
+
+        if (pending) addCustomColor(pending);
+    }, [editingColor]);
 
     useEffect(() => {
         const validIds = new Set([...tabs.map(t => t.id), ...tabGroups.map(g => g.id)]);
@@ -279,13 +320,42 @@ export default function KanbanTabs({
         setEditingColor(target);
     }
 
-    function handleColorChange(color) {
+    function addCustomColor(color) {
+        if (!HEX_PATTERN.test(color)) return;
+
+        setCustomColors(previous => {
+            const lower = color.toLowerCase();
+            if (previous.some(entry => entry.toLowerCase() === lower)) return previous;
+
+            const next = [...previous, lower].slice(-MAX_CUSTOM_COLORS);
+            persistCustomColors(workspaceID, next);
+
+            return next;
+        });
+    }
+
+    function removeCustomColor(color) {
+        setCustomColors(previous => {
+            const next = previous.filter(entry => entry !== color);
+            persistCustomColors(workspaceID, next);
+
+            return next;
+        });
+    }
+
+    function handleCustomInput(color) {
+        pendingCustomRef.current = color;
+        handleColorChange(color, true);
+    }
+
+    function handleColorChange(color, keepOpen = false) {
         if (!editingColor) return;
 
         if (editingColor.kind === 'group') onUpdateGroup(editingColor.id, { color });
         else onUpdate(editingColor.id, { color });
 
-        setEditingColor(null);
+        if (!keepOpen) setEditingColor(null);
+        else setEditingColor({ ...editingColor, color });
     }
 
     // drag handlers
@@ -568,15 +638,60 @@ export default function KanbanTabs({
                     style={{ top: pickerPos.top, left: pickerPos.left }}
                     onMouseDown={e => e.stopPropagation()}
                 >
-                    {PRESET_COLORS.map(({ color, label }) => (
-                        <button
-                            key={color}
-                            className={`kanban-tab-color-swatch ${pickerColor === color ? 'selected' : ''}`}
-                            style={{ background: color }}
-                            title={label}
-                            onClick={() => handleColorChange(color)}
+                    <div className="kanban-tab-color-row">
+                        {PRESET_COLORS.map(({ color, label }) => (
+                            <button
+                                key={color}
+                                className={`kanban-tab-color-swatch ${pickerColor === color ? 'selected' : ''}`}
+                                style={{ background: color }}
+                                title={label}
+                                onClick={() => handleColorChange(color)}
+                            />
+                        ))}
+                    </div>
+
+                    <div className="kanban-tab-color-row kanban-tab-color-row--custom">
+                        {customColors.map(color => (
+                            <span className="kanban-tab-color-slot" key={color}>
+                                <button
+                                    className={`kanban-tab-color-swatch ${pickerColor === color ? 'selected' : ''}`}
+                                    style={{ background: color }}
+                                    title={color}
+                                    onClick={() => handleColorChange(color)}
+                                />
+
+                                <button
+                                    className="kanban-tab-color-remove"
+                                    title="Remove colour"
+                                    aria-label="Remove colour"
+                                    onClick={() => removeCustomColor(color)}
+                                >
+                                    <X size={9} strokeWidth={3} />
+                                </button>
+                            </span>
+                        ))}
+
+                        {customColors.length < MAX_CUSTOM_COLORS && (
+                            <button
+                                className="kanban-tab-color-add"
+                                title="Add a colour"
+                                aria-label="Add a colour"
+                                onClick={() => customInputRef.current?.click()}
+                            >
+                                <Plus size={13} strokeWidth={2.5} />
+                            </button>
+                        )}
+
+                        <input
+                            ref={customInputRef}
+                            type="color"
+                            className="kanban-tab-color-input"
+                            value={pickerColor ?? '#b3d8ff'}
+                            onChange={e => handleCustomInput(e.target.value)}
+                            tabIndex={-1}
+                            aria-hidden="true"
                         />
-                    ))}
+                    </div>
                 </div>,
                 document.body
             )}
