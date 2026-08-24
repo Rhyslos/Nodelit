@@ -23,6 +23,9 @@ export default function ColorSection({ editor }) {
     });
 
     function togglePicker(kind, event) {
+        event.preventDefault();
+        event.stopPropagation();
+
         setAnchorRect(event.currentTarget.getBoundingClientRect());
         setActivePicker(current => (current === kind ? null : kind));
     }
@@ -40,7 +43,7 @@ export default function ColorSection({ editor }) {
         <div className="subbar-section" ref={containerRef} style={{ position: 'relative' }}>
             <button
                 className={`tiptap-color-btn ${state.isHighlight ? 'active' : ''}`}
-                onClick={event => togglePicker('highlight', event)}
+                onMouseDown={event => togglePicker('highlight', event)}
                 title="Highlight"
             >
                 <span style={{ fontSize: '13px' }}>Highlight</span>
@@ -63,7 +66,7 @@ export default function ColorSection({ editor }) {
 
             <button
                 className="tiptap-color-btn"
-                onClick={event => togglePicker('text', event)}
+                onMouseDown={event => togglePicker('text', event)}
                 title="Text colour"
             >
                 <span style={{ fontSize: '13px', fontWeight: 'bold' }}>A</span>
