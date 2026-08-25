@@ -74,6 +74,8 @@ export default function ColorPickerPopover({ anchorRect, align = 'left', onClose
         };
     }, [onClose]);
 
+    if (!anchorRect) return null;
+
     return createPortal(
         <div
             ref={ref}

@@ -3,17 +3,11 @@ import { createPortal } from 'react-dom';
 import { useNotationSidebar } from '../../hooks/useNotationSidebar';
 import ContextMenu, { ContextMenuItem, ContextMenuDivider, ContextMenuLabel } from './ContextMenu';
 import SidebarSearch from './SidebarSearch';
+import ColorPickerPopover from '../colorpicker/ColorPickerPopover';
+import { PASTEL_PALETTE } from '../../lib/color';
+import { usePalette } from '../../hooks/usePalette';
 
 // configuration constants
-const PRESET_COLORS = [
-    { color: '#ffb3b3', label: 'Red' },
-    { color: '#ffd0a8', label: 'Orange' },
-    { color: '#fff0a8', label: 'Yellow' },
-    { color: '#b8f0c8', label: 'Green' },
-    { color: '#b3d8ff', label: 'Blue' },
-    { color: '#ffb3d9', label: 'Pink' },
-    { color: '#e8b3ff', label: 'Magenta' }
-];
 
 // utility functions
 function selectContents(element) {
@@ -278,7 +272,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     const [selectedGroupID, setSelectedGroupID] = useState(null);
 
     const [colorPickerID, setColorPickerID] = useState(null);
-    const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
+    const [pickerRect, setPickerRect] = useState(null);
 
     const [contextTarget, setContextTarget] = useState(null);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -334,6 +328,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
     // data derived
     const groupIDs = new Set(groups.map(group => group.id));
+    const activeGroupColor = groups.find(group => group.id === colorPickerID)?.color ?? null;
     const needle = term.toLowerCase();
 
     function pageMatches(page) {
@@ -370,8 +365,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
             return;
         }
 
-        const rect = element.getBoundingClientRect();
-        setPickerPos({ top: rect.bottom + 8, left: rect.left });
+        setPickerRect(element.getBoundingClientRect());
         setColorPickerID(groupID);
     }
 
@@ -513,6 +507,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     }, []);
 
     const closeColorPicker = useCallback(() => setColorPickerID(null), []);
+    const { palette, saveColor, forgetColor } = usePalette();
 
     const closeContext = useCallback(() => {
         setContextTarget(null);
@@ -834,26 +829,17 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                 document.body
             )}
 
-            {colorPickerID && createPortal(
-                <div
-                    className="kanban-tab-color-picker"
-                    style={{ top: pickerPos.top, left: pickerPos.left }}
-                    onMouseDown={event => event.stopPropagation()}
-                >
-                    {PRESET_COLORS.map(({ color, label }) => (
-                        <button
-                            key={color}
-                            className="kanban-tab-color-swatch"
-                            style={{ background: color }}
-                            title={label}
-                            onClick={() => {
-                                colorGroup(colorPickerID, color);
-                                setColorPickerID(null);
-                            }}
-                        />
-                    ))}
-                </div>,
-                document.body
+            {colorPickerID && (
+                <ColorPickerPopover
+                    anchorRect={pickerRect}
+                    value={activeGroupColor ?? PASTEL_PALETTE[0]}
+                    presets={PASTEL_PALETTE}
+                    saved={palette}
+                    onCommit={color => colorGroup(colorPickerID, color)}
+                    onSave={saveColor}
+                    onForget={forgetColor}
+                    onClose={() => setColorPickerID(null)}
+                />
             )}
         </>
     );
