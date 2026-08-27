@@ -23,11 +23,29 @@ export const NotationImage = Node.create({
 
     addAttributes() {
         return {
-            imageID: { default: null },
-            width: { default: null },
-            align: { default: 'center' },
-            caption: { default: '' },
-            ratio: { default: null }
+            imageID: {
+                default: null,
+                parseHTML: element => element.getAttribute('data-image-id'),
+                renderHTML: attributes => ({ 'data-image-id': attributes.imageID })
+            },
+            width: {
+                default: null,
+                parseHTML: element => {
+                    const value = Number.parseInt(element.getAttribute('data-width'), 10);
+                    return Number.isInteger(value) ? value : null;
+                },
+                renderHTML: attributes => (attributes.width ? { 'data-width': attributes.width } : {})
+            },
+            align: {
+                default: 'center',
+                parseHTML: element => element.getAttribute('data-align') ?? 'center',
+                renderHTML: attributes => ({ 'data-align': attributes.align })
+            },
+            ratio: {
+                default: null,
+                parseHTML: element => element.getAttribute('data-ratio'),
+                renderHTML: attributes => (attributes.ratio ? { 'data-ratio': attributes.ratio } : {})
+            }
         };
     },
 
@@ -36,7 +54,7 @@ export const NotationImage = Node.create({
     },
 
     renderHTML({ HTMLAttributes }) {
-        return ['figure', mergeAttributes({ 'data-image-id': HTMLAttributes.imageID })];
+        return ['figure', mergeAttributes(HTMLAttributes)];
     },
 
     addNodeView() {

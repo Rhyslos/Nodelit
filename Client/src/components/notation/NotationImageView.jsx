@@ -13,7 +13,7 @@ const ALIGNMENTS = [
 
 // component functions
 export default function NotationImageView({ node, updateAttributes, deleteNode, editor }) {
-    const { imageID, width, align, caption, ratio } = node.attrs;
+    const { imageID, width, align, ratio } = node.attrs;
 
     // state variables
     const [drag, setDrag] = useState(null);
@@ -65,7 +65,7 @@ export default function NotationImageView({ node, updateAttributes, deleteNode, 
             <figure ref={figureRef} style={{ width: width ? `${width}px` : undefined }}>
                 <img
                     src={imageURL(imageID)}
-                    alt={caption || 'Notation image'}
+                    alt=""
                     draggable={false}
                     style={{ aspectRatio: ratio || undefined }}
                 />
@@ -101,15 +101,6 @@ export default function NotationImageView({ node, updateAttributes, deleteNode, 
                     />
                 )}
 
-                <figcaption contentEditable={false}>
-                    <input
-                        className="notation-image-caption"
-                        value={caption ?? ''}
-                        readOnly={!editor.isEditable}
-                        placeholder={editor.isEditable ? 'Add a caption…' : ''}
-                        onChange={event => updateAttributes({ caption: event.target.value })}
-                    />
-                </figcaption>
             </figure>
         </NodeViewWrapper>
     );
