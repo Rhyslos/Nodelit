@@ -14,6 +14,7 @@ import { FontSize } from './FontSize';
 import { Indent } from './Indent';
 import { LinkBehaviour } from './LinkBehaviour';
 import { StickyFloats } from './StickyFloats';
+import { NotationImage } from './NotationImage';
 
 // extension configuration
 export const editorExtensions = [
@@ -37,6 +38,7 @@ export const editorExtensions = [
     Indent,
     LinkBehaviour,
     StickyFloats,
+    NotationImage,
     Highlight.configure({ multicolor: true }),
     Subscript,
     Superscript,

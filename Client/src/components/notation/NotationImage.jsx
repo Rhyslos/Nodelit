@@ -17,7 +17,7 @@ export const NotationImage = Node.create({
     atom: true,
     draggable: true,
 
-    addOptions() {
+    addStorage() {
         return { upload: null, onError: null };
     },
 
@@ -71,8 +71,8 @@ export const NotationImage = Node.create({
     addProseMirrorPlugins() {
         const extension = this;
 
-        async function ingest(view, files, position) {
-            const upload = extension.options.upload;
+        async function ingest(files, position) {
+            const { upload, onError } = extension.storage;
             if (!upload) return;
 
             for (const file of files) {
@@ -80,15 +80,18 @@ export const NotationImage = Node.create({
                     const image = await upload(file);
                     if (!image) continue;
 
-                    const node = view.state.schema.nodes[extension.name].create({
-                        imageID: image.id,
-                        ratio: `${image.width} / ${image.height}`
-                    });
+                    const editor = extension.editor;
+                    if (!editor || editor.isDestroyed) return;
 
-                    const at = position ?? view.state.selection.from;
-                    view.dispatch(view.state.tr.insert(at, node));
+                    const size = editor.state.doc.content.size;
+                    const at = Math.min(Math.max(position ?? editor.state.selection.from, 0), size);
+
+                    editor.chain().insertContentAt(at, {
+                        type: extension.name,
+                        attrs: { imageID: image.id, ratio: `${image.width} / ${image.height}` }
+                    }).run();
                 } catch (error) {
-                    extension.options.onError?.(error.message);
+                    onError?.(error.message);
                 }
             }
         }
@@ -104,7 +107,7 @@ export const NotationImage = Node.create({
                         if (files.length === 0) return false;
 
                         event.preventDefault();
-                        ingest(view, files, null);
+                        ingest(files, null);
 
                         return true;
                     },
@@ -118,7 +121,7 @@ export const NotationImage = Node.create({
                         event.preventDefault();
 
                         const point = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                        ingest(view, files, point?.pos ?? null);
+                        ingest(files, point?.pos ?? null);
 
                         return true;
                     }

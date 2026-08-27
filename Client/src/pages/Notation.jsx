@@ -8,7 +8,6 @@ import { useNotation } from '../contexts/NotationContext';
 import { useNotationDocument } from '../hooks/useNotationDocument';
 import { useNotationSidebar } from '../hooks/useNotationSidebar';
 import { editorExtensions } from '../components/notation/EditorExtensions';
-import { NotationImage } from '../components/notation/NotationImage';
 import { uploadImage } from '../lib/image';
 import NotationSidebar from '../components/notation/NotationSidebar';
 import EditorContextMenu from '../components/notation/EditorContextMenu';
@@ -60,7 +59,6 @@ export default function Notation() {
         extensions: session
             ? [
                 ...editorExtensions,
-                NotationImage.configure({ upload: handleUpload, onError: setActionError }),
                 Collaboration.configure({ document: session.ydoc }),
                 CollaborationCaret.configure({
                     provider: session.provider,
@@ -72,12 +70,19 @@ export default function Notation() {
                 })
             ]
             : editorExtensions
-    }, [session, handleUpload]);
+    }, [session]);
 
     // lifecycle functions
     useEffect(() => {
         editor?.setEditable(canEdit && !reading);
     }, [editor, canEdit, reading]);
+
+    useEffect(() => {
+        if (!editor?.storage?.notationImage) return;
+
+        editor.storage.notationImage.upload = handleUpload;
+        editor.storage.notationImage.onError = setActionError;
+    }, [editor, handleUpload, setActionError]);
 
     const activePage = notationData.pages.find(page => page.id === activePageID) ?? null;
     const layout = activePage?.layout ?? 'pageless';
