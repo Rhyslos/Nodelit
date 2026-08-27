@@ -203,7 +203,13 @@ export default function createAdminRouter(authz) {
             const data = await db.exportAll();
             const stamp = new Date().toISOString().slice(0, 10);
 
-            await audit(req, { action: 'data.exported' });
+            const counts = Object.fromEntries(
+                Object.entries(data)
+                    .filter(([, value]) => Array.isArray(value))
+                    .map(([key, value]) => [key, value.length])
+            );
+
+            await audit(req, { action: 'data.exported', detail: { version: data.version, counts } });
 
             res.setHeader('Content-Disposition', `attachment; filename="nodelit-export-${stamp}.json"`);
             res.json(data);

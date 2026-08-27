@@ -883,50 +883,59 @@ class Database {
 
     async exportAll() {
         const [
-            users,
             categories,
             workspaces,
             memberships,
+            tabGroups,
             tabs,
             columns,
             lists,
             tasks,
             tags,
+            meetings,
+            availability,
             notationGroups,
-            notationPages
+            notationPages,
+            notationDocuments
         ] = await Promise.all([
-            query(`SELECT id, username, display_name AS "displayName", role,
-                          cursor_color AS "cursorColor", created_at AS "createdAt",
-                          deleted_at AS "deletedAt"
-                   FROM users ORDER BY created_at`),
             query('SELECT id, user_id AS "userID", name, color FROM categories ORDER BY id'),
             query(`SELECT id, name, owner_id AS "ownerID", category_id AS "categoryID",
                           created_at AS "createdAt", deleted_at AS "deletedAt"
                    FROM workspaces ORDER BY created_at`),
             query('SELECT workspace_id AS "workspaceID", user_id AS "userID", role FROM memberships ORDER BY workspace_id'),
+            query(`SELECT ${TAB_GROUP_SELECT} FROM tab_groups g ORDER BY g.workspace_id, g.name`),
             query(`SELECT ${TAB_SELECT} FROM tabs t ORDER BY t.workspace_id, t.tab_order`),
             query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} ORDER BY c.tab_id, c.column_index`),
             query(`SELECT ${LIST_SELECT} ${LIST_FROM} ORDER BY l.column_id, l.list_order`),
             query(`SELECT ${TASK_SELECT} ${TASK_FROM} ORDER BY k.list_id, k.task_order`),
             query(`SELECT ${TAG_SELECT} FROM tags tg ORDER BY tg.workspace_id, tg.name`),
+            query(`SELECT ${MEETING_SELECT} FROM meetings mt ORDER BY mt.workspace_id, mt.starts_at`),
+            query(`SELECT a.workspace_id AS "workspaceID", a.user_id AS "userID",
+                          to_char(a.slot_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "slotStart"
+                   FROM availability_slots a ORDER BY a.workspace_id, a.slot_start`),
             query(`SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g ORDER BY g.workspace_id, g.group_order`),
-            query(`SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p ORDER BY p.workspace_id, p.page_order`)
+            query(`SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p ORDER BY p.workspace_id, p.page_order`),
+            query(`SELECT page_id AS "pageID", content, updated_at AS "updatedAt"
+                   FROM notation_documents ORDER BY page_id`)
         ]);
 
         return {
             exportedAt: new Date().toISOString(),
-            version: 1,
-            users: users.rows,
+            version: 2,
             categories: categories.rows,
             workspaces: workspaces.rows,
             memberships: memberships.rows,
+            tabGroups: tabGroups.rows,
             tabs: tabs.rows,
             columns: columns.rows,
             lists: lists.rows,
             tasks: tasks.rows,
             tags: tags.rows,
+            meetings: meetings.rows,
+            availability: availability.rows,
             notationGroups: notationGroups.rows,
-            notationPages: notationPages.rows
+            notationPages: notationPages.rows,
+            notationDocuments: notationDocuments.rows
         };
     }
 
