@@ -1583,3 +1583,30 @@
     color: var(--muted);
     text-align: center;
 }
+
+/* nesting styles */
+.notation-sidebar-group .notation-sidebar-group {
+    border-left: 1px solid var(--border);
+    margin-left: 4px;
+}
+
+.notation-drop-indicator.inside {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: auto;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    background: var(--accent-lt);
+    pointer-events: none;
+}
+
+.notation-modal--move {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 340px;
+    z-index: 1000;
+}

@@ -6,8 +6,12 @@ import SidebarSearch from './SidebarSearch';
 import ColorPickerPopover from '../colorpicker/ColorPickerPopover';
 import { PASTEL_PALETTE } from '../../lib/color';
 import { usePalette } from '../../hooks/usePalette';
+import { descendantsOf, groupDepthOf } from '../../hooks/useNotationSidebar';
+import GroupTreePicker from './GroupTreePicker';
 
 // configuration constants
+const MAX_GROUP_DEPTH = 3;
+const INDENT_STEP = 12;
 
 // utility functions
 function selectContents(element) {
@@ -186,6 +190,7 @@ function GroupHeader({
                 onStartEditing(group.id);
             }}
         >
+            {dropPosition === 'inside' && <div className="notation-drop-indicator inside" />}
             {dropPosition === 'before' && <div className="notation-drop-indicator" />}
 
             <div className="notation-sidebar-group-pill" style={group.color ? { background: group.color } : undefined}>
@@ -247,6 +252,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         createGroup,
         renameGroup,
         colorGroup,
+        moveGroup,
         createPage,
         renamePage,
         deletePage,
@@ -272,6 +278,8 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     const [selectedGroupID, setSelectedGroupID] = useState(null);
 
     const [colorPickerID, setColorPickerID] = useState(null);
+    const [moveTarget, setMoveTarget] = useState(null);
+    const [moveDestination, setMoveDestination] = useState(null);
     const [pickerRect, setPickerRect] = useState(null);
 
     const [contextTarget, setContextTarget] = useState(null);
@@ -348,6 +356,77 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
     const visibleGroups = groups.filter(group =>
         groupMatches(group) || visiblePages.some(page => page.groupID === group.id));
+
+    // render functions
+                function renderGroup(group, depth) {
+                    const groupPages = visiblePages.filter(page => page.groupID === group.id);
+                    const isCollapsed = !isSearching && collapsedGroups.has(group.id);
+
+        return (
+                        <div
+                            key={group.id}
+                            className="notation-sidebar-group"
+                            style={depth > 0 ? { paddingLeft: INDENT_STEP } : undefined}
+                            onDragOver={handleDragOverGroup}
+                            onDrop={event => handleDropOnGroup(event, group.id, groupPages)}
+                        >
+                            <GroupHeader
+                                group={group}
+                                isCollapsed={isCollapsed}
+                                canEdit={canEdit}
+                                canDrag={canEdit && !isSearching}
+                                isEditing={editingGroupID === group.id}
+                                onToggle={toggleGroup}
+                                onStartEditing={setEditingGroupID}
+                                onCommitName={renameGroup}
+                                onColorClick={handleColorClick}
+                                onAddPage={handleAddPage}
+                                onContextMenu={handleGroupContext}
+                                isDragged={draggedGroupID === group.id}
+                                dropPosition={groupDropID === group.id ? groupDropPosition : null}
+                                onDragStart={handleGroupDragStart}
+                                onDragOver={handleGroupDragOver}
+                                onDragLeave={() => setGroupDropID(null)}
+                                onDrop={handleGroupDrop}
+                            />
+
+                            {!isCollapsed && (
+                                <div className="notation-sidebar-group-pages">
+                                    {groupPages.map(page => (
+                                        <PageRow
+                                            key={page.id}
+                                            page={page}
+                                            list={groupPages}
+                                            isActive={page.id === activePageID}
+                                            canEdit={canEdit}
+                                            canDrag={canEdit && !isSearching}
+                                            isEditing={editingPageID === page.id}
+                                            isDragged={draggedPageID === page.id}
+                                            dropPosition={dropTargetID === page.id ? dropPosition : null}
+                                            onSelect={onPageSelect}
+                                            onStartEditing={setEditingPageID}
+                                            onCommitTitle={renamePage}
+                                            onDragStart={handleDragStart}
+                                            onDragOver={handleDragOverPage}
+                                            onDragLeave={handleDragLeavePage}
+                                            onDrop={handleDropOnPage}
+                                            onContextMenu={handlePageContext}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+
+                            {!isCollapsed && renderGroups(group.id, depth + 1)}
+                        </div>
+                    );
+    }
+
+    function renderGroups(parentID, depth) {
+        return visibleGroups
+            .filter(group => (group.parentID ?? null) === parentID)
+            .sort((a, b) => a.groupOrder - b.groupOrder || a.id.localeCompare(b.id))
+            .map(group => renderGroup(group, depth));
+    }
 
     // group handlers
     function toggleGroup(groupID) {
@@ -443,8 +522,22 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
             return;
         }
 
+        if (descendantsOf(groups, draggedGroupID).has(targetGroupID)) {
+            setGroupDropID(null);
+            setGroupDropPosition(null);
+            return;
+        }
+
         const rect = event.currentTarget.getBoundingClientRect();
-        const position = event.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
+        const offset = event.clientY - rect.top;
+
+        let position = 'inside';
+        if (offset < rect.height * 0.25) position = 'before';
+        else if (offset > rect.height * 0.75) position = 'after';
+
+        if (position === 'inside' && groupDepthOf(groups, targetGroupID) >= MAX_GROUP_DEPTH) {
+            position = 'after';
+        }
 
         setGroupDropID(targetGroupID);
         setGroupDropPosition(position);
@@ -463,11 +556,25 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
         if (!dragged || dragged === targetGroupID) return;
 
-        const remaining = groups.filter(group => group.id !== dragged);
-        const anchor = remaining.findIndex(group => group.id === targetGroupID);
+        const target = groups.find(group => group.id === targetGroupID);
+        if (!target) return;
+
+        if (position === 'inside') {
+            const children = groups.filter(group => (group.parentID ?? null) === targetGroupID);
+            reorderGroups(dragged, targetGroupID, children.length);
+            return;
+        }
+
+        const parentID = target.parentID ?? null;
+
+        const siblings = groups
+            .filter(group => (group.parentID ?? null) === parentID && group.id !== dragged)
+            .sort((a, b) => a.groupOrder - b.groupOrder);
+
+        const anchor = siblings.findIndex(group => group.id === targetGroupID);
         if (anchor === -1) return;
 
-        reorderGroups(dragged, position === 'after' ? anchor + 1 : anchor);
+        reorderGroups(dragged, parentID, position === 'after' ? anchor + 1 : anchor);
     }
 
     function handleDropOnPage(event, targetPage, list) {
@@ -635,65 +742,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                     />
                 ))}
 
-                {visibleGroups.map(group => {
-                    const groupPages = visiblePages.filter(page => page.groupID === group.id);
-                    const isCollapsed = !isSearching && collapsedGroups.has(group.id);
-
-                    return (
-                        <div
-                            key={group.id}
-                            className="notation-sidebar-group"
-                            onDragOver={handleDragOverGroup}
-                            onDrop={event => handleDropOnGroup(event, group.id, groupPages)}
-                        >
-                            <GroupHeader
-                                group={group}
-                                isCollapsed={isCollapsed}
-                                canEdit={canEdit}
-                                canDrag={canEdit && !isSearching}
-                                isEditing={editingGroupID === group.id}
-                                onToggle={toggleGroup}
-                                onStartEditing={setEditingGroupID}
-                                onCommitName={renameGroup}
-                                onColorClick={handleColorClick}
-                                onAddPage={handleAddPage}
-                                onContextMenu={handleGroupContext}
-                                isDragged={draggedGroupID === group.id}
-                                dropPosition={groupDropID === group.id ? groupDropPosition : null}
-                                onDragStart={handleGroupDragStart}
-                                onDragOver={handleGroupDragOver}
-                                onDragLeave={() => setGroupDropID(null)}
-                                onDrop={handleGroupDrop}
-                            />
-
-                            {!isCollapsed && (
-                                <div className="notation-sidebar-group-pages">
-                                    {groupPages.map(page => (
-                                        <PageRow
-                                            key={page.id}
-                                            page={page}
-                                            list={groupPages}
-                                            isActive={page.id === activePageID}
-                                            canEdit={canEdit}
-                                            canDrag={canEdit && !isSearching}
-                                            isEditing={editingPageID === page.id}
-                                            isDragged={draggedPageID === page.id}
-                                            dropPosition={dropTargetID === page.id ? dropPosition : null}
-                                            onSelect={onPageSelect}
-                                            onStartEditing={setEditingPageID}
-                                            onCommitTitle={renamePage}
-                                            onDragStart={handleDragStart}
-                                            onDragOver={handleDragOverPage}
-                                            onDragLeave={handleDragLeavePage}
-                                            onDrop={handleDropOnPage}
-                                            onContextMenu={handlePageContext}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
+                {renderGroups(null, 0)}
 
                 {canEdit && (
                     <button
@@ -727,6 +776,16 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                             </ContextMenuItem>
 
                             <ContextMenuItem
+                                disabled={groupDepthOf(groups, contextTarget.entity.id) >= MAX_GROUP_DEPTH}
+                                onSelect={() => {
+                                    createGroup('New group', contextTarget.entity.id);
+                                    closeContext();
+                                }}
+                            >
+                                New subgroup
+                            </ContextMenuItem>
+
+                            <ContextMenuItem
                                 onSelect={() => {
                                     setPickerPos({ top: contextTarget.y, left: contextTarget.x });
                                     setColorPickerID(contextTarget.entity.id);
@@ -737,6 +796,15 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                             </ContextMenuItem>
                         </>
                     )}
+
+                    <ContextMenuItem
+                        onSelect={() => {
+                            setMoveTarget(contextTarget);
+                            closeContext();
+                        }}
+                    >
+                        Move to…
+                    </ContextMenuItem>
 
                     <ContextMenuDivider />
 
@@ -796,26 +864,11 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                         )}
 
                         {step === 'page' && (
-                            <div className="notation-modal-list">
-                                <button
-                                    className={`notation-list-item ${selectedGroupID === null ? 'selected' : ''}`}
-                                    onClick={() => setSelectedGroupID(null)}
-                                >
-                                    <span className="notation-modal-icon">📄</span>
-                                    <p className="notation-modal-label">Uncategorized</p>
-                                </button>
-
-                                {groups.map(group => (
-                                    <button
-                                        key={group.id}
-                                        className={`notation-list-item ${selectedGroupID === group.id ? 'selected' : ''}`}
-                                        onClick={() => setSelectedGroupID(group.id)}
-                                    >
-                                        <span className="notation-modal-icon">📁</span>
-                                        <p className="notation-modal-label">{group.name}</p>
-                                    </button>
-                                ))}
-                            </div>
+                            <GroupTreePicker
+                                groups={groups}
+                                value={selectedGroupID}
+                                onChange={setSelectedGroupID}
+                            />
                         )}
                     </div>
 
@@ -825,6 +878,42 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                             <button className="notation-btn-primary" onClick={handleNewPage}>Create page</button>
                         </div>
                     )}
+                </div>,
+                document.body
+            )}
+
+            {moveTarget && createPortal(
+                <div className="notation-modal notation-modal--move" onMouseDown={event => event.stopPropagation()}>
+                    <div className="notation-modal-header">
+                        <h3>Move {moveTarget.entity.title ?? moveTarget.entity.name}</h3>
+                        <button className="notation-modal-close" onClick={() => setMoveTarget(null)}>✕</button>
+                    </div>
+
+                    <div className="notation-modal-body">
+                        <GroupTreePicker
+                            groups={groups}
+                            value={moveDestination}
+                            onChange={setMoveDestination}
+                            disabledID={moveTarget.kind === 'group' ? moveTarget.entity.id : null}
+                        />
+                    </div>
+
+                    <div className="notation-modal-footer">
+                        <button className="notation-btn-secondary" onClick={() => setMoveTarget(null)}>Cancel</button>
+
+                        <button
+                            className="notation-btn-primary"
+                            onClick={() => {
+                                if (moveTarget.kind === 'group') moveGroup(moveTarget.entity.id, moveDestination);
+                                else reorderPages(moveTarget.entity.id, moveDestination, 0);
+
+                                setMoveTarget(null);
+                                setMoveDestination(null);
+                            }}
+                        >
+                            Move here
+                        </button>
+                    </div>
                 </div>,
                 document.body
             )}

@@ -12,6 +12,46 @@ function groupOf(page) {
     return page.groupID ?? null;
 }
 
+function parentOf(group) {
+    return group.parentID ?? null;
+}
+
+function groupsUnder(groups, parentID) {
+    return groups.filter(group => parentOf(group) === parentID).sort(byOrder('groupOrder'));
+}
+
+export function descendantsOf(groups, groupID) {
+    const marked = new Set([groupID]);
+    const queue = [groupID];
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+
+        for (const group of groups) {
+            if (parentOf(group) === current && !marked.has(group.id)) {
+                marked.add(group.id);
+                queue.push(group.id);
+            }
+        }
+    }
+
+    return marked;
+}
+
+export function groupDepthOf(groups, groupID) {
+    const byID = new Map(groups.map(group => [group.id, group]));
+
+    let depth = 0;
+    let cursor = groupID ? byID.get(groupID) : null;
+
+    while (cursor) {
+        depth += 1;
+        cursor = parentOf(cursor) ? byID.get(parentOf(cursor)) : null;
+    }
+
+    return depth;
+}
+
 function pagesInGroup(pages, groupID) {
     return pages.filter(page => groupOf(page) === groupID).sort(byOrder('pageOrder'));
 }
@@ -47,18 +87,38 @@ export function buildReorder(pages, draggedPageID, targetGroupID, targetIndex) {
     return updates;
 }
 
-export function buildGroupReorder(groups, draggedGroupID, targetIndex) {
+export function buildGroupReorder(groups, draggedGroupID, targetParentID, targetIndex) {
     const dragged = groups.find(group => group.id === draggedGroupID);
     if (!dragged) return null;
 
-    const ordered = groups.filter(group => group.id !== draggedGroupID);
-    const index = Math.max(0, Math.min(targetIndex, ordered.length));
+    const blocked = descendantsOf(groups, draggedGroupID);
+    if (targetParentID && blocked.has(targetParentID)) return null;
 
-    ordered.splice(index, 0, dragged);
+    const source = parentOf(dragged);
+    const target = targetParentID ?? null;
 
-    if (ordered.every((group, position) => group.groupOrder === position)) return [];
+    const targetList = groupsUnder(groups, target).filter(group => group.id !== draggedGroupID);
+    const index = Math.max(0, Math.min(targetIndex, targetList.length));
 
-    return ordered.map((group, position) => ({ id: group.id, groupOrder: position }));
+    targetList.splice(index, 0, dragged);
+
+    if (source === target && targetList.every((group, position) => group.groupOrder === position)) return [];
+
+    const updates = targetList.map((group, position) => ({
+        id: group.id,
+        parentID: target,
+        groupOrder: position
+    }));
+
+    if (source !== target) {
+        groupsUnder(groups, source)
+            .filter(group => group.id !== draggedGroupID)
+            .forEach((group, position) => {
+                updates.push({ id: group.id, parentID: source, groupOrder: position });
+            });
+    }
+
+    return updates;
 }
 
 // hook functions
@@ -96,11 +156,11 @@ export function useNotationSidebar() {
     }
 
     // mutation functions
-    async function createGroup(name = 'New group') {
+    async function createGroup(name = 'New group', parentID = null) {
         try {
             const group = await api('/api/notation/groups', {
                 method: 'POST',
-                body: { workspaceID, name }
+                body: { workspaceID, name, parentID }
             });
 
             setNotationData(prev => applyDelta(prev, { upsert: { groups: [group] } }));
@@ -137,12 +197,21 @@ export function useNotationSidebar() {
         await updateGroup(groupID, { color });
     }
 
+    async function moveGroup(groupID, parentID) {
+        const target = groups.find(group => group.id === groupID);
+        if (!target || parentOf(target) === (parentID ?? null)) return;
+
+        const siblings = groupsUnder(groups, parentID ?? null).filter(group => group.id !== groupID);
+
+        await updateGroup(groupID, { parentID: parentID ?? null, groupOrder: siblings.length });
+    }
+
     async function deleteGroup(groupID) {
         try {
             const result = await api(`/api/notation/groups/${groupID}`, { method: 'DELETE' });
 
             setNotationData(prev => applyDelta(prev, {
-                upsert: { pages: result.pages },
+                upsert: { pages: result.pages, groups: result.groups ?? [] },
                 remove: result.removed
             }));
 
@@ -215,8 +284,8 @@ export function useNotationSidebar() {
         }
     }
 
-    async function reorderGroups(draggedGroupID, targetIndex) {
-        const updates = buildGroupReorder(groups, draggedGroupID, targetIndex);
+    async function reorderGroups(draggedGroupID, targetParentID, targetIndex) {
+        const updates = buildGroupReorder(groups, draggedGroupID, targetParentID, targetIndex);
         if (!updates || updates.length === 0) return;
 
         setNotationData(prev => {
@@ -226,7 +295,7 @@ export function useNotationSidebar() {
                 ...prev,
                 groups: prev.groups.map(g => {
                     const update = moved.get(g.id);
-                    return update ? { ...g, groupOrder: update.groupOrder } : g;
+                    return update ? { ...g, parentID: update.parentID, groupOrder: update.groupOrder } : g;
                 })
             };
         });
@@ -279,6 +348,7 @@ export function useNotationSidebar() {
         createGroup,
         renameGroup,
         colorGroup,
+        moveGroup,
         deleteGroup,
         createPage,
         renamePage,
