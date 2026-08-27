@@ -1,5 +1,6 @@
 // page imports
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
@@ -17,6 +18,28 @@ import NotationSubbar from '../components/subbar/NotationSubbar';
 
 // configuration constants
 const DEFAULT_CURSOR = '#c8502a';
+const PAGE_STORAGE_PREFIX = 'nodelit:notationpage:';
+
+// utility functions
+function readStoredPage(workspaceID) {
+    if (!workspaceID) return null;
+
+    try {
+        return localStorage.getItem(`${PAGE_STORAGE_PREFIX}${workspaceID}`);
+    } catch {
+        return null;
+    }
+}
+
+function persistPage(workspaceID, pageID) {
+    if (!workspaceID || !pageID) return;
+
+    try {
+        localStorage.setItem(`${PAGE_STORAGE_PREFIX}${workspaceID}`, pageID);
+    } catch {
+        return;
+    }
+}
 
 // utility functions
 function renderCaret(user) {
@@ -41,8 +64,21 @@ export default function Notation() {
 
     // state variables
     const [activePageID, setActivePageID] = useState(null);
+    const [searchParams, setSearchParams] = useSearchParams();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [reading, setReading] = useState(false);
+
+    const selectPage = useCallback(pageID => {
+        setActivePageID(pageID);
+        persistPage(workspaceID, pageID);
+
+        const next = new URLSearchParams(searchParams);
+
+        if (pageID) next.set('page', pageID);
+        else next.delete('page');
+
+        setSearchParams(next, { replace: true });
+    }, [workspaceID, searchParams, setSearchParams]);
 
     const handleUpload = useCallback(
         file => uploadImage(workspaceID, file),
@@ -73,6 +109,29 @@ export default function Notation() {
     }, [session]);
 
     // lifecycle functions
+    useEffect(() => {
+        if (loading || notationData.pages.length === 0) return;
+
+        const exists = id => notationData.pages.some(page => page.id === id);
+
+        if (activePageID && exists(activePageID)) return;
+
+        const requested = searchParams.get('page');
+        if (requested && exists(requested)) {
+            setActivePageID(requested);
+            persistPage(workspaceID, requested);
+            return;
+        }
+
+        const remembered = readStoredPage(workspaceID);
+        if (remembered && exists(remembered)) {
+            setActivePageID(remembered);
+            return;
+        }
+
+        setActivePageID(notationData.pages[0].id);
+    }, [loading, notationData.pages, activePageID, searchParams, workspaceID]);
+
     useEffect(() => {
         editor?.setEditable(canEdit && !reading);
     }, [editor, canEdit, reading]);
@@ -139,7 +198,7 @@ export default function Notation() {
                 {sidebarOpen && (
                     <NotationSidebar
                         activePageID={activePageID}
-                        onPageSelect={setActivePageID}
+                        onPageSelect={selectPage}
                     />
                 )}
 

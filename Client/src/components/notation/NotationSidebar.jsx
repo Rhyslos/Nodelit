@@ -686,10 +686,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     // side effects
     useDismiss(Boolean(colorPickerID), closeColorPicker);
 
-    useEffect(() => {
-        if (loading || activePageID || pages.length === 0) return;
-        onPageSelect(pages[0].id);
-    }, [loading, pages, activePageID, onPageSelect]);
+
 
     useEffect(() => {
         if (loading || !activePageID) return;
