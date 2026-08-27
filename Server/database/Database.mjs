@@ -2176,6 +2176,60 @@ class Database {
         return row?.workspaceID ?? null;
     }
 
+    // notation image functions
+    async createNotationImage(workspaceID, userID, meta, bytes) {
+        return withTransaction(async client => {
+            const { rows } = await client.query(
+                `INSERT INTO notation_images (id, workspace_id, uploaded_by, mime, byte_size, width, height)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 RETURNING id, workspace_id AS "workspaceID", mime,
+                           byte_size AS "byteSize", width, height,
+                           created_at AS "createdAt"`,
+                [newID('image'), workspaceID, userID, meta.mime, bytes.length, meta.width, meta.height]
+            );
+
+            const image = rows[0];
+
+            await client.query(
+                'INSERT INTO notation_image_data (image_id, bytes) VALUES ($1, $2)',
+                [image.id, bytes]
+            );
+
+            return image;
+        });
+    }
+
+    async getNotationImage(imageID) {
+        return queryOne(
+            `SELECT id, workspace_id AS "workspaceID", mime, byte_size AS "byteSize",
+                    width, height, created_at AS "createdAt"
+             FROM notation_images WHERE id = $1`,
+            [imageID]
+        );
+    }
+
+    async getNotationImageBytes(imageID) {
+        const row = await queryOne(
+            `SELECT i.mime, d.bytes
+             FROM notation_image_data d
+             JOIN notation_images i ON i.id = d.image_id
+             WHERE d.image_id = $1`,
+            [imageID]
+        );
+
+        return row ?? null;
+    }
+
+    async getWorkspaceIDForNotationImage(imageID) {
+        const row = await queryOne('SELECT workspace_id AS "workspaceID" FROM notation_images WHERE id = $1', [imageID]);
+        return row?.workspaceID ?? null;
+    }
+
+    async deleteNotationImage(imageID) {
+        const { rowCount } = await query('DELETE FROM notation_images WHERE id = $1', [imageID]);
+        return rowCount > 0;
+    }
+
     async getWorkspaceIDForNotationPage(pageID) {
         const row = await queryOne(
             'SELECT workspace_id AS "workspaceID" FROM notation_pages WHERE id = $1',

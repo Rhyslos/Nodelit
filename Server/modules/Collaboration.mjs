@@ -87,6 +87,11 @@ function collectText(node, parts) {
     }
 
     if (node instanceof Y.XmlElement || node instanceof Y.XmlFragment) {
+        if (node instanceof Y.XmlElement) {
+            const caption = node.getAttribute('caption');
+            if (typeof caption === 'string' && caption) parts.push(caption);
+        }
+
         for (const child of node.toArray()) collectText(child, parts);
         if (node instanceof Y.XmlElement) parts.push('\n');
     }

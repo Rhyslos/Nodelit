@@ -1,5 +1,5 @@
 // import modules
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useEditorState } from '@tiptap/react';
 import ToolbarMenu, { ToolbarMenuItem, ToolbarMenuDivider } from './ToolbarMenu';
 
@@ -19,6 +19,8 @@ function safeURL(value) {
 
 // component functions
 export default function InsertMenu({ editor, view }) {
+    const fileRef = useRef(null);
+
     const state = useEditorState({
         editor,
         selector: ({ editor: instance }) => ({
@@ -70,6 +72,10 @@ export default function InsertMenu({ editor, view }) {
 
                 <ToolbarMenuItem onSelect={() => view.onAddSticky()}>
                     Sticky note
+                </ToolbarMenuItem>
+
+                <ToolbarMenuItem onSelect={() => fileRef.current?.click()}>
+                    Image
                 </ToolbarMenuItem>
 
                 <ToolbarMenuDivider />
@@ -131,6 +137,18 @@ export default function InsertMenu({ editor, view }) {
                     Delete table
                 </ToolbarMenuItem>
             </ToolbarMenu>
+
+            <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                style={{ display: 'none' }}
+                onChange={event => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (file) view.onAddImage(file);
+                }}
+            />
         </div>
     );
 }

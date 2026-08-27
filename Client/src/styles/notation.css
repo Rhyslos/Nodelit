@@ -1391,3 +1391,115 @@
         padding: 28px 20px;
     }
 }
+/* image styles */
+.notation-image {
+    margin: 16px 0;
+}
+
+.notation-image figure {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    margin: 0;
+}
+
+.notation-image--left {
+    text-align: left;
+}
+
+.notation-image--center {
+    text-align: center;
+}
+
+.notation-image--right {
+    text-align: right;
+}
+
+.notation-image img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--field);
+}
+
+.notation-image.is-resizing img {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.notation-image-tools {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 4px 16px var(--shadow);
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+
+.notation-image figure:hover .notation-image-tools {
+    opacity: 1;
+}
+
+.notation-image-tools button {
+    padding: 3px 8px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: var(--muted);
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.notation-image-tools button:hover,
+.notation-image-tools button.active {
+    background: var(--accent-lt);
+    color: var(--accent);
+}
+
+.notation-image-resize {
+    position: absolute;
+    right: -5px;
+    bottom: 26px;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--panel);
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: ew-resize;
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+
+.notation-image figure:hover .notation-image-resize {
+    opacity: 1;
+}
+
+.notation-image figcaption {
+    margin-top: 4px;
+}
+
+.notation-image-caption {
+    width: 100%;
+    padding: 2px 4px;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 12px;
+    text-align: center;
+    outline: none;
+}
+
+.notation-image-caption:focus {
+    background: var(--field);
+    border-radius: 4px;
+}

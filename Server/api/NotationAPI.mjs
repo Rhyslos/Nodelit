@@ -1,5 +1,5 @@
 // import modules
-import { Router } from 'express';
+import { Router, raw } from 'express';
 import db from '../database/Database.mjs';
 import { broadcastNotationChange } from '../modules/Networking.mjs';
 import { closeRoom } from '../modules/Collaboration.mjs';
@@ -11,7 +11,9 @@ import {
     optionalInteger,
     optionalNotationLayout,
     requireNotationGroupReorder,
-    requireNotationPageReorder
+    requireNotationPageReorder,
+    detectImageMime,
+    requireDimension
 } from '../modules/Validation.mjs';
 
 // utility functions
@@ -52,6 +54,10 @@ const MAX_PAGE_TITLE = 120;
 const MAX_SEARCH_TERM = 100;
 
 // router configuration
+const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const IMAGE_LIMIT = '2mb';
+const IMAGE_CACHE = 'private, max-age=31536000, immutable';
+
 export default function createNotationRouter(authz) {
     const router = Router();
 
@@ -313,6 +319,61 @@ export default function createNotationRouter(authz) {
     });
 
     // retrieval routes
+    // image routes
+    router.post('/:workspaceID/images',
+        authz.workspaceParamEdit('workspaceID'),
+        raw({ type: IMAGE_MIMES, limit: IMAGE_LIMIT }),
+        async (req, res, next) => {
+            try {
+                if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+                    return res.status(400).json({ error: 'No image data received' });
+                }
+
+                const image = await db.createNotationImage(
+                    req.workspaceID,
+                    req.user.id,
+                    {
+                        mime: detectImageMime(req.body),
+                        width: requireDimension(req.query?.width, 'width'),
+                        height: requireDimension(req.query?.height, 'height')
+                    },
+                    req.body
+                );
+
+                res.status(201).json(image);
+            } catch (error) {
+                next(error);
+            }
+        });
+
+    router.get('/images/:id', authz.notationImageAccess(), async (req, res, next) => {
+        try {
+            const record = await db.getNotationImageBytes(req.params.id);
+            if (!record) return res.status(404).json({ error: 'Not found' });
+
+            res.setHeader('Content-Type', record.mime);
+            res.setHeader('Cache-Control', IMAGE_CACHE);
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('Content-Disposition', 'inline');
+            res.setHeader('ETag', `"${req.params.id}"`);
+
+            res.send(record.bytes);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.delete('/images/:id', authz.notationImageEdit(), async (req, res, next) => {
+        try {
+            const removed = await db.deleteNotationImage(req.params.id);
+            if (!removed) return res.status(404).json({ error: 'Not found' });
+
+            res.json({ removed: [req.params.id] });
+        } catch (error) {
+            next(error);
+        }
+    });
+
     router.get('/:workspaceID/search', authz.workspaceParam(), async (req, res, next) => {
         try {
             const term = requireText(req.query.q, 'q', MAX_SEARCH_TERM);

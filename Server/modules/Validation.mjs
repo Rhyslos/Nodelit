@@ -188,6 +188,40 @@ export function optionalBoolean(value, field) {
 
 const SLOT_ALIGNMENT_MS = 15 * 60 * 1000;
 
+const IMAGE_SIGNATURES = [
+    { mime: 'image/png', bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+    { mime: 'image/jpeg', bytes: [0xff, 0xd8, 0xff] },
+    { mime: 'image/gif', bytes: [0x47, 0x49, 0x46, 0x38] }
+];
+
+export function detectImageMime(buffer) {
+    if (!buffer || buffer.length < 12) {
+        throw new ValidationError('image is empty or truncated');
+    }
+
+    for (const signature of IMAGE_SIGNATURES) {
+        const matches = signature.bytes.every((byte, index) => buffer[index] === byte);
+        if (matches) return signature.mime;
+    }
+
+    const riff = buffer.toString('ascii', 0, 4) === 'RIFF';
+    const webp = buffer.toString('ascii', 8, 12) === 'WEBP';
+
+    if (riff && webp) return 'image/webp';
+
+    throw new ValidationError('only PNG, JPEG, WebP and GIF images are supported');
+}
+
+export function requireDimension(value, field) {
+    const size = Number.parseInt(value, 10);
+
+    if (!Number.isInteger(size) || size < 1 || size > 20000) {
+        throw new ValidationError(`${field} must be between 1 and 20000`);
+    }
+
+    return size;
+}
+
 export function requireTimestamp(value, field) {
     if (typeof value !== 'string') {
         throw new ValidationError(`${field} must be an ISO timestamp`);

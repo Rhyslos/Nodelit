@@ -356,3 +356,27 @@ ALTER TABLE notation_groups ADD CONSTRAINT notation_groups_color_check
 
 -- saved palette columns
 ALTER TABLE users ADD COLUMN IF NOT EXISTS palette jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- notation image tables
+CREATE TABLE IF NOT EXISTS notation_images (
+    id           text PRIMARY KEY,
+    workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    uploaded_by  text REFERENCES users(id) ON DELETE SET NULL,
+    mime         text NOT NULL,
+    byte_size    integer NOT NULL,
+    width        integer NOT NULL,
+    height       integer NOT NULL,
+    created_at   timestamptz(3) NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS notation_images_workspace_id_idx ON notation_images (workspace_id);
+
+ALTER TABLE notation_images DROP CONSTRAINT IF EXISTS notation_images_mime_check;
+
+ALTER TABLE notation_images ADD CONSTRAINT notation_images_mime_check
+    CHECK (mime IN ('image/png', 'image/jpeg', 'image/webp')) NOT VALID;
+
+CREATE TABLE IF NOT EXISTS notation_image_data (
+    image_id text PRIMARY KEY REFERENCES notation_images(id) ON DELETE CASCADE,
+    bytes    bytea NOT NULL
+);

@@ -15,7 +15,8 @@ const resolvers = {
     meeting: field => async req => db.getWorkspaceIDForMeeting(req.params[field] ?? req.body?.[field]),
     tabGroup: field => async req => db.getWorkspaceIDForTabGroup(req.params[field] ?? req.body?.[field]),
     notationGroup: field => async req => db.getWorkspaceIDForNotationGroup(req.params[field] ?? req.body?.[field]),
-    notationPage: field => async req => db.getWorkspaceIDForNotationPage(req.params[field] ?? req.body?.[field])
+    notationPage: field => async req => db.getWorkspaceIDForNotationPage(req.params[field] ?? req.body?.[field]),
+    notationImage: field => async req => db.getWorkspaceIDForNotationImage(req.params[field] ?? req.body?.[field])
 };
 
 // authorization classes
@@ -180,6 +181,14 @@ class Authorization {
 
     notationPageAccess(field = 'id') {
         return this.requireMembership(resolvers.notationPage(field));
+    }
+
+    notationImageAccess(field = 'id') {
+        return this.requireMembership(resolvers.notationImage(field));
+    }
+
+    notationImageEdit(field = 'id') {
+        return this.requireEditor(resolvers.notationImage(field));
     }
 
     notationPageEdit(field = 'id') {

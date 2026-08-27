@@ -8,6 +8,8 @@ import { useNotation } from '../contexts/NotationContext';
 import { useNotationDocument } from '../hooks/useNotationDocument';
 import { useNotationSidebar } from '../hooks/useNotationSidebar';
 import { editorExtensions } from '../components/notation/EditorExtensions';
+import { NotationImage } from '../components/notation/NotationImage';
+import { uploadImage } from '../lib/image';
 import NotationSidebar from '../components/notation/NotationSidebar';
 import EditorContextMenu from '../components/notation/EditorContextMenu';
 import StickyLayer from '../components/notation/StickyLayer';
@@ -35,13 +37,18 @@ function renderCaret(user) {
 // page functions
 export default function Notation() {
     const { user } = useAuth();
-    const { notationData, loading, error, canEdit } = useNotation();
+    const { notationData, loading, error, canEdit, workspaceID, setActionError } = useNotation();
     const { setPageLayout } = useNotationSidebar();
 
     // state variables
     const [activePageID, setActivePageID] = useState(null);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [reading, setReading] = useState(false);
+
+    const handleUpload = useCallback(
+        file => uploadImage(workspaceID, file),
+        [workspaceID]
+    );
 
     const layerRef = useRef(null);
 
@@ -53,6 +60,7 @@ export default function Notation() {
         extensions: session
             ? [
                 ...editorExtensions,
+                NotationImage.configure({ upload: handleUpload, onError: setActionError }),
                 Collaboration.configure({ document: session.ydoc }),
                 CollaborationCaret.configure({
                     provider: session.provider,
@@ -64,7 +72,7 @@ export default function Notation() {
                 })
             ]
             : editorExtensions
-    }, [session]);
+    }, [session, handleUpload]);
 
     // lifecycle functions
     useEffect(() => {
@@ -93,6 +101,12 @@ export default function Notation() {
         layout,
         canEdit,
         onAddSticky: () => addStickyAt(null),
+        onAddImage: file => handleUpload(file)
+            .then(image => editor?.commands.insertNotationImage({
+                imageID: image.id,
+                ratio: `${image.width} / ${image.height}`
+            }))
+            .catch(err => setActionError(err.message)),
         onReading: setReading,
         onLayout: next => { if (activePageID) setPageLayout(activePageID, next); }
     };
