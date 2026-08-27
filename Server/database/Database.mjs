@@ -19,7 +19,7 @@ const TAB_FIELDS = ['name', 'color', 'tabOrder', 'isArchived', 'groupID'];
 const TAB_GROUP_FIELDS = ['name', 'color'];
 const LIST_FIELDS = ['name', 'columnID', 'listOrder'];
 const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'deadline', 'checklists'];
-const NOTATION_GROUP_FIELDS = ['name', 'color', 'groupOrder'];
+const NOTATION_GROUP_FIELDS = ['name', 'color', 'groupOrder', 'parentID'];
 const NOTATION_PAGE_FIELDS = ['title', 'groupID', 'pageOrder', 'layout'];
 const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor', 'theme'];
 
@@ -163,6 +163,7 @@ const TASK_FROM = `
 const NOTATION_GROUP_SELECT = `
     g.id,
     g.workspace_id AS "workspaceID",
+    g.parent_id AS "parentID",
     g.name,
     g.color,
     g.group_order AS "groupOrder",
@@ -543,6 +544,70 @@ async function normalizeTabs(client, workspaceIDs) {
     );
 
     return { removedGroupIDs, tabs };
+}
+
+const MAX_GROUP_DEPTH = 3;
+
+async function groupDepth(client, groupID) {
+    if (!groupID) return 0;
+
+    const { rows } = await client.query(
+        `WITH RECURSIVE ancestors AS (
+             SELECT id, parent_id, 1 AS depth FROM notation_groups WHERE id = $1
+             UNION ALL
+             SELECT g.id, g.parent_id, a.depth + 1
+             FROM notation_groups g JOIN ancestors a ON g.id = a.parent_id
+         )
+         SELECT COALESCE(MAX(depth), 0) AS depth FROM ancestors`,
+        [groupID]
+    );
+
+    return rows[0]?.depth ?? 0;
+}
+
+async function groupSubtree(client, groupID) {
+    const { rows } = await client.query(
+        `WITH RECURSIVE descendants AS (
+             SELECT id, 1 AS depth FROM notation_groups WHERE id = $1
+             UNION ALL
+             SELECT g.id, d.depth + 1
+             FROM notation_groups g JOIN descendants d ON g.parent_id = d.id
+         )
+         SELECT id, depth FROM descendants`,
+        [groupID]
+    );
+
+    return {
+        ids: rows.map(row => row.id),
+        height: rows.reduce((tallest, row) => Math.max(tallest, row.depth), 0)
+    };
+}
+
+async function assertGroupPlacement(client, workspaceID, parentID, movingGroupID) {
+    if (!parentID) return;
+
+    const { rows } = await client.query(
+        'SELECT workspace_id AS "workspaceID" FROM notation_groups WHERE id = $1',
+        [parentID]
+    );
+
+    if (rows.length === 0 || rows[0].workspaceID !== workspaceID) {
+        throw Object.assign(new Error('That group does not exist here'), { status: 400 });
+    }
+
+    const parentDepth = await groupDepth(client, parentID);
+    const subtree = movingGroupID ? await groupSubtree(client, movingGroupID) : { ids: [], height: 1 };
+
+    if (movingGroupID && subtree.ids.includes(parentID)) {
+        throw Object.assign(new Error('A group cannot be moved inside itself'), { status: 400 });
+    }
+
+    if (parentDepth + subtree.height > MAX_GROUP_DEPTH) {
+        throw Object.assign(
+            new Error(`Groups can only be nested ${MAX_GROUP_DEPTH} levels deep`),
+            { status: 400 }
+        );
+    }
 }
 
 // database classes
@@ -2274,16 +2339,23 @@ class Database {
                 throw badRequest(`A workspace cannot contain more than ${MAX_GROUPS_PER_WORKSPACE} groups`);
             }
 
+            const parentID = fields.parentID ?? null;
+
+            await assertGroupPlacement(client, workspaceID, parentID, null);
+
             const { rows } = await client.query(
-                `INSERT INTO notation_groups (id, workspace_id, name, color, group_order)
+                `INSERT INTO notation_groups (id, workspace_id, parent_id, name, color, group_order)
                  VALUES (
-                     $1, $2,
-                     COALESCE($3, 'New group'),
-                     $4,
-                     COALESCE($5, (SELECT COALESCE(MAX(group_order), -1) + 1 FROM notation_groups WHERE workspace_id = $2))
+                     $1, $2, $3,
+                     COALESCE($4, 'New group'),
+                     $5,
+                     COALESCE($6, (
+                         SELECT COALESCE(MAX(group_order), -1) + 1 FROM notation_groups
+                         WHERE workspace_id = $2 AND parent_id IS NOT DISTINCT FROM $3
+                     ))
                  )
                  RETURNING id`,
-                [newID('group'), workspaceID, fields.name ?? null, fields.color ?? null, fields.groupOrder ?? null]
+                [newID('group'), workspaceID, parentID, fields.name ?? null, fields.color ?? null, fields.groupOrder ?? null]
             );
 
             if (rows.length === 0) return null;
@@ -2301,14 +2373,34 @@ class Database {
         const { assignments, values, nextIndex } = buildAssignments(changes, NOTATION_GROUP_FIELDS, 1);
         if (assignments.length === 0) return this.getNotationGroup(groupID);
 
-        const updated = await queryOne(
-            `UPDATE notation_groups SET ${assignments.join(', ')}, updated_at = now()
-             WHERE id = $${nextIndex}
-             RETURNING id`,
-            [...values, groupID]
-        );
+        return withTransaction(async client => {
+            if (changes.parentID !== undefined) {
+                const scope = await client.query(
+                    'SELECT workspace_id AS "workspaceID" FROM notation_groups WHERE id = $1',
+                    [groupID]
+                );
 
-        return updated ? this.getNotationGroup(updated.id) : null;
+                if (scope.rowCount === 0) return null;
+
+                await assertGroupPlacement(client, scope.rows[0].workspaceID, changes.parentID, groupID);
+            }
+
+            const { rows } = await client.query(
+                `UPDATE notation_groups SET ${assignments.join(', ')}, updated_at = now()
+                 WHERE id = $${nextIndex}
+                 RETURNING id`,
+                [...values, groupID]
+            );
+
+            if (rows.length === 0) return null;
+
+            const { rows: records } = await client.query(
+                `SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g WHERE g.id = $1`,
+                [rows[0].id]
+            );
+
+            return records[0] ?? null;
+        });
     }
 
     async deleteNotationGroup(groupID) {
@@ -2320,9 +2412,18 @@ class Database {
                 [groupID]
             );
 
-            if (scope.rowCount === 0) return { removed, pages: [] };
+            if (scope.rowCount === 0) return { removed, pages: [], groups: [] };
 
             const workspaceID = scope.rows[0].workspaceID;
+
+            const { rows: promoted } = await client.query(
+                `UPDATE notation_groups
+                 SET parent_id = (SELECT parent_id FROM notation_groups WHERE id = $1),
+                     updated_at = now()
+                 WHERE parent_id = $1
+                 RETURNING id`,
+                [groupID]
+            );
 
             const { rows: orphans } = await client.query(
                 'SELECT id FROM notation_pages WHERE group_id = $1 ORDER BY page_order, id',
@@ -2337,11 +2438,19 @@ class Database {
             );
 
             const { rowCount } = await client.query('DELETE FROM notation_groups WHERE id = $1', [groupID]);
-            if (rowCount === 0) return { removed, pages: [] };
+            if (rowCount === 0) return { removed, pages: [], groups: [] };
 
             removed.groups.push(groupID);
 
-            if (orphans.length === 0) return { removed, pages: [] };
+            const { rows: children } = promoted.length > 0
+                ? await client.query(
+                    `SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g
+                     WHERE g.id = ANY($1::text[]) ORDER BY g.group_order`,
+                    [promoted.map(row => row.id)]
+                )
+                : { rows: [] };
+
+            if (orphans.length === 0) return { removed, pages: [], groups: children };
 
             const orphanIDs = orphans.map(row => row.id);
             const orphanOrders = orphans.map((row, index) => base.rows[0].next + index);
@@ -2360,7 +2469,7 @@ class Database {
                 [orphanIDs]
             );
 
-            return { removed, pages };
+            return { removed, pages, groups: children };
         });
     }
 
@@ -2533,27 +2642,48 @@ class Database {
     async reorderNotationGroups(updates) {
         if (!updates || updates.length === 0) return [];
 
-        const ids = updates.map(update => update.id);
-        const orders = updates.map(update => update.groupOrder);
+        return withTransaction(async client => {
+            const scope = await client.query(
+                'SELECT DISTINCT workspace_id AS "workspaceID" FROM notation_groups WHERE id = ANY($1::text[])',
+                [updates.map(update => update.id)]
+            );
 
-        const { rows } = await query(
-            `UPDATE notation_groups AS g
-             SET group_order = u.group_order, updated_at = now()
-             FROM unnest($1::text[], $2::int[]) AS u(id, group_order)
-             WHERE g.id = u.id
-             RETURNING g.id`,
-            [ids, orders]
-        );
+            if (scope.rowCount !== 1) return [];
 
-        if (rows.length === 0) return [];
+            const workspaceID = scope.rows[0].workspaceID;
 
-        const { rows: records } = await query(
-            `SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g
-             WHERE g.id = ANY($1::text[]) ORDER BY g.group_order`,
-            [rows.map(row => row.id)]
-        );
+            for (const update of updates) {
+                if (update.parentID === undefined) continue;
+                await assertGroupPlacement(client, workspaceID, update.parentID, update.id);
+            }
 
-        return records;
+            const { rows } = await client.query(
+                `UPDATE notation_groups AS g
+                 SET group_order = u.group_order,
+                     parent_id = CASE WHEN u.set_parent THEN u.parent_id ELSE g.parent_id END,
+                     updated_at = now()
+                 FROM unnest($1::text[], $2::int[], $3::text[], $4::boolean[])
+                     AS u(id, group_order, parent_id, set_parent)
+                 WHERE g.id = u.id
+                 RETURNING g.id`,
+                [
+                    updates.map(update => update.id),
+                    updates.map(update => update.groupOrder),
+                    updates.map(update => update.parentID ?? null),
+                    updates.map(update => update.parentID !== undefined)
+                ]
+            );
+
+            if (rows.length === 0) return [];
+
+            const { rows: records } = await client.query(
+                `SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g
+                 WHERE g.id = ANY($1::text[]) ORDER BY g.group_order`,
+                [rows.map(row => row.id)]
+            );
+
+            return records;
+        });
     }
 
     async reorderNotationPages(updates) {

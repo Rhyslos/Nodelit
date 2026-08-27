@@ -165,7 +165,8 @@ export default function createNotationRouter(authz) {
                     ? 'New group'
                     : requireText(req.body.name, 'name', MAX_GROUP_NAME),
                 color: optionalColor(req.body?.color, 'color'),
-                groupOrder: optionalInteger(req.body?.groupOrder, 'groupOrder')
+                groupOrder: optionalInteger(req.body?.groupOrder, 'groupOrder'),
+                parentID: optionalID(req.body?.parentID, 'parentID') ?? null
             });
 
             publish(req, { upsert: { groups: [group] } });
@@ -198,7 +199,10 @@ export default function createNotationRouter(authz) {
                     ? undefined
                     : requireText(req.body.name, 'name', MAX_GROUP_NAME),
                 color: optionalColor(req.body?.color, 'color'),
-                groupOrder: optionalInteger(req.body?.groupOrder, 'groupOrder')
+                groupOrder: optionalInteger(req.body?.groupOrder, 'groupOrder'),
+                parentID: req.body?.parentID === undefined
+                    ? undefined
+                    : (optionalID(req.body.parentID, 'parentID') ?? null)
             };
 
             const group = await db.updateNotationGroup(groupID, changes);
@@ -216,7 +220,7 @@ export default function createNotationRouter(authz) {
             const groupID = requireID(req.params.id, 'id');
             const target = await db.getNotationGroup(groupID);
 
-            const { removed, pages } = await db.deleteNotationGroup(groupID);
+            const { removed, pages, groups } = await db.deleteNotationGroup(groupID);
 
             if (removed.groups.length > 0) {
                 await audit(req, {
@@ -227,8 +231,8 @@ export default function createNotationRouter(authz) {
                 });
             }
 
-            publish(req, { upsert: { pages }, remove: removed });
-            res.json({ removed, pages });
+            publish(req, { upsert: { pages, groups }, remove: removed });
+            res.json({ removed, pages, groups });
         } catch (error) {
             next(error);
         }

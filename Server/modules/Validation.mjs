@@ -329,6 +329,9 @@ export function requireNotationPageReorder(updates) {
 export function requireNotationGroupReorder(updates) {
     const parsed = requireArray(updates, 'updates').map(update => ({
         id: requireID(update?.id, 'updates.id'),
+        parentID: update?.parentID === undefined
+            ? undefined
+            : (optionalID(update.parentID, 'updates.parentID') ?? null),
         groupOrder: requireInteger(update?.groupOrder, 'updates.groupOrder')
     }));
 

@@ -380,3 +380,18 @@ CREATE TABLE IF NOT EXISTS notation_image_data (
     image_id text PRIMARY KEY REFERENCES notation_images(id) ON DELETE CASCADE,
     bytes    bytea NOT NULL
 );
+
+-- notation subgroup columns
+ALTER TABLE notation_groups ADD COLUMN IF NOT EXISTS parent_id text;
+
+ALTER TABLE notation_groups DROP CONSTRAINT IF EXISTS notation_groups_parent_id_fkey;
+
+ALTER TABLE notation_groups ADD CONSTRAINT notation_groups_parent_id_fkey
+    FOREIGN KEY (parent_id) REFERENCES notation_groups(id) ON DELETE SET NULL;
+
+ALTER TABLE notation_groups DROP CONSTRAINT IF EXISTS notation_groups_parent_self_check;
+
+ALTER TABLE notation_groups ADD CONSTRAINT notation_groups_parent_self_check
+    CHECK (parent_id IS NULL OR parent_id <> id) NOT VALID;
+
+CREATE INDEX IF NOT EXISTS notation_groups_parent_id_idx ON notation_groups (parent_id);
