@@ -12,6 +12,8 @@ import GroupTreePicker from './GroupTreePicker';
 // configuration constants
 const MAX_GROUP_DEPTH = 3;
 const INDENT_STEP = 12;
+const NEST_EDGE_MIN = 12;
+const NEST_EDGE_RATIO = 0.38;
 
 // utility functions
 function selectContents(element) {
@@ -526,13 +528,16 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
         const rect = event.currentTarget.getBoundingClientRect();
         const offset = event.clientY - rect.top;
+        const edge = Math.max(NEST_EDGE_MIN, rect.height * NEST_EDGE_RATIO);
+
+        const atDepthLimit = groupDepthOf(groups, targetGroupID) >= MAX_GROUP_DEPTH;
 
         let position = 'inside';
-        if (offset < rect.height * 0.25) position = 'before';
-        else if (offset > rect.height * 0.75) position = 'after';
+        if (offset < edge) position = 'before';
+        else if (offset > rect.height - edge) position = 'after';
 
-        if (position === 'inside' && groupDepthOf(groups, targetGroupID) >= MAX_GROUP_DEPTH) {
-            position = 'after';
+        if (position === 'inside' && atDepthLimit) {
+            position = offset < rect.height / 2 ? 'before' : 'after';
         }
 
         setGroupDropID(targetGroupID);
