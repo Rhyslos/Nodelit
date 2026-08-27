@@ -272,10 +272,6 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     const [editingGroupID, setEditingGroupID] = useState(null);
     const [editingPageID, setEditingPageID] = useState(null);
 
-    const [showModal, setShowModal] = useState(false);
-    const [modalPos, setModalPos] = useState({ top: 0, left: 0 });
-    const [step, setStep] = useState('main');
-    const [selectedGroupID, setSelectedGroupID] = useState(null);
 
     const [colorPickerID, setColorPickerID] = useState(null);
     const [moveTarget, setMoveTarget] = useState(null);
@@ -606,13 +602,6 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         reorderPages(dragged, groupID, groupPages.filter(page => page.id !== dragged).length);
     }
 
-    // modal handlers
-    const closeModal = useCallback(() => {
-        setShowModal(false);
-        setStep('main');
-        setSelectedGroupID(null);
-    }, []);
-
     const closeColorPicker = useCallback(() => setColorPickerID(null), []);
     const { palette, saveColor, forgetColor } = usePalette();
 
@@ -639,6 +628,18 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         openContext(event, 'group', group);
     }
 
+    function handleSidebarContext(event) {
+        if (!canEdit) return;
+        if (event.target.closest('.notation-sidebar-page-wrapper')) return;
+        if (event.target.closest('.notation-sidebar-group-header')) return;
+        if (event.target.closest('.notation-search')) return;
+
+        event.preventDefault();
+
+        setConfirmingDelete(false);
+        setContextTarget({ kind: 'sidebar', entity: null, x: event.clientX, y: event.clientY });
+    }
+
     function startRenameFromContext() {
         const { kind, entity } = contextTarget;
 
@@ -657,9 +658,9 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         else await deleteGroup(entity.id);
     }
 
-    async function handleNewPage() {
-        const page = await createPage('Untitled', selectedGroupID);
-        closeModal();
+    async function handleNewPage(groupID = null) {
+        const page = await createPage('Untitled', groupID);
+        closeContext();
 
         if (!page) return;
 
@@ -667,9 +668,9 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         setEditingPageID(page.id);
     }
 
-    async function handleNewGroup() {
-        const group = await createGroup('New group');
-        closeModal();
+    async function handleNewGroup(parentID = null) {
+        const group = await createGroup('New group', parentID);
+        closeContext();
 
         if (!group) return;
 
@@ -683,7 +684,6 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     }
 
     // side effects
-    useDismiss(showModal, closeModal);
     useDismiss(Boolean(colorPickerID), closeColorPicker);
 
     useEffect(() => {
@@ -704,6 +704,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         <>
             <div
                 className="notation-sidebar"
+                onContextMenu={handleSidebarContext}
                 onDragOver={handleDragOverGroup}
                 onDrop={event => handleDropOnGroup(event, null, uncategorized)}
             >
@@ -744,43 +745,41 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
                 {renderGroups(null, 0)}
 
-                {canEdit && (
-                    <button
-                        className="notation-sidebar-add"
-                        onClick={event => {
-                            const rect = event.currentTarget.getBoundingClientRect();
-                            setModalPos({ top: rect.bottom + 8, left: rect.left });
-                            setShowModal(true);
-                        }}
-                    >
-                        +
-                    </button>
-                )}
             </div>
 
             {contextTarget && (
                 <ContextMenu position={{ x: contextTarget.x, y: contextTarget.y }} onClose={closeContext}>
-                    <ContextMenuLabel>{contextTarget.entity.title ?? contextTarget.entity.name}</ContextMenuLabel>
+                    <ContextMenuLabel>
+                        {contextTarget.kind === 'sidebar'
+                            ? 'Create'
+                            : contextTarget.entity.title ?? contextTarget.entity.name}
+                    </ContextMenuLabel>
 
-                    <ContextMenuItem onSelect={startRenameFromContext}>Rename</ContextMenuItem>
+                    {contextTarget.kind === 'sidebar' && (
+                        <>
+                            <ContextMenuItem onSelect={() => handleNewPage(null)}>
+                                New page
+                            </ContextMenuItem>
+
+                            <ContextMenuItem onSelect={() => handleNewGroup(null)}>
+                                New group
+                            </ContextMenuItem>
+                        </>
+                    )}
+
+                    {contextTarget.kind !== 'sidebar' && (
+                        <ContextMenuItem onSelect={startRenameFromContext}>Rename</ContextMenuItem>
+                    )}
 
                     {contextTarget.kind === 'group' && (
                         <>
-                            <ContextMenuItem
-                                onSelect={() => {
-                                    handleAddPage(contextTarget.entity.id);
-                                    closeContext();
-                                }}
-                            >
-                                New page
+                            <ContextMenuItem onSelect={() => handleNewPage(contextTarget.entity.id)}>
+                                New page in group
                             </ContextMenuItem>
 
                             <ContextMenuItem
                                 disabled={groupDepthOf(groups, contextTarget.entity.id) >= MAX_GROUP_DEPTH}
-                                onSelect={() => {
-                                    createGroup('New group', contextTarget.entity.id);
-                                    closeContext();
-                                }}
+                                onSelect={() => handleNewGroup(contextTarget.entity.id)}
                             >
                                 New subgroup
                             </ContextMenuItem>
@@ -797,24 +796,26 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                         </>
                     )}
 
-                    <ContextMenuItem
-                        onSelect={() => {
-                            setMoveTarget(contextTarget);
-                            closeContext();
-                        }}
-                    >
-                        Move to…
-                    </ContextMenuItem>
+                    {contextTarget.kind !== 'sidebar' && (
+                        <ContextMenuItem
+                            onSelect={() => {
+                                setMoveTarget(contextTarget);
+                                closeContext();
+                            }}
+                        >
+                            Move to…
+                        </ContextMenuItem>
+                    )}
 
-                    <ContextMenuDivider />
+                    {contextTarget.kind !== 'sidebar' && <ContextMenuDivider />}
 
-                    {!confirmingDelete && (
+                    {contextTarget.kind !== 'sidebar' && !confirmingDelete && (
                         <ContextMenuItem onSelect={() => setConfirmingDelete(true)} danger>
                             {contextTarget.kind === 'page' ? 'Delete page' : 'Delete group'}
                         </ContextMenuItem>
                     )}
 
-                    {confirmingDelete && (
+                    {contextTarget.kind !== 'sidebar' && confirmingDelete && (
                         <>
                             <ContextMenuLabel>
                                 {contextTarget.kind === 'page'
@@ -832,54 +833,6 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                         </>
                     )}
                 </ContextMenu>
-            )}
-
-            {showModal && createPortal(
-                <div
-                    className="notation-modal"
-                    style={{ position: 'absolute', top: modalPos.top, left: modalPos.left, zIndex: 1000, margin: 0, transform: 'none' }}
-                    onMouseDown={event => event.stopPropagation()}
-                >
-                    <div className="notation-modal-header">
-                        <h3>{step === 'main' ? 'Create New' : 'Select Group'}</h3>
-                        <button className="notation-modal-close" onClick={closeModal}>✕</button>
-                    </div>
-
-                    <div className="notation-modal-body">
-                        {step === 'main' && (
-                            <div className="notation-modal-actions-grid">
-                                <button className="notation-modal-action-card" onClick={() => setStep('page')}>
-                                    <div className="notation-modal-text">
-                                        <p className="notation-modal-label">New page</p>
-                                        <p className="notation-modal-sub">Add a notation page</p>
-                                    </div>
-                                </button>
-                                <button className="notation-modal-action-card" onClick={handleNewGroup}>
-                                    <div className="notation-modal-text">
-                                        <p className="notation-modal-label">New group</p>
-                                        <p className="notation-modal-sub">Organize pages</p>
-                                    </div>
-                                </button>
-                            </div>
-                        )}
-
-                        {step === 'page' && (
-                            <GroupTreePicker
-                                groups={groups}
-                                value={selectedGroupID}
-                                onChange={setSelectedGroupID}
-                            />
-                        )}
-                    </div>
-
-                    {step === 'page' && (
-                        <div className="notation-modal-footer">
-                            <button className="notation-btn-secondary" onClick={() => setStep('main')}>Back</button>
-                            <button className="notation-btn-primary" onClick={handleNewPage}>Create page</button>
-                        </div>
-                    )}
-                </div>,
-                document.body
             )}
 
             {moveTarget && createPortal(
