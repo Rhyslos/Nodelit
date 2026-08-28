@@ -642,8 +642,9 @@
     flex: 1;
     display: flex;
     justify-content: center;
-    padding: 48px 24px;
+    padding: 40px 24px 96px;
     overflow-y: auto;
+    scroll-padding-bottom: 96px;
 }
 
 .notation-page-heading {
@@ -686,39 +687,34 @@
     max-width: 794px;
 }
 
-.notation-editor--paged .tiptap::after {
-    content: 'Page';
-    position: absolute;
-    right: 12px;
-    bottom: 8px;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-    opacity: 0.6;
-    pointer-events: none;
-}
+
 
 .notation-editor--paged .tiptap {
+    --page-height: 1123px;
+    --page-gap: 24px;
+
     position: relative;
-    min-height: 1123px;
-    padding: 96px 76px;
+    min-height: var(--page-height);
+    padding: 96px 96px;
     border: none;
     border-radius: 0;
-    box-shadow: 0 6px 28px var(--shadow), 0 0 0 1px var(--border);
+    box-shadow: none;
+    filter: drop-shadow(0 1px 2px var(--shadow)) drop-shadow(0 6px 16px var(--shadow));
     background:
         repeating-linear-gradient(
             to bottom,
             var(--field) 0,
-            var(--field) 1123px,
-            var(--paper) 1123px,
-            var(--paper) 1147px
+            var(--field) calc(var(--page-height) - 1px),
+            var(--border) calc(var(--page-height) - 1px),
+            var(--border) var(--page-height),
+            transparent var(--page-height),
+            transparent calc(var(--page-height) + var(--page-gap))
         );
 }
 
 
 .notation-editor .tiptap h1 {
-    margin-top: 32px;
+    margin-top: 28px;
     margin-bottom: 16px;
     font-size: 32px;
     font-weight: 400;
@@ -726,27 +722,40 @@
 }
 
 .notation-editor .tiptap h2 {
-    margin-top: 28px;
+    margin-top: 24px;
     margin-bottom: 12px;
     font-size: 24px;
     font-weight: 400;
 }
 
 .notation-editor .tiptap h3 {
-    margin-top: 24px;
+    margin-top: 20px;
     margin-bottom: 8px;
     font-size: 18px;
     font-weight: 600;
 }
 
+.notation-editor .tiptap > :first-child {
+    margin-top: 0;
+}
+
+.notation-editor .tiptap > :last-child {
+    margin-bottom: 0;
+}
+
 .notation-editor .tiptap p {
-    margin-bottom: 12px;
+    margin: 0 0 12px;
+}
+
+.notation-editor .tiptap p:empty::after {
+    content: '';
+    display: inline-block;
 }
 
 .notation-editor .tiptap ul,
 .notation-editor .tiptap ol {
     padding-left: 24px;
-    margin-bottom: 12px;
+    margin: 0 0 12px;
 }
 
 .notation-editor .tiptap li {
