@@ -143,8 +143,15 @@ export default function Notation() {
         editor.storage.notationImage.onError = setActionError;
     }, [editor, handleUpload, setActionError]);
 
+
     const activePage = notationData.pages.find(page => page.id === activePageID) ?? null;
     const layout = activePage?.layout ?? 'pageless';
+    useEffect(() => {
+        if (!editor?.storage?.pagination) return;
+
+        editor.storage.pagination.enabled = layout === 'paged';
+        editor.view?.dispatch(editor.state.tr);
+    }, [editor, layout]);
 
     const editable = canEdit && !reading;
 
