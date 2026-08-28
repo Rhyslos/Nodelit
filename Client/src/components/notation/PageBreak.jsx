@@ -20,7 +20,7 @@ export const PageBreak = Node.create({
         return {
             insertPageBreak: () => ({ chain }) =>
                 chain()
-                    .insertContent({ type: this.name })
+                    .insertContent([{ type: this.name }, { type: 'paragraph' }])
                     .focus()
                     .run()
         };

@@ -55,7 +55,6 @@ function spacerElement(fill) {
     element.contentEditable = 'false';
     element.style.setProperty('--fill', `${fill}px`);
     element.style.setProperty('--gap', `${PAGE_GAP}px`);
-    element.style.setProperty('--edge', `${PAGE_MARGIN}px`);
     element.style.height = `${fill + PAGE_GAP + PAGE_MARGIN * 2}px`;
 
     return element;
