@@ -1,5 +1,5 @@
 // import modules
-import ToolbarMenu, { ToolbarMenuItem, ToolbarMenuDivider } from './ToolbarMenu';
+import ToolbarMenu, { ToolbarMenuItem } from './ToolbarMenu';
 
 // component functions
 export default function ViewMenu({ view }) {
@@ -12,22 +12,6 @@ export default function ViewMenu({ view }) {
 
                 <ToolbarMenuItem onSelect={() => view.onReading(true)} disabled={view.reading}>
                     Reading mode
-                </ToolbarMenuItem>
-
-                <ToolbarMenuDivider />
-
-                <ToolbarMenuItem
-                    onSelect={() => view.onLayout('pageless')}
-                    disabled={!view.canEdit || view.layout === 'pageless'}
-                >
-                    Pageless
-                </ToolbarMenuItem>
-
-                <ToolbarMenuItem
-                    onSelect={() => view.onLayout('paged')}
-                    disabled={!view.canEdit || view.layout === 'paged'}
-                >
-                    Paged
                 </ToolbarMenuItem>
             </ToolbarMenu>
         </div>

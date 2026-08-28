@@ -7,7 +7,6 @@ import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotation } from '../contexts/NotationContext';
 import { useNotationDocument } from '../hooks/useNotationDocument';
-import { useNotationSidebar } from '../hooks/useNotationSidebar';
 import { editorExtensions } from '../components/notation/EditorExtensions';
 import { uploadImage } from '../lib/image';
 import NotationSidebar from '../components/notation/NotationSidebar';
@@ -60,7 +59,6 @@ function renderCaret(user) {
 export default function Notation() {
     const { user } = useAuth();
     const { notationData, loading, error, canEdit, workspaceID, setActionError } = useNotation();
-    const { setPageLayout } = useNotationSidebar();
 
     // state variables
     const [activePageID, setActivePageID] = useState(null);
@@ -145,13 +143,6 @@ export default function Notation() {
 
 
     const activePage = notationData.pages.find(page => page.id === activePageID) ?? null;
-    const layout = activePage?.layout ?? 'pageless';
-    useEffect(() => {
-        if (!editor?.storage?.pagination) return;
-
-        editor.storage.pagination.enabled = layout === 'paged';
-        editor.view?.dispatch(editor.state.tr);
-    }, [editor, layout]);
 
     const editable = canEdit && !reading;
 
@@ -169,7 +160,6 @@ export default function Notation() {
 
     const view = {
         reading,
-        layout,
         canEdit,
         onAddSticky: () => addStickyAt(null),
         onAddImage: file => handleUpload(file)
@@ -178,8 +168,7 @@ export default function Notation() {
                 ratio: `${image.width} / ${image.height}`
             }))
             .catch(err => setActionError(err.message)),
-        onReading: setReading,
-        onLayout: next => { if (activePageID) setPageLayout(activePageID, next); }
+        onReading: setReading
     };
 
     if (error) return <div className="route-loading">{error.message}</div>;
@@ -237,7 +226,7 @@ export default function Notation() {
                         >
                             <EditorContent
                                 editor={editor}
-                                className={`notation-editor notation-editor--${layout} ${reading ? 'notation-editor--reading' : ''}`}
+                                className={`notation-editor ${reading ? 'notation-editor--reading' : ''}`}
                             />
                         </StickyLayer>
                     )}

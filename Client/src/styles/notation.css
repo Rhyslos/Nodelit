@@ -683,53 +683,6 @@
     outline: none;
 }
 
-.notation-editor--paged {
-    max-width: 794px;
-}
-
-
-
-.notation-editor--paged .tiptap {
-    position: relative;
-    min-height: 1123px;
-    padding: 96px;
-    border: none;
-    border-radius: 0;
-    background: var(--field);
-    box-shadow: 0 1px 2px var(--shadow), 0 6px 20px var(--shadow);
-}
-
-.notation-page-spacer {
-    margin: 0 -96px;
-    user-select: none;
-    pointer-events: none;
-    background:
-        linear-gradient(
-            to bottom,
-            var(--field) 0,
-            var(--field) calc(var(--fill) - 1px),
-            var(--border) calc(var(--fill) - 1px),
-            var(--border) var(--fill),
-            var(--paper) var(--fill),
-            var(--paper) calc(var(--fill) + var(--gap)),
-            var(--border) calc(var(--fill) + var(--gap)),
-            var(--border) calc(var(--fill) + var(--gap) + 1px),
-            var(--field) calc(var(--fill) + var(--gap) + 1px),
-            var(--field) 100%
-        );
-}
-
-.notation-editor .tiptap div[data-page-break] {
-    height: 0;
-    margin: 0;
-    border-top: 1px dashed var(--border);
-}
-
-.notation-editor--paged .tiptap div[data-page-break] {
-    border-top: none;
-}
-
-
 .notation-editor .tiptap h1 {
     margin-top: 28px;
     margin-bottom: 16px;

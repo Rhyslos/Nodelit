@@ -15,8 +15,6 @@ import { Indent } from './Indent';
 import { LinkBehaviour } from './LinkBehaviour';
 import { StickyFloats } from './StickyFloats';
 import { NotationImage } from './NotationImage';
-import { PageBreak } from './PageBreak';
-import { Pagination } from './Pagination';
 
 // extension configuration
 export const editorExtensions = [
@@ -41,8 +39,6 @@ export const editorExtensions = [
     LinkBehaviour,
     StickyFloats,
     NotationImage,
-    PageBreak,
-    Pagination,
     Highlight.configure({ multicolor: true }),
     Subscript,
     Superscript,
