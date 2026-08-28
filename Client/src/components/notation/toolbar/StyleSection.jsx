@@ -1,5 +1,6 @@
 // import modules
 import { useEditorState } from '@tiptap/react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import { FONTS, FONT_WEIGHTS, FONT_SIZES, BLOCK_DEFAULTS } from '../Constants';
 
 // utility functions
@@ -46,6 +47,24 @@ function matchSize(value, block) {
 
 function sizeOptions(size) {
     return FONT_SIZES.includes(size) ? FONT_SIZES : [size, ...FONT_SIZES];
+}
+
+function sizeLadder(size) {
+    return [...new Set([...FONT_SIZES, size])]
+        .map(entry => Number(entry))
+        .filter(entry => Number.isFinite(entry))
+        .sort((a, b) => a - b);
+}
+
+function steppedSize(size, direction) {
+    const ladder = sizeLadder(size);
+    const index = ladder.indexOf(Number(size));
+
+    if (index === -1) return size;
+
+    const next = ladder[Math.min(Math.max(index + direction, 0), ladder.length - 1)];
+
+    return String(next);
 }
 
 // event functions
@@ -99,15 +118,41 @@ export default function StyleSection({ editor }) {
                 ))}
             </select>
 
-            <select
-                className="tiptap-select tiptap-select-narrow"
-                value={state.size}
-                onChange={event => editor.chain().focus().setFontSize(event.target.value).run()}
-            >
-                {sizeOptions(state.size).map(size => (
-                    <option key={size} value={size}>{size}</option>
-                ))}
-            </select>
+            <div className="tiptap-size-field">
+                <select
+                    className="tiptap-select tiptap-select-narrow"
+                    value={state.size}
+                    onChange={event => editor.chain().focus().setFontSize(event.target.value).run()}
+                >
+                    {sizeOptions(state.size).map(size => (
+                        <option key={size} value={size}>{size}</option>
+                    ))}
+                </select>
+
+                <span className="tiptap-size-stepper">
+                    <button
+                        type="button"
+                        className="tiptap-size-step"
+                        title="Larger text"
+                        aria-label="Larger text"
+                        disabled={steppedSize(state.size, 1) === state.size}
+                        onClick={() => editor.chain().focus().setFontSize(steppedSize(state.size, 1)).run()}
+                    >
+                        <ChevronUp size={11} strokeWidth={2.5} />
+                    </button>
+
+                    <button
+                        type="button"
+                        className="tiptap-size-step"
+                        title="Smaller text"
+                        aria-label="Smaller text"
+                        disabled={steppedSize(state.size, -1) === state.size}
+                        onClick={() => editor.chain().focus().setFontSize(steppedSize(state.size, -1)).run()}
+                    >
+                        <ChevronDown size={11} strokeWidth={2.5} />
+                    </button>
+                </span>
+            </div>
 
             <select
                 className="tiptap-select"
