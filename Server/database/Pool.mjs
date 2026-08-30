@@ -8,6 +8,7 @@ const { Pool } = pg;
 
 // configuration constants
 const SLOW_QUERY_MS = 500;
+const SCHEMA_LOCK_TIMEOUT_MS = 30000;
 const SCHEMA_LOCK_ID = 4915203;
 const SCHEMA_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'schema.sql');
 
@@ -64,6 +65,7 @@ export async function queryOne(text, params = []) {
 
 export async function withTransaction(handler) {
     const client = await pool.connect();
+    let released = false;
 
     try {
         await client.query('BEGIN');
@@ -71,10 +73,16 @@ export async function withTransaction(handler) {
         await client.query('COMMIT');
         return result;
     } catch (error) {
-        await client.query('ROLLBACK').catch(() => {});
+        const rolledBack = await client.query('ROLLBACK').then(() => true).catch(() => false);
+
+        if (!rolledBack) {
+            released = true;
+            client.release(error);
+        }
+
         throw error;
     } finally {
-        client.release();
+        if (!released) client.release();
     }
 }
 
@@ -84,10 +92,16 @@ export async function applySchema() {
     const client = await pool.connect();
 
     try {
+        await client.query(`SET lock_timeout = ${SCHEMA_LOCK_TIMEOUT_MS}`);
         await client.query('SELECT pg_advisory_lock($1)', [SCHEMA_LOCK_ID]);
+
+        await client.query('SET statement_timeout = 0');
         await client.query(sql);
+
         console.log('Schema applied');
     } finally {
+        await client.query('RESET statement_timeout').catch(() => {});
+        await client.query('RESET lock_timeout').catch(() => {});
         await client.query('SELECT pg_advisory_unlock($1)', [SCHEMA_LOCK_ID]).catch(() => {});
         client.release();
     }
