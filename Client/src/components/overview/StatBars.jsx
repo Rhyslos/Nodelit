@@ -1,55 +1,73 @@
 // package imports
-import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, Tooltip, CartesianGrid } from 'recharts';
+import { useState } from 'react';
 
 // component functions
 export default function StatBars({ series, emptyLabel }) {
+    // state variables
+    const [hovered, setHovered] = useState(null);
+
+    // render conditions
     if (!series || series.length === 0) {
         return <p className="stat-empty">{emptyLabel}</p>;
     }
 
-    return (
-        <div style={{ width: '100%', height: '220px' }}>
-            <ResponsiveContainer>
-                <BarChart data={series} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                    
-                    {/* svg definitions */}
-                    <defs>
-                        <linearGradient id="completedGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#4ade80" stopOpacity={0.9}/>
-                            <stop offset="95%" stopColor="#2dd4bf" stopOpacity={0.9}/>
-                        </linearGradient>
-                        <linearGradient id="soonGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.9}/>
-                            <stop offset="95%" stopColor="#f97316" stopOpacity={0.9}/>
-                        </linearGradient>
-                        <linearGradient id="overdueGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#818cf8" stopOpacity={0.9}/>
-                            <stop offset="95%" stopColor="#c084fc" stopOpacity={0.9}/>
-                        </linearGradient>
-                    </defs>
+    // calculation functions
+    const max = Math.max(...series.map(s => s.value), 1);
 
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                    
-                    <XAxis 
-                        dataKey="label" 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fill: '#9ca3af', fontSize: 12 }} 
-                        dy={10} 
-                    />
-                    
-                    <Tooltip 
-                        cursor={{ fill: 'rgba(0,0,0,0.02)' }} 
-                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} 
-                    />
-                    
-                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                        {series.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={`url(#${entry.tone}Grad)`} />
-                        ))}
-                    </Bar>
-                </BarChart>
-            </ResponsiveContainer>
+    const getGradient = (tone) => {
+        if (tone === 'completed') return 'linear-gradient(to bottom, #4ade80 5%, #2dd4bf 95%)';
+        if (tone === 'soon') return 'linear-gradient(to bottom, #fbbf24 5%, #f97316 95%)';
+        return 'linear-gradient(to bottom, #818cf8 5%, #c084fc 95%)';
+    };
+
+    // layout structure
+    return (
+        <div style={{ position: 'relative', width: '100%', height: '220px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '8px', paddingBottom: '24px' }}>
+            
+            {/* grid layout */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: '24px', zIndex: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+                {[...Array(4)].map((_, i) => (
+                    <div key={i} style={{ borderTop: '1px dashed #f3f4f6', width: '100%' }}></div>
+                ))}
+            </div>
+
+            {/* data loops */}
+            {series.map((entry, index) => {
+                const heightPercentage = (entry.value / max) * 100;
+                const isHovered = hovered === index;
+
+                return (
+                    <div 
+                        key={entry.key}
+                        onMouseEnter={() => setHovered(index)}
+                        onMouseLeave={() => setHovered(null)}
+                        style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', position: 'relative', zIndex: 1, cursor: 'pointer' }}
+                    >
+                        {/* overlay components */}
+                        {isHovered && (
+                            <div style={{ position: 'absolute', top: '-30px', background: '#fff', border: '1px solid #f3f4f6', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 10 }}>
+                                {entry.value}
+                            </div>
+                        )}
+                        
+                        {/* visual elements */}
+                        <div style={{ 
+                            width: '80%', 
+                            height: `${heightPercentage}%`, 
+                            background: getGradient(entry.tone), 
+                            borderTopLeftRadius: '6px', 
+                            borderTopRightRadius: '6px', 
+                            opacity: isHovered ? 1 : 0.85,
+                            transition: 'opacity 0.2s, height 0.3s ease'
+                        }}></div>
+                        
+                        {/* typography elements */}
+                        <span style={{ position: 'absolute', bottom: '-24px', fontSize: '12px', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                            {entry.label}
+                        </span>
+                    </div>
+                )
+            })}
         </div>
     );
 }
