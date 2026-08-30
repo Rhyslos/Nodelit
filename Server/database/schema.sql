@@ -177,9 +177,6 @@ CREATE INDEX IF NOT EXISTS tags_workspace_id_idx ON tags (workspace_id);
 
 DROP INDEX IF EXISTS tags_workspace_name_key;
 
-CREATE UNIQUE INDEX IF NOT EXISTS tags_workspace_named_key
-    ON tags (workspace_id, lower(name)) WHERE name <> '';
-
 CREATE TABLE IF NOT EXISTS list_tags (
     list_id text NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
     tag_id  text NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
