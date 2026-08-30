@@ -392,3 +392,35 @@ ALTER TABLE notation_groups ADD CONSTRAINT notation_groups_parent_self_check
     CHECK (parent_id IS NULL OR parent_id <> id) NOT VALID;
 
 CREATE INDEX IF NOT EXISTS notation_groups_parent_id_idx ON notation_groups (parent_id);
+
+-- task history columns
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at timestamptz(3) NOT NULL DEFAULT now();
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at timestamptz(3);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workspace_id text;
+
+UPDATE tasks SET created_at = updated_at WHERE created_at > updated_at;
+
+UPDATE tasks SET completed_at = updated_at WHERE is_completed AND completed_at IS NULL;
+
+UPDATE tasks SET completed_at = NULL WHERE NOT is_completed AND completed_at IS NOT NULL;
+
+UPDATE tasks AS k
+SET workspace_id = t.workspace_id
+FROM lists l
+JOIN board_columns c ON c.id = l.column_id
+JOIN tabs t ON t.id = c.tab_id
+WHERE l.id = k.list_id AND k.workspace_id IS DISTINCT FROM t.workspace_id;
+
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_workspace_id_fkey;
+
+ALTER TABLE tasks ADD CONSTRAINT tasks_workspace_id_fkey
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE NOT VALID;
+
+CREATE INDEX IF NOT EXISTS tasks_workspace_created_idx
+    ON tasks (workspace_id, created_at);
+
+CREATE INDEX IF NOT EXISTS tasks_workspace_completed_idx
+    ON tasks (workspace_id, completed_at) WHERE completed_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS tasks_workspace_deadline_idx
+    ON tasks (workspace_id, deadline) WHERE deadline IS NOT NULL AND is_completed = false;

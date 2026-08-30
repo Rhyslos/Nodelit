@@ -20,7 +20,26 @@ import {
     requireTabReorder
 } from '../modules/Validation.mjs';
 
+// configuration constants
+const STATS_WEEKS = 26;
+const STATS_MAX_WEEKS = 104;
+const STATS_CACHE_MS = 60000;
+
 // utility functions
+const statsCache = new Map();
+
+function cachedStats(key) {
+    const entry = statsCache.get(key);
+    if (!entry || Date.now() - entry.at > STATS_CACHE_MS) return null;
+
+    return entry.value;
+}
+
+function storeStats(key, value) {
+    if (statsCache.size > 64) statsCache.clear();
+    statsCache.set(key, { at: Date.now(), value });
+}
+
 function emptyCollections() {
     return { tabs: [], tabGroups: [], columns: [], lists: [], tasks: [], tags: [] };
 }
@@ -375,6 +394,33 @@ export default function createKanbanRouter(authz) {
     });
 
     // tag routes
+    // statistics routes
+    router.get('/:workspaceID/stats', authz.workspaceParam('workspaceID'), async (req, res, next) => {
+        try {
+            const requested = Number.parseInt(req.query?.weeks, 10);
+
+            const weeks = Number.isInteger(requested)
+                ? Math.min(Math.max(requested, 1), STATS_MAX_WEEKS)
+                : STATS_WEEKS;
+
+            const key = `${req.workspaceID}:${weeks}`;
+            const cached = cachedStats(key);
+
+            if (cached) {
+                res.setHeader('X-Stats-Cache', 'hit');
+                return res.json(cached);
+            }
+
+            const stats = await db.getWorkspaceStats(req.workspaceID, weeks);
+            storeStats(key, stats);
+
+            res.setHeader('X-Stats-Cache', 'miss');
+            res.json(stats);
+        } catch (error) {
+            next(error);
+        }
+    });
+
     router.get('/tags/:workspaceID', authz.workspaceParam(), async (req, res, next) => {
         try {
             const board = await db.getWorkspaceData(req.workspaceID);

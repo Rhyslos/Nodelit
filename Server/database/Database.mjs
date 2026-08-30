@@ -1512,6 +1512,116 @@ class Database {
         return row?.workspaceID ?? null;
     }
 
+    // statistics functions
+    async getWorkspaceStats(workspaceID, weeks) {
+        const { rows } = await query(
+            `WITH scope AS (
+                 SELECT id, is_completed, deadline, created_at, completed_at
+                 FROM tasks WHERE workspace_id = $1
+             ),
+             open_tasks AS (
+                 SELECT * FROM scope WHERE is_completed = false
+             ),
+             headline AS (
+                 SELECT
+                     (SELECT count(*) FROM scope)::int AS total,
+                     (SELECT count(*) FROM scope WHERE is_completed)::int AS completed,
+                     (SELECT count(*) FROM open_tasks WHERE deadline < CURRENT_DATE)::int AS overdue,
+                     (SELECT count(*) FROM open_tasks WHERE deadline = CURRENT_DATE)::int AS due_today,
+                     (SELECT count(*) FROM open_tasks
+                      WHERE deadline > CURRENT_DATE AND deadline <= CURRENT_DATE + 7)::int AS due_week,
+                     (SELECT count(*) FROM open_tasks WHERE deadline IS NULL)::int AS undated
+             ),
+             timeline AS (
+                 SELECT to_char(deadline, 'YYYY-MM-DD') AS day, count(*)::int AS total
+                 FROM open_tasks
+                 WHERE deadline >= CURRENT_DATE - 7 AND deadline <= CURRENT_DATE + 14
+                 GROUP BY deadline ORDER BY deadline
+             ),
+             throughput AS (
+                 SELECT to_char(date_trunc('week', completed_at), 'YYYY-MM-DD') AS week,
+                        count(*)::int AS total
+                 FROM scope
+                 WHERE completed_at >= date_trunc('week', now()) - ($2::int * INTERVAL '1 week')
+                 GROUP BY 1 ORDER BY 1
+             ),
+             created AS (
+                 SELECT to_char(date_trunc('week', created_at), 'YYYY-MM-DD') AS week,
+                        count(*)::int AS total
+                 FROM scope
+                 WHERE created_at >= date_trunc('week', now()) - ($2::int * INTERVAL '1 week')
+                 GROUP BY 1 ORDER BY 1
+             ),
+             cycle AS (
+                 SELECT width_bucket(
+                            EXTRACT(epoch FROM completed_at - created_at) / 86400,
+                            0, 30, 6
+                        ) AS bucket,
+                        count(*)::int AS total
+                 FROM scope
+                 WHERE completed_at IS NOT NULL AND completed_at >= created_at
+                 GROUP BY 1 ORDER BY 1
+             ),
+             cycle_median AS (
+                 SELECT percentile_cont(0.5) WITHIN GROUP (
+                            ORDER BY EXTRACT(epoch FROM completed_at - created_at) / 86400
+                        ) AS days
+                 FROM scope
+                 WHERE completed_at IS NOT NULL AND completed_at >= created_at
+             ),
+             reliability AS (
+                 SELECT
+                     count(*) FILTER (WHERE completed_at::date <= deadline)::int AS on_time,
+                     count(*) FILTER (WHERE completed_at::date > deadline)::int AS late
+                 FROM scope
+                 WHERE deadline IS NOT NULL AND completed_at IS NOT NULL
+             ),
+             aging AS (
+                 SELECT width_bucket(
+                            EXTRACT(epoch FROM now() - created_at) / 86400,
+                            0, 60, 4
+                        ) AS bucket,
+                        count(*)::int AS total
+                 FROM open_tasks
+                 GROUP BY 1 ORDER BY 1
+             ),
+             workload AS (
+                 SELECT ta.user_id AS "userID",
+                        count(*)::int AS total,
+                        count(*) FILTER (WHERE o.deadline < CURRENT_DATE)::int AS overdue
+                 FROM open_tasks o
+                 JOIN task_assignees ta ON ta.task_id = o.id
+                 GROUP BY ta.user_id
+             ),
+             unassigned AS (
+                 SELECT count(*)::int AS total
+                 FROM open_tasks o
+                 WHERE NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = o.id)
+             ),
+             tag_mix AS (
+                 SELECT tt.tag_id AS "tagID", count(*)::int AS total
+                 FROM open_tasks o
+                 JOIN task_tags tt ON tt.task_id = o.id
+                 GROUP BY tt.tag_id ORDER BY 2 DESC LIMIT 8
+             )
+             SELECT
+                 (SELECT row_to_json(headline) FROM headline) AS headline,
+                 (SELECT coalesce(json_agg(timeline), '[]'::json) FROM timeline) AS timeline,
+                 (SELECT coalesce(json_agg(throughput), '[]'::json) FROM throughput) AS throughput,
+                 (SELECT coalesce(json_agg(created), '[]'::json) FROM created) AS created,
+                 (SELECT coalesce(json_agg(cycle), '[]'::json) FROM cycle) AS cycle,
+                 (SELECT days FROM cycle_median) AS "cycleMedian",
+                 (SELECT row_to_json(reliability) FROM reliability) AS reliability,
+                 (SELECT coalesce(json_agg(aging), '[]'::json) FROM aging) AS aging,
+                 (SELECT coalesce(json_agg(workload), '[]'::json) FROM workload) AS workload,
+                 (SELECT total FROM unassigned) AS "unassigned",
+                 (SELECT coalesce(json_agg(tag_mix), '[]'::json) FROM tag_mix) AS "tagMix"`,
+            [workspaceID, weeks]
+        );
+
+        return rows[0] ?? null;
+    }
+
     // tag functions
     async getTags(workspaceID) {
         const { rows } = await query(
@@ -2089,9 +2199,14 @@ class Database {
     async createTask(listID, fields = {}) {
         return withTransaction(async client => {
             const { rows } = await client.query(
-                `INSERT INTO tasks (id, list_id, title, description, task_order)
+                `INSERT INTO tasks (id, list_id, workspace_id, title, description, task_order)
                  VALUES (
                      $1, $2,
+                     (SELECT t.workspace_id
+                      FROM lists l
+                      JOIN board_columns c ON c.id = l.column_id
+                      JOIN tabs t ON t.id = c.tab_id
+                      WHERE l.id = $2),
                      COALESCE($3, 'New Task'),
                      COALESCE($4, ''),
                      COALESCE($5, (SELECT COALESCE(MAX(task_order), -1) + 1 FROM tasks WHERE list_id = $2))
@@ -2117,6 +2232,10 @@ class Database {
         const applied = pickFields(changes, TASK_FIELDS);
         const assignees = changes.assignedUsers;
         const { assignments, values, nextIndex } = buildAssignments(applied, TASK_FIELDS, 1);
+
+        if (changes.isCompleted !== undefined) {
+            assignments.push(changes.isCompleted ? 'completed_at = now()' : 'completed_at = NULL');
+        }
 
         if (assignments.length === 0 && assignees === undefined) {
             const record = await this.getTask(taskID);

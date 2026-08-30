@@ -10,6 +10,7 @@ import { appName } from '../../App';
 
 // configuration constants
 const WORKSPACE_PAGES = [
+    { key: 'overview', label: 'Overview' },
     { key: 'kanban', label: 'Kanban' },
     { key: 'notation', label: 'Notation' },
     { key: 'calendar', label: 'Calendar' }

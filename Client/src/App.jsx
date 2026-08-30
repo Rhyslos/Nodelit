@@ -10,6 +10,7 @@ import Navbar from './components/navbar/Navbar';
 import ToastStack from './components/toast/ToastStack';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Overview from './pages/Overview';
 import Kanban from './pages/Kanban';
 import Notation from './pages/Notation';
 import Calendar from './pages/Calendar';
@@ -89,6 +90,7 @@ function AppLayout() {
 
                     <Route path="/workspace/:workspaceID" element={<WorkspaceLayout />}>
                         <Route index element={<Navigate to="kanban" replace />} />
+                        <Route path="overview" element={<Overview />} />
                         <Route path="kanban" element={<Kanban />} />
                         <Route path="calendar" element={<Calendar />} />
 
