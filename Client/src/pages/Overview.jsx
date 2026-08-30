@@ -40,6 +40,7 @@ export default function Overview() {
     const { workspaceID } = useParams();
     const { boardData } = useKanban();
     const { members } = useWorkspacePresence(workspaceID);
+
     const { stats, loading } = useWorkspaceStats(workspaceID);
 
     // state variables

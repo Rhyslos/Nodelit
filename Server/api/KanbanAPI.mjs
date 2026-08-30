@@ -40,6 +40,12 @@ function storeStats(key, value) {
     statsCache.set(key, { at: Date.now(), value });
 }
 
+function clearStats(workspaceID) {
+    for (const key of statsCache.keys()) {
+        if (key.startsWith(`${workspaceID}:`)) statsCache.delete(key);
+    }
+}
+
 function emptyCollections() {
     return { tabs: [], tabGroups: [], columns: [], lists: [], tasks: [], tags: [] };
 }
@@ -57,6 +63,7 @@ function originOf(req) {
 }
 
 function publish(req, changes) {
+    clearStats(req.workspaceID);
     broadcastKanbanChange(req.workspaceID, buildDelta(changes), originOf(req));
 }
 
