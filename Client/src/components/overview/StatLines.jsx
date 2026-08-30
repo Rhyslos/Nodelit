@@ -3,8 +3,8 @@ import { useState, useMemo } from 'react';
 
 // style configurations
 const COLORS = {
-    created: '#f97316',
-    completed: '#2dd4bf'
+    created: '#cbd5e1',
+    completed: '#4f46e5'
 };
 
 // component functions

@@ -13,12 +13,7 @@ export default function StatBars({ series, emptyLabel }) {
 
     // calculation functions
     const max = Math.max(...series.map(s => s.value), 1);
-
-    const getGradient = (tone) => {
-        if (tone === 'completed') return 'linear-gradient(to bottom, #4ade80 5%, #2dd4bf 95%)';
-        if (tone === 'soon') return 'linear-gradient(to bottom, #fbbf24 5%, #f97316 95%)';
-        return 'linear-gradient(to bottom, #818cf8 5%, #c084fc 95%)';
-    };
+    const uniformGradient = 'linear-gradient(to bottom, #818cf8 5%, #4f46e5 95%)';
 
     // layout structure
     return (
@@ -54,7 +49,7 @@ export default function StatBars({ series, emptyLabel }) {
                         <div style={{ 
                             width: '80%', 
                             height: `${heightPercentage}%`, 
-                            background: getGradient(entry.tone), 
+                            background: uniformGradient, 
                             borderTopLeftRadius: '6px', 
                             borderTopRightRadius: '6px', 
                             opacity: isHovered ? 1 : 0.85,
