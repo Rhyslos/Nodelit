@@ -14,7 +14,7 @@ const HISTORY_WINDOW = 12;
 const CYCLE_LABELS = ['0-5d', '5-10d', '10-15d', '15-20d', '20-25d', '25-30d', '30d+'];
 const AGING_LABELS = ['0-15d', '15-30d', '30-45d', '45-60d', '60d+'];
 
-// utility functions
+// formatting functions
 function whenLabel(days) {
     if (days < 0) return `${Math.abs(days)}d late`;
     if (days === 0) return 'Today';
@@ -50,18 +50,15 @@ function weeklySeries(rows, weeks) {
     return weeks.map(week => byWeek.get(week) ?? 0);
 }
 
-// page functions
+// component functions
 export default function Overview() {
-    // hook integrations
     const { workspaceID } = useParams();
     const { boardData } = useKanban();
     const { members } = useWorkspacePresence(workspaceID);
     const { stats, loading } = useWorkspaceStats(workspaceID);
 
-    // state variables
     const [offset, setOffset] = useState(0);
 
-    // derived variables
     const weeks = useMemo(() => {
         const all = new Set([
             ...(stats?.throughput ?? []).map(entry => entry.week),
@@ -83,7 +80,6 @@ export default function Overview() {
 
     const tagOf = id => boardData.tags.find(tag => tag.id === id) ?? null;
 
-    // render conditions
     if (loading) {
         return <div className="overview-root"><p className="stat-empty">Loading overview…</p></div>;
     }
@@ -92,7 +88,6 @@ export default function Overview() {
         return <div className="overview-root"><p className="stat-empty">No data yet.</p></div>;
     }
 
-    // statistics calculations
     const headline = stats.headline ?? {};
     const reliability = stats.reliability ?? { on_time: 0, late: 0 };
     const rated = reliability.on_time + reliability.late;
@@ -107,10 +102,8 @@ export default function Overview() {
 
     return (
         <div className="overview-root">
-            
-            {/* layout sections */}
             <div className="overview-section">
-                <h2 className="overview-section-title">At a Glance</h2>
+                <h2 className="overview-section-title">Overview</h2>
                 <div className="overview-grid">
                     <StatCard title="Right now" hint={`${remaining} open of ${headline.total ?? 0}`}>
                         <div className="stat-chips">
@@ -167,9 +160,8 @@ export default function Overview() {
                 </div>
             </div>
 
-            {/* layout sections */}
-            <div className="overview-section">
-                <h2 className="overview-section-title">Tactical Breakdown</h2>
+            <div className="overview-section" style={{ marginTop: '32px' }}>
+                <h2 className="overview-section-title">Load</h2>
                 <div className="overview-grid">
                     <StatCard title="Due next" hint="open work, soonest first">
                         {(stats.upcoming ?? []).length === 0 ? (
@@ -230,40 +222,9 @@ export default function Overview() {
                 </div>
             </div>
 
-            {/* layout sections */}
-            <div className="overview-section">
-                <h2 className="overview-section-title">Velocity & Trends</h2>
+            <div className="overview-section" style={{ marginTop: '32px' }}>
+                <h2 className="overview-section-title">Statistics</h2>
                 <div className="overview-grid">
-                    <StatCard title="History" hint="created against completed" wide>
-                        <StatLines
-                            labels={visibleWeeks.map(shortDate)}
-                            lines={[
-                                { key: 'created', label: 'Created', tone: 'created', values: createdPerWeek },
-                                { key: 'completed', label: 'Completed', tone: 'completed', values: completedPerWeek }
-                            ]}
-                        />
-
-                        <div className="overview-scrub">
-                            <button
-                                type="button"
-                                disabled={offset + HISTORY_WINDOW >= weeks.length}
-                                onClick={() => setOffset(current => current + 4)}
-                            >
-                                ‹ Earlier
-                            </button>
-
-                            <span>{visibleWeeks.length > 0 ? `${shortDate(visibleWeeks[0])} – ${shortDate(visibleWeeks[visibleWeeks.length - 1])}` : ''}</span>
-
-                            <button
-                                type="button"
-                                disabled={offset === 0}
-                                onClick={() => setOffset(current => Math.max(0, current - 4))}
-                            >
-                                Later ›
-                            </button>
-                        </div>
-                    </StatCard>
-
                     <StatCard title="Throughput" hint="completed per week">
                         <StatBars
                             emptyLabel="Nothing completed yet"
@@ -297,6 +258,36 @@ export default function Overview() {
 
                     <StatCard title="How long tasks have sat" hint="open work by age">
                         <StatBars series={bucketSeries(stats.aging ?? [], AGING_LABELS, 'soon')} />
+                    </StatCard>
+
+                    <StatCard title="History" hint="created against completed" wide>
+                        <StatLines
+                            labels={visibleWeeks.map(shortDate)}
+                            lines={[
+                                { key: 'created', label: 'Created', tone: 'created', values: createdPerWeek },
+                                { key: 'completed', label: 'Completed', tone: 'completed', values: completedPerWeek }
+                            ]}
+                        />
+
+                        <div className="overview-scrub">
+                            <button
+                                type="button"
+                                disabled={offset + HISTORY_WINDOW >= weeks.length}
+                                onClick={() => setOffset(current => current + 4)}
+                            >
+                                ‹ Earlier
+                            </button>
+
+                            <span>{visibleWeeks.length > 0 ? `${shortDate(visibleWeeks[0])} – ${shortDate(visibleWeeks[visibleWeeks.length - 1])}` : ''}</span>
+
+                            <button
+                                type="button"
+                                disabled={offset === 0}
+                                onClick={() => setOffset(current => Math.max(0, current - 4))}
+                            >
+                                Later ›
+                            </button>
+                        </div>
                     </StatCard>
                 </div>
             </div>
