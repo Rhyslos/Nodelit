@@ -1598,6 +1598,26 @@ class Database {
                  FROM open_tasks o
                  WHERE NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = o.id)
              ),
+             upcoming AS (
+                 SELECT k.id,
+                        k.title,
+                        to_char(k.deadline, 'YYYY-MM-DD') AS deadline,
+                        (k.deadline - CURRENT_DATE)::int AS "daysRemaining",
+                        t.id AS "tabID",
+                        t.name AS "tabName",
+                        t.color AS "tabColor"
+                 FROM tasks k
+                 JOIN lists l ON l.id = k.list_id
+                 JOIN board_columns c ON c.id = l.column_id
+                 JOIN tabs t ON t.id = c.tab_id
+                 WHERE k.workspace_id = $1
+                   AND k.is_completed = false
+                   AND k.deadline IS NOT NULL
+                   AND k.deadline <= CURRENT_DATE + 7
+                   AND t.is_archived = false
+                 ORDER BY k.deadline, k.title
+                 LIMIT 8
+             ),
              tag_mix AS (
                  SELECT tt.tag_id AS "tagID", count(*)::int AS total
                  FROM open_tasks o
@@ -1615,7 +1635,8 @@ class Database {
                  (SELECT coalesce(json_agg(aging), '[]'::json) FROM aging) AS aging,
                  (SELECT coalesce(json_agg(workload), '[]'::json) FROM workload) AS workload,
                  (SELECT total FROM unassigned) AS "unassigned",
-                 (SELECT coalesce(json_agg(tag_mix), '[]'::json) FROM tag_mix) AS "tagMix"`,
+                 (SELECT coalesce(json_agg(tag_mix), '[]'::json) FROM tag_mix) AS "tagMix",
+                 (SELECT coalesce(json_agg(upcoming), '[]'::json) FROM upcoming) AS "upcoming"`,
             [workspaceID, weeks]
         );
 

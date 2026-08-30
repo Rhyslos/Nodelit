@@ -15,6 +15,21 @@ const CYCLE_LABELS = ['0-5d', '5-10d', '10-15d', '15-20d', '20-25d', '25-30d', '
 const AGING_LABELS = ['0-15d', '15-30d', '30-45d', '45-60d', '60d+'];
 
 // utility functions
+function whenLabel(days) {
+    if (days < 0) return `${Math.abs(days)}d late`;
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Tomorrow';
+
+    return `in ${days}d`;
+}
+
+function whenTone(days) {
+    if (days < 0) return 'overdue';
+    if (days <= 1) return 'today';
+
+    return 'soon';
+}
+
 function shortDate(value) {
     const [year, month, day] = String(value).split('-').map(Number);
     if (!year) return value;
@@ -83,7 +98,7 @@ export default function Overview() {
     const completedPerWeek = weeklySeries(stats.throughput ?? [], visibleWeeks);
     const createdPerWeek = weeklySeries(stats.created ?? [], visibleWeeks);
 
-    const recent = completedPerWeek.slice(-4).filter(Boolean);
+    const recent = completedPerWeek.slice(-4);
     const rate = recent.length > 0 ? recent.reduce((sum, n) => sum + n, 0) / recent.length : 0;
     const remaining = (headline.total ?? 0) - (headline.completed ?? 0);
     const weeksLeft = rate > 0 ? Math.ceil(remaining / rate) : null;
@@ -109,6 +124,34 @@ export default function Overview() {
                             <strong>{stats.unassigned ?? 0}</strong>no owner
                         </span>
                     </div>
+                </StatCard>
+
+                <StatCard title="Due next" hint="open work, soonest first">
+                    {(stats.upcoming ?? []).length === 0 ? (
+                        <p className="stat-empty">Nothing due in the next week.</p>
+                    ) : (
+                        <ul className="stat-list">
+                            {stats.upcoming.map(task => (
+                                <li className="stat-list-row" key={task.id}>
+                                    <span className={`stat-list-when is-${whenTone(task.daysRemaining)}`}>
+                                        {whenLabel(task.daysRemaining)}
+                                    </span>
+
+                                    <span className="stat-list-title" title={task.title}>
+                                        {task.title || 'Untitled task'}
+                                    </span>
+
+                                    <span
+                                        className="stat-list-where"
+                                        style={{ '--tab-color': task.tabColor }}
+                                        title={task.tabName}
+                                    >
+                                        {task.tabName}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </StatCard>
 
                 <StatCard title="Deadlines ahead" hint="past week and next two">
