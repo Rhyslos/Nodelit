@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS memberships (
 ALTER TABLE memberships DROP CONSTRAINT IF EXISTS memberships_role_check;
 
 ALTER TABLE memberships ADD CONSTRAINT memberships_role_check
-    CHECK (role IN ('owner', 'member', 'viewer'));
+    CHECK (role IN ('owner', 'member', 'viewer')) NOT VALID;
 
 CREATE INDEX IF NOT EXISTS memberships_user_id_idx ON memberships (user_id);
 
@@ -242,7 +242,7 @@ ALTER TABLE notation_pages ADD COLUMN IF NOT EXISTS layout text NOT NULL DEFAULT
 ALTER TABLE notation_pages DROP CONSTRAINT IF EXISTS notation_pages_layout_check;
 
 ALTER TABLE notation_pages ADD CONSTRAINT notation_pages_layout_check
-    CHECK (layout IN ('paged', 'pageless'));
+    CHECK (layout IN ('paged', 'pageless')) NOT VALID;
 
 -- notation search columns
 ALTER TABLE notation_documents ADD COLUMN IF NOT EXISTS content text NOT NULL DEFAULT '';
@@ -263,7 +263,7 @@ ALTER TABLE tabs ADD COLUMN IF NOT EXISTS group_id text;
 ALTER TABLE tabs DROP CONSTRAINT IF EXISTS tabs_group_id_fkey;
 
 ALTER TABLE tabs ADD CONSTRAINT tabs_group_id_fkey
-    FOREIGN KEY (group_id) REFERENCES tab_groups(id) ON DELETE SET NULL;
+    FOREIGN KEY (group_id) REFERENCES tab_groups(id) ON DELETE SET NULL NOT VALID;
 
 CREATE INDEX IF NOT EXISTS tabs_group_id_idx ON tabs (group_id);
 
@@ -274,17 +274,17 @@ ALTER TABLE tags ADD COLUMN IF NOT EXISTS group_id text;
 ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_tab_id_fkey;
 
 ALTER TABLE tags ADD CONSTRAINT tags_tab_id_fkey
-    FOREIGN KEY (tab_id) REFERENCES tabs(id) ON DELETE CASCADE;
+    FOREIGN KEY (tab_id) REFERENCES tabs(id) ON DELETE CASCADE NOT VALID;
 
 ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_group_id_fkey;
 
 ALTER TABLE tags ADD CONSTRAINT tags_group_id_fkey
-    FOREIGN KEY (group_id) REFERENCES tab_groups(id) ON DELETE CASCADE;
+    FOREIGN KEY (group_id) REFERENCES tab_groups(id) ON DELETE CASCADE NOT VALID;
 
 ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_single_scope_check;
 
 ALTER TABLE tags ADD CONSTRAINT tags_single_scope_check
-    CHECK (tab_id IS NULL OR group_id IS NULL);
+    CHECK (tab_id IS NULL OR group_id IS NULL) NOT VALID;
 
 CREATE INDEX IF NOT EXISTS tags_tab_id_idx ON tags (tab_id);
 CREATE INDEX IF NOT EXISTS tags_group_id_idx ON tags (group_id);
@@ -384,7 +384,7 @@ ALTER TABLE notation_groups ADD COLUMN IF NOT EXISTS parent_id text;
 ALTER TABLE notation_groups DROP CONSTRAINT IF EXISTS notation_groups_parent_id_fkey;
 
 ALTER TABLE notation_groups ADD CONSTRAINT notation_groups_parent_id_fkey
-    FOREIGN KEY (parent_id) REFERENCES notation_groups(id) ON DELETE SET NULL;
+    FOREIGN KEY (parent_id) REFERENCES notation_groups(id) ON DELETE SET NULL NOT VALID;
 
 ALTER TABLE notation_groups DROP CONSTRAINT IF EXISTS notation_groups_parent_self_check;
 

@@ -38,6 +38,7 @@ const FIELD_DEFINITIONS = {
     deadline: { column: 'deadline', cast: '::date', transform: value => (value === '' || value === undefined ? null : value) },
     checklists: { column: 'checklists', cast: '::jsonb', transform: value => JSON.stringify(value ?? []) },
     groupID: { column: 'group_id' },
+    parentID: { column: 'parent_id' },
     groupOrder: { column: 'group_order' },
     pageOrder: { column: 'page_order' },
     layout: { column: 'layout' }
