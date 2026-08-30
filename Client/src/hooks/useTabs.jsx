@@ -3,12 +3,15 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
+import { useToast } from '../contexts/ToastContext';
 
 // configuration constants
 const ACTIVE_TAB_STORAGE_PREFIX = 'nodelit:activetab:';
 
 // hook functions
 export function useTabs(workspaceID) {
+    const { notifyError } = useToast();
+
     const { boardData, setBoardData, applyDelta, refresh } = useKanban();
 
     // state variables
@@ -74,7 +77,8 @@ export function useTabs(workspaceID) {
             setBoardData(prev => applyDelta(prev, { upsert: { tabs: [tab] } }));
             selectTab(tab.id);
             return tab.id;
-        } catch {
+        } catch (error) {
+            notifyError(error, 'Could not create the tab');
             refresh();
             return null;
         }
@@ -89,7 +93,8 @@ export function useTabs(workspaceID) {
         try {
             const tab = await api(`/api/kanban/tabs/${tabId}`, { method: 'PUT', body: changes });
             setBoardData(prev => applyDelta(prev, { upsert: { tabs: [tab] } }));
-        } catch {
+        } catch (error) {
+            notifyError(error, 'Could not update the tab');
             refresh();
         }
     }
@@ -104,7 +109,8 @@ export function useTabs(workspaceID) {
         try {
             const { removed, tabs: updated } = await api(`/api/kanban/tabs/${tabId}`, { method: 'DELETE' });
             setBoardData(prev => applyDelta(prev, { upsert: { tabs: updated }, remove: removed }));
-        } catch {
+        } catch (error) {
+            notifyError(error, 'Could not delete the tab');
             refresh();
         }
     }
@@ -140,7 +146,7 @@ export function useTabs(workspaceID) {
                 remove: result.removed
             }));
         } catch (error) {
-            console.error('reorderTabs failed:', error);
+            notifyError(error, 'Could not reorder the tabs');
             refresh();
         }
     }
@@ -167,7 +173,7 @@ export function useTabs(workspaceID) {
 
             return result.group.id;
         } catch (error) {
-            console.error('addTabGroup failed:', error);
+            notifyError(error, 'Could not create the group');
             refresh();
             return null;
         }
@@ -183,7 +189,7 @@ export function useTabs(workspaceID) {
             const group = await api(`/api/kanban/tab-groups/${groupID}`, { method: 'PUT', body: changes });
             setBoardData(prev => applyDelta(prev, { upsert: { tabGroups: [group] } }));
         } catch (error) {
-            console.error('updateTabGroup failed:', error);
+            notifyError(error, 'Could not update the group');
             refresh();
         }
     }
@@ -207,7 +213,7 @@ export function useTabs(workspaceID) {
                 remove: result.removed
             }));
         } catch (error) {
-            console.error('deleteTabGroup failed:', error);
+            notifyError(error, 'Could not ungroup the tabs');
             refresh();
         }
     }

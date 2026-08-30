@@ -2,12 +2,15 @@
 import { useMemo } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
+import { useToast } from '../contexts/ToastContext';
 
 // configuration constants
 const CONTENT_FIELDS = ['title', 'description', 'isCompleted', 'deadline', 'checklists', 'assignedUsers'];
 
 // hook functions
 export function useTasks(listIDs) {
+    const { notifyError } = useToast();
+
     const { boardData, setBoardData, applyDelta, refresh } = useKanban();
 
     // state variables
@@ -32,7 +35,8 @@ export function useTasks(listIDs) {
 
             setBoardData(prev => applyDelta(prev, { upsert: { tasks: [task] } }));
             return task.id;
-        } catch {
+        } catch (error) {
+            notifyError(error, 'Could not create the task');
             refresh();
             return null;
         }
@@ -64,6 +68,8 @@ export function useTasks(listIDs) {
                 setBoardData(prev => applyDelta(prev, { upsert: { tasks: [err.payload.record] } }));
                 return;
             }
+
+            notifyError(err, 'Could not save the task');
             refresh();
         }
     }
@@ -73,7 +79,8 @@ export function useTasks(listIDs) {
 
         try {
             await api(`/api/kanban/tasks/${taskID}`, { method: 'DELETE' });
-        } catch {
+        } catch (error) {
+            notifyError(error, 'Could not delete the task');
             refresh();
         }
     }
@@ -100,7 +107,8 @@ export function useTasks(listIDs) {
             });
 
             setBoardData(prev => applyDelta(prev, { upsert: { tasks: result.tasks } }));
-        } catch {
+        } catch (error) {
+            notifyError(error, 'Could not move the task');
             refresh();
         }
     }
@@ -115,7 +123,7 @@ export function useTasks(listIDs) {
             const task = await api(`/api/kanban/tasks/${taskID}/tags`, { method: 'PUT', body: { tagIDs } });
             setBoardData(prev => applyDelta(prev, { upsert: { tasks: [task] } }));
         } catch (error) {
-            console.error('setTaskTags failed:', error);
+            notifyError(error, 'Could not update the task tags');
             refresh();
         }
     }

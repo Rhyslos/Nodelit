@@ -3,9 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'rea
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { StreamProvider } from './contexts/StreamContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { KanbanProvider } from './contexts/KanbanContext';
 import { NotationProvider } from './contexts/NotationContext';
 import Navbar from './components/navbar/Navbar';
+import ToastStack from './components/toast/ToastStack';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Kanban from './pages/Kanban';
@@ -71,6 +73,7 @@ function AppLayout() {
     return (
         <>
             {!hideNavbar && <Navbar />}
+            <ToastStack />
             <Routes>
                 <Route element={<PublicRoute />}>
                     <Route path="/login" element={<Login />} />
@@ -107,11 +110,13 @@ function App() {
     return (
         <AuthProvider>
             <ThemeProvider>
-                <StreamProvider>
-                    <BrowserRouter>
-                        <AppLayout />
-                    </BrowserRouter>
-                </StreamProvider>
+                <ToastProvider>
+                    <StreamProvider>
+                        <BrowserRouter>
+                            <AppLayout />
+                        </BrowserRouter>
+                    </StreamProvider>
+                </ToastProvider>
             </ThemeProvider>
         </AuthProvider>
     );

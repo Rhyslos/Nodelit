@@ -3,12 +3,15 @@ import { useCallback } from 'react';
 import { api } from '../lib/api';
 import { normalizeHex } from '../lib/color';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 // configuration constants
 const MAX_PALETTE_COLORS = 12;
 
 // hook functions
 export function usePalette() {
+    const { notifyError } = useToast();
+
     const { user, updateUser } = useAuth();
 
     const palette = user?.palette ?? [];
@@ -20,10 +23,10 @@ export function usePalette() {
             const updated = await api('/api/auth/profile', { method: 'PUT', body: { palette: next } });
             updateUser(updated);
         } catch (error) {
-            console.error('palette save failed:', error);
+            notifyError(error, 'Could not save your palette');
             updateUser(user);
         }
-    }, [user, updateUser]);
+    }, [user, updateUser, notifyError]);
 
     const saveColor = useCallback(hex => {
         const parsed = normalizeHex(hex);

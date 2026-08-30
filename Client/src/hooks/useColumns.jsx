@@ -2,9 +2,12 @@
 import { useMemo } from 'react';
 import { api } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
+import { useToast } from '../contexts/ToastContext';
 
 // hook functions
 export function useColumns(workspaceID, tabID) {
+    const { notifyError } = useToast();
+
     const { boardData, setBoardData, applyDelta, refresh } = useKanban();
 
     // state variables
@@ -27,7 +30,8 @@ export function useColumns(workspaceID, tabID) {
 
             setBoardData(prev => applyDelta(prev, { upsert: { columns: [column] } }));
             return column.id;
-        } catch {
+        } catch (error) {
+            notifyError(error, 'Could not create the column');
             refresh();
             return null;
         }
@@ -44,7 +48,7 @@ export function useColumns(workspaceID, tabID) {
                 remove: result.removed
             }));
         } catch (error) {
-            console.error('deleteColumn failed:', error);
+            notifyError(error, 'Could not delete the column');
             refresh();
         }
     }

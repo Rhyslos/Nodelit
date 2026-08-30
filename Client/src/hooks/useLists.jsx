@@ -2,9 +2,12 @@
 import { useMemo } from 'react';
 import { api } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
+import { useToast } from '../contexts/ToastContext';
 
 // hook functions
 export function useLists(columnIDs) {
+    const { notifyError } = useToast();
+
     const { boardData, setBoardData, applyDelta, refresh } = useKanban();
 
     // state variables
@@ -29,7 +32,8 @@ export function useLists(columnIDs) {
 
             setBoardData(prev => applyDelta(prev, { upsert: { lists: [list] } }));
             return list.id;
-        } catch {
+        } catch (error) {
+            notifyError(error, 'Could not create the list');
             refresh();
             return null;
         }
@@ -44,7 +48,8 @@ export function useLists(columnIDs) {
         try {
             const list = await api(`/api/kanban/lists/${listID}`, { method: 'PUT', body: changes });
             setBoardData(prev => applyDelta(prev, { upsert: { lists: [list] } }));
-        } catch {
+        } catch (error) {
+            notifyError(error, 'Could not update the list');
             refresh();
         }
     }
@@ -74,7 +79,7 @@ export function useLists(columnIDs) {
                 remove: result.removed
             }));
         } catch (error) {
-            console.error('reorderLists failed:', error);
+            notifyError(error, 'Could not move the list');
             refresh();
         }
     }
@@ -96,7 +101,7 @@ export function useLists(columnIDs) {
                 remove: result.removed
             }));
         } catch (error) {
-            console.error('deleteList failed:', error);
+            notifyError(error, 'Could not delete the list');
             refresh();
         }
     }
@@ -111,7 +116,7 @@ export function useLists(columnIDs) {
             const result = await api(`/api/kanban/lists/${listID}/tags`, { method: 'PUT', body: { tagIDs } });
             setBoardData(prev => applyDelta(prev, { upsert: { lists: [result.list], tasks: result.tasks } }));
         } catch (error) {
-            console.error('setListTags failed:', error);
+            notifyError(error, 'Could not update the list tags');
             refresh();
         }
     }

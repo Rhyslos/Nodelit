@@ -2,12 +2,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../lib/api';
 import { useStream } from '../contexts/StreamContext';
+import { useToast } from '../contexts/ToastContext';
 
 // configuration constants
 const SLOT_MINUTES = 30;
 
 // hook functions
 export function useCalendar(workspaceID, rangeStart, rangeEnd, userID) {
+    const { notifyError } = useToast();
+
     const { subscribe } = useStream();
 
     // state variables
@@ -124,7 +127,7 @@ export function useCalendar(workspaceID, rangeStart, rangeEnd, userID) {
                 return next;
             });
         } catch (err) {
-            console.error('setAvailability failed:', err);
+            notifyError(err, 'Could not save your availability');
             refresh();
         }
     }
@@ -139,7 +142,7 @@ export function useCalendar(workspaceID, rangeStart, rangeEnd, userID) {
             setMeetings(current => [...current, meeting].sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
             return meeting;
         } catch (err) {
-            console.error('createMeeting failed:', err);
+            notifyError(err, 'Could not create the meeting');
             refresh();
             return null;
         }
@@ -162,7 +165,7 @@ export function useCalendar(workspaceID, rangeStart, rangeEnd, userID) {
 
             return meeting;
         } catch (err) {
-            console.error('updateMeeting failed:', err);
+            notifyError(err, 'Could not update the meeting');
             refresh();
             return null;
         }
@@ -174,7 +177,7 @@ export function useCalendar(workspaceID, rangeStart, rangeEnd, userID) {
         try {
             await api(`/api/calendar/meetings/${meetingID}`, { method: 'DELETE' });
         } catch (err) {
-            console.error('deleteMeeting failed:', err);
+            notifyError(err, 'Could not delete the meeting');
             refresh();
         }
     }
