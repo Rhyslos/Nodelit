@@ -14,7 +14,7 @@ const HISTORY_WINDOW = 12;
 const CYCLE_LABELS = ['0-5d', '5-10d', '10-15d', '15-20d', '20-25d', '25-30d', '30d+'];
 const AGING_LABELS = ['0-15d', '15-30d', '30-45d', '45-60d', '60d+'];
 
-// formatting functions
+// utility functions
 function whenLabel(days) {
     if (days < 0) return `${Math.abs(days)}d late`;
     if (days === 0) return 'Today';
@@ -50,7 +50,7 @@ function weeklySeries(rows, weeks) {
     return weeks.map(week => byWeek.get(week) ?? 0);
 }
 
-// component functions
+// page functions
 export default function Overview() {
     // hook integrations
     const { workspaceID } = useParams();
@@ -108,12 +108,10 @@ export default function Overview() {
     return (
         <div className="overview-root">
             
-            {/* section wrapper */}
+            {/* layout sections */}
             <div className="overview-section">
-                <h2 className="overview-section-title">Current Status & Workload</h2>
+                <h2 className="overview-section-title">At a Glance</h2>
                 <div className="overview-grid">
-                    
-                    {/* stat cards */}
                     <StatCard title="Right now" hint={`${remaining} open of ${headline.total ?? 0}`}>
                         <div className="stat-chips">
                             <span className="stat-chip is-overdue">
@@ -132,6 +130,73 @@ export default function Overview() {
                                 <strong>{stats.unassigned ?? 0}</strong>no owner
                             </span>
                         </div>
+                    </StatCard>
+
+                    <StatCard title="Forecast" hint="at the recent rate">
+                        {weeksLeft === null ? (
+                            <p className="stat-empty">Not enough completed work to project.</p>
+                        ) : (
+                            <div className="stat-forecast">
+                                <strong>{weeksLeft}</strong>
+                                <span>{weeksLeft === 1 ? 'week' : 'weeks'} to clear {remaining} open tasks</span>
+                                <span className="stat-forecast-rate">{rate.toFixed(1)} finished per week recently</span>
+                            </div>
+                        )}
+                    </StatCard>
+
+                    <StatCard title="Deadline reliability" hint={rated > 0 ? `${rated} dated tasks` : 'no history yet'}>
+                        {rated === 0 ? (
+                            <p className="stat-empty">No completed tasks had deadlines.</p>
+                        ) : (
+                            <div className="stat-split">
+                                <span
+                                    className="stat-split-part is-completed"
+                                    style={{ width: `${(reliability.on_time / rated) * 100}%` }}
+                                >
+                                    {reliability.on_time} on time
+                                </span>
+                                <span
+                                    className="stat-split-part is-overdue"
+                                    style={{ width: `${(reliability.late / rated) * 100}%` }}
+                                >
+                                    {reliability.late} late
+                                </span>
+                            </div>
+                        )}
+                    </StatCard>
+                </div>
+            </div>
+
+            {/* layout sections */}
+            <div className="overview-section">
+                <h2 className="overview-section-title">Tactical Breakdown</h2>
+                <div className="overview-grid">
+                    <StatCard title="Due next" hint="open work, soonest first">
+                        {(stats.upcoming ?? []).length === 0 ? (
+                            <p className="stat-empty">Nothing due in the next week.</p>
+                        ) : (
+                            <ul className="stat-list">
+                                {stats.upcoming.map(task => (
+                                    <li className="stat-list-row" key={task.id}>
+                                        <span className={`stat-list-when is-${whenTone(task.daysRemaining)}`}>
+                                            {whenLabel(task.daysRemaining)}
+                                        </span>
+
+                                        <span className="stat-list-title" title={task.title}>
+                                            {task.title || 'Untitled task'}
+                                        </span>
+
+                                        <span
+                                            className="stat-list-where"
+                                            style={{ '--tab-color': task.tabColor }}
+                                            title={task.tabName}
+                                        >
+                                            {task.tabName}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                     </StatCard>
 
                     <StatCard title="Who is carrying what" hint="open tasks">
@@ -165,72 +230,10 @@ export default function Overview() {
                 </div>
             </div>
 
-            {/* section wrapper */}
+            {/* layout sections */}
             <div className="overview-section">
-                <h2 className="overview-section-title">Deadlines & Future</h2>
+                <h2 className="overview-section-title">Velocity & Trends</h2>
                 <div className="overview-grid">
-                    
-                    {/* stat cards */}
-                    <StatCard title="Due next" hint="open work, soonest first">
-                        {(stats.upcoming ?? []).length === 0 ? (
-                            <p className="stat-empty">Nothing due in the next week.</p>
-                        ) : (
-                            <ul className="stat-list">
-                                {stats.upcoming.map(task => (
-                                    <li className="stat-list-row" key={task.id}>
-                                        <span className={`stat-list-when is-${whenTone(task.daysRemaining)}`}>
-                                            {whenLabel(task.daysRemaining)}
-                                        </span>
-
-                                        <span className="stat-list-title" title={task.title}>
-                                            {task.title || 'Untitled task'}
-                                        </span>
-
-                                        <span
-                                            className="stat-list-where"
-                                            style={{ '--tab-color': task.tabColor }}
-                                            title={task.tabName}
-                                        >
-                                            {task.tabName}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </StatCard>
-
-                    <StatCard title="Deadlines ahead" hint="past week and next two">
-                        <StatBars
-                            emptyLabel="No dated work"
-                            series={(stats.timeline ?? []).map(entry => ({
-                                key: entry.day,
-                                label: shortDate(entry.day),
-                                value: entry.total,
-                                tone: entry.day < new Date().toISOString().slice(0, 10) ? 'overdue' : 'soon'
-                            }))}
-                        />
-                    </StatCard>
-
-                    <StatCard title="Forecast" hint="at the recent rate">
-                        {weeksLeft === null ? (
-                            <p className="stat-empty">Not enough completed work to project.</p>
-                        ) : (
-                            <div className="stat-forecast">
-                                <strong>{weeksLeft}</strong>
-                                <span>{weeksLeft === 1 ? 'week' : 'weeks'} to clear {remaining} open tasks</span>
-                                <span className="stat-forecast-rate">{rate.toFixed(1)} finished per week recently</span>
-                            </div>
-                        )}
-                    </StatCard>
-                </div>
-            </div>
-
-            {/* section wrapper */}
-            <div className="overview-section">
-                <h2 className="overview-section-title">Performance & History</h2>
-                <div className="overview-grid">
-                    
-                    {/* stat cards */}
                     <StatCard title="History" hint="created against completed" wide>
                         <StatLines
                             labels={visibleWeeks.map(shortDate)}
@@ -273,6 +276,18 @@ export default function Overview() {
                         />
                     </StatCard>
 
+                    <StatCard title="Deadlines ahead" hint="past week and next two">
+                        <StatBars
+                            emptyLabel="No dated work"
+                            series={(stats.timeline ?? []).map(entry => ({
+                                key: entry.day,
+                                label: shortDate(entry.day),
+                                value: entry.total,
+                                tone: entry.day < new Date().toISOString().slice(0, 10) ? 'overdue' : 'soon'
+                            }))}
+                        />
+                    </StatCard>
+
                     <StatCard
                         title="Cycle time"
                         hint={stats.cycleMedian ? `median ${Number(stats.cycleMedian).toFixed(1)} days` : 'not enough history'}
@@ -282,27 +297,6 @@ export default function Overview() {
 
                     <StatCard title="How long tasks have sat" hint="open work by age">
                         <StatBars series={bucketSeries(stats.aging ?? [], AGING_LABELS, 'soon')} />
-                    </StatCard>
-
-                    <StatCard title="Deadline reliability" hint={rated > 0 ? `${rated} dated tasks` : 'no history yet'}>
-                        {rated === 0 ? (
-                            <p className="stat-empty">No completed tasks had deadlines.</p>
-                        ) : (
-                            <div className="stat-split">
-                                <span
-                                    className="stat-split-part is-completed"
-                                    style={{ width: `${(reliability.on_time / rated) * 100}%` }}
-                                >
-                                    {reliability.on_time} on time
-                                </span>
-                                <span
-                                    className="stat-split-part is-overdue"
-                                    style={{ width: `${(reliability.late / rated) * 100}%` }}
-                                >
-                                    {reliability.late} late
-                                </span>
-                            </div>
-                        )}
                     </StatCard>
                 </div>
             </div>
