@@ -58,7 +58,11 @@ export default function Kanban() {
     }), [boardData.tags, activeTabId, activeGroupID]);
 
     // ui state
-    const [activeTask, setActiveTask] = useState(null);
+    const [activeTaskId, setActiveTaskId] = useState(null);
+    const activeTask = useMemo(
+        () => tasks.find(t => t.id === activeTaskId) ?? null,
+        [tasks, activeTaskId]
+    );
     const [pendingCombine, setPendingCombine] = useState(null);
     const [focusedListId, setFocusedListId] = useState(null);
     const [focusedTaskId, setFocusedTaskId] = useState(null);
@@ -309,7 +313,7 @@ export default function Kanban() {
                                 registerListElement(list.id, el);
                                 startDrag(e, list, el, 'list');
                             }}
-                            onOpenTask={setActiveTask}
+                            onOpenTask={task => setActiveTaskId(task.id)}
                             onFocusClear={handleFocusClear}
                             registerList={registerList}
                             registerTask={registerTask}
@@ -399,11 +403,8 @@ export default function Kanban() {
                     tags={tags}
                     members={members}
                     onSetTags={tagIDs => setTaskTags(activeTask.id, tagIDs)}
-                    onSave={changes => {
-                        updateTask(activeTask.id, changes);
-                        setActiveTask(null);
-                    }}
-                    onClose={() => setActiveTask(null)}
+                    onChange={changes => updateTask(activeTask.id, changes)}
+                    onClose={() => setActiveTaskId(null)}
                 />
             )}
         </div>

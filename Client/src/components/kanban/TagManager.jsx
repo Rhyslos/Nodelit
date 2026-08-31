@@ -239,6 +239,11 @@ export default function TagManager({ workspaceID, onClose }) {
                     placeholder="No name"
                     onChange={e => setTags(prev => prev.map(t => t.id === tag.id ? { ...t, name: e.target.value } : t))}
                     onBlur={e => handleRename(tag, e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                    }}
                 />
 
                 <select
