@@ -1,6 +1,6 @@
 // component imports
 import { useEffect, useRef, useState } from 'react';
-import { Tag as TagIcon } from 'lucide-react';
+import { Tag as TagIcon, GripVertical, Plus } from 'lucide-react';
 import KanbanTask from './KanbanTask';
 import AnimatedRemoval from '../AnimatedRemoval';
 import TagPicker from './TagPicker';
@@ -106,7 +106,7 @@ export default function KanbanList({
                             onMouseDown={e => onStartListDrag(e, list, listRef.current)}
                             title="Drag to move list"
                         >
-                            ⋮⋮
+                            <GripVertical size={14} strokeWidth={2} />
                         </div>
                     )}
 
@@ -192,7 +192,8 @@ export default function KanbanList({
 
                 {canEdit && (
                     <button className="kanban-add-task-btn" onClick={onAddTask}>
-                        + Add task
+                        <Plus size={14} strokeWidth={2} />
+                        Add task
                     </button>
                 )}
             </div>

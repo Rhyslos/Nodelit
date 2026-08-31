@@ -1,4 +1,5 @@
 // component imports
+import { Plus } from 'lucide-react';
 import KanbanList from './KanbanList';
 
 // component functions
@@ -86,7 +87,7 @@ export default function KanbanColumn({
                     className="kanban-ghost-list"
                     ref={el => registerGhost(`ghost-task-col-${column.columnIndex}`, el)}
                 >
-                    <span>+ Drop to create list</span>
+                    <span><Plus size={14} strokeWidth={2} />Drop to create list</span>
                 </div>
             )}
 

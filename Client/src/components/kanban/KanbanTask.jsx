@@ -1,6 +1,6 @@
 // component imports
 import { useState, useRef, useEffect } from 'react';
-import { Eye, EyeOff, UserPlus, Tag as TagIcon } from 'lucide-react';
+import { Eye, EyeOff, UserPlus, GripVertical, AlignLeft, CalendarDays, ListChecks, Square, Check, Tag as TagIcon } from 'lucide-react';
 import TagPicker from './TagPicker';
 import AssigneeDropdown from './AssigneeDropdown';
 import { useKanban } from '../../contexts/KanbanContext';
@@ -142,25 +142,27 @@ export default function KanbanTask({
                             onMouseDown={e => onStartDrag(e, task, taskRef.current)}
                             title="Drag to move"
                         >
-                            ⋮⋮
+                            <GripVertical size={14} strokeWidth={2} />
                         </div>
                     )}
                 </div>
 
                 <div className="kanban-task-indicators">
                     {task.description && (
-                        <span className="kanban-task-indicator" title="Has description">☰</span>
+                        <span className="kanban-task-indicator" title="Has description"><AlignLeft size={12} strokeWidth={2} /></span>
                     )}
 
                     {task.deadline && (
                         <span className="kanban-task-indicator" title={`Due ${task.deadline}`}>
-                            📅 {task.deadline}
+                            <CalendarDays size={12} strokeWidth={2} />
+                            {task.deadline}
                         </span>
                     )}
 
                     {totalSubtasks > 0 && (
                         <span className="kanban-task-indicator" title="Subtasks">
-                            ☑ {completedSubtasks}/{totalSubtasks}
+                            <ListChecks size={12} strokeWidth={2} />
+                            {completedSubtasks}/{totalSubtasks}
                             <button
                                 type="button"
                                 className="kanban-task-eye-btn"
@@ -189,7 +191,11 @@ export default function KanbanTask({
                                             key={item.id}
                                             className={`kanban-task-checklist-item ${item.done ? 'is-done' : ''}`}
                                         >
-                                            <span className="kanban-task-checklist-mark">{item.done ? '☑' : '☐'}</span>
+                                            <span className="kanban-task-checklist-mark">
+                                                {item.done
+                                                    ? <Check size={12} strokeWidth={2.5} />
+                                                    : <Square size={12} strokeWidth={2} />}
+                                            </span>
                                             {item.text || 'Untitled item'}
                                         </li>
                                     ))}

@@ -1,6 +1,7 @@
 // import functions
 import { useState } from 'react';
 import { useNavigate, useLocation, matchPath } from 'react-router-dom';
+import { Waypoints } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspacePresence } from '../../hooks/useWorkspacePresence';
 import HamburgerMenu from './HamburgerMenu';
@@ -70,7 +71,7 @@ export default function Navbar() {
         <>
             <nav className="navbar">
                 <div className="navbar-brand" onClick={() => navigate('/dashboard')} role="button" tabIndex={0}>
-                    <span className="navbar-logo">✦</span>
+                    <span className="navbar-logo"><Waypoints size={18} strokeWidth={2} /></span>
                     <span className="navbar-name">{appName}</span>
                 </div>
 

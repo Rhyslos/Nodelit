@@ -17,6 +17,7 @@ import KanbanTask from "../components/kanban/KanbanTask";
 import TaskModal from "../components/kanban/TaskModal";
 import DeleteDropZone from "../components/kanban/DeleteDropZone";
 import ConfirmModal from "../components/kanban/ConfirmModal";
+import { Plus } from "lucide-react";
 
 // page component
 export default function Kanban() {
@@ -278,7 +279,7 @@ export default function Kanban() {
                         className="kanban-add-col-btn"
                         onClick={() => handleAddColumn(i)}
                     >
-                        +
+                        <Plus size={15} strokeWidth={2} />
                     </button>
                 ))}
             </div>
@@ -333,7 +334,7 @@ export default function Kanban() {
                                 left: columnCount * (300 + 16),
                             }}
                         >
-                            <span>+ New column</span>
+                            <span><Plus size={14} strokeWidth={2} />New column</span>
                         </div>
                     )}
                 </div>

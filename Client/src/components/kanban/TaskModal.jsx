@@ -1,7 +1,7 @@
 // component imports
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { UserPlus, Tag as TagIcon } from 'lucide-react';
+import { UserPlus, Plus, X, Tag as TagIcon } from 'lucide-react';
 import AssigneeDropdown from './AssigneeDropdown';
 import TagPicker from './TagPicker';
 
@@ -320,7 +320,8 @@ export default function TaskModal({ task, tags = [], members = [], onChange, onS
                     <div className="kanban-modal-group-head">
                         <label>Checklists</label>
                         <button type="button" className="kanban-subtask-add" onClick={addChecklist}>
-                            + Add checklist
+                            <Plus size={13} strokeWidth={2} />
+                            Add checklist
                         </button>
                     </div>
 
@@ -345,7 +346,7 @@ export default function TaskModal({ task, tags = [], members = [], onChange, onS
                                     onClick={() => removeChecklistAt(listIndex)}
                                     aria-label="Remove checklist"
                                 >
-                                    ✕
+                                    <X size={13} strokeWidth={2} />
                                 </button>
                             </div>
 
@@ -373,7 +374,7 @@ export default function TaskModal({ task, tags = [], members = [], onChange, onS
                                             onClick={() => removeItemAt(listIndex, itemIndex)}
                                             aria-label="Remove item"
                                         >
-                                            ✕
+                                            <X size={13} strokeWidth={2} />
                                         </button>
                                     </div>
                                 ))}
@@ -384,7 +385,8 @@ export default function TaskModal({ task, tags = [], members = [], onChange, onS
                                 className="kanban-subtask-add kanban-checklist-add-item"
                                 onClick={() => addItem(listIndex)}
                             >
-                                + Add item
+                                <Plus size={13} strokeWidth={2} />
+                                Add item
                             </button>
                         </div>
                     ))}

@@ -269,6 +269,8 @@
 
 .kanban-list-drag-handle,
 .kanban-task-drag-handle {
+    display: flex;
+    align-items: center;
     color: var(--border);
     font-size: 14px;
     line-height: 1;
@@ -319,6 +321,10 @@
 }
 
 .kanban-add-task-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     background: none;
     border: 1px dashed var(--border);
     border-radius: 8px;
@@ -1158,7 +1164,10 @@
 }
 
 .kanban-task-checklist-mark {
+    display: flex;
+    align-items: center;
     flex-shrink: 0;
+    width: 12px;
     color: var(--muted);
 }
 
@@ -2013,4 +2022,20 @@
 
 .kanban-modal-status.is-idle {
     opacity: 0;
+}
+
+/* icon button styles */
+.kanban-subtask-add,
+.kanban-ghost-list span,
+.kanban-empty-column-dropzone span,
+.kanban-ghost-column span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.kanban-add-col-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
