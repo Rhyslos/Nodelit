@@ -1,9 +1,15 @@
 // component functions
-export default function StatCard({ title, hint, wide = false, children }) {
+export default function StatCard({ title, hint, wide = false, full = false, children }) {
+    const classes = [
+        'stat-card',
+        wide ? 'stat-card--wide' : '',
+        full ? 'stat-card--full' : ''
+    ].filter(Boolean).join(' ');
+
     return (
-        <section className={`stat-card ${wide ? 'stat-card--wide' : ''}`}>
+        <section className={classes}>
             <header className="stat-card-head">
-                <h2 className="stat-card-title">{title}</h2>
+                <h3 className="stat-card-title">{title}</h3>
                 {hint && <span className="stat-card-hint">{hint}</span>}
             </header>
 

@@ -1,132 +1,196 @@
 // package imports
-import { useState, useMemo } from 'react';
+import { useId, useMemo, useState } from 'react';
+import { buildScale, labelStride, showsLabel, toneVariable } from './chartScale';
 
-// style configurations
-const COLORS = {
-    created: '#3b82f6',
-    completed: '#10b981'
-};
+// configuration constants
+const GRID_STEPS = 4;
+const MAX_LABELS = 12;
+const MAX_STATIC_DOTS = 16;
 
 // component functions
-export default function StatLines({ labels, lines }) {
+export default function StatLines({ labels, lines, emptyLabel = 'No history yet' }) {
     // state variables
-    const [hovered, setHovered] = useState(null);
+    const [active, setActive] = useState(null);
+    const gradientID = useId().replace(/[^a-zA-Z0-9-_]/g, '');
 
     // data transformations
-    const { max, points } = useMemo(() => {
-        const maxVal = Math.max(...lines.flatMap(l => l.values), 1);
-        const mappedPoints = labels.map((label, i) => {
-            const point = { label, x: i / Math.max(labels.length - 1, 1) };
-            lines.forEach(line => {
-                point[line.key] = line.values[i] || 0;
-            });
-            return point;
-        });
-        return { max: maxVal, points: mappedPoints };
+    const { max, ticks, points } = useMemo(() => {
+        const safeLabels = labels ?? [];
+        const safeLines = lines ?? [];
+
+        const peak = Math.max(...safeLines.flatMap(line => line.values ?? []), 0);
+        const scale = buildScale(peak, GRID_STEPS);
+
+        const mapped = safeLabels.map((label, index) => ({
+            label,
+            x: ((index + 0.5) / safeLabels.length) * 100,
+            values: safeLines.map(line => line.values?.[index] ?? 0)
+        }));
+
+        return { ...scale, points: mapped };
     }, [labels, lines]);
 
+    // render conditions
+    if (!labels || labels.length === 0 || !lines || lines.length === 0) {
+        return <p className="stat-empty">{emptyLabel}</p>;
+    }
+
     // calculation functions
-    const buildSmoothPath = (dataKey) => {
+    const heightOf = value => 100 - (value / max) * 100;
+
+    const pathFor = lineIndex => {
         if (points.length === 0) return '';
-        
-        let path = `M 0 ${100 - (points[0][dataKey] / max) * 100}`;
-        
-        for (let i = 0; i < points.length - 1; i++) {
-            const p0 = points[i];
-            const p1 = points[i+1];
-            
-            const x0 = p0.x * 100;
-            const y0 = 100 - (p0[dataKey] / max) * 100;
-            const x1 = p1.x * 100;
-            const y1 = 100 - (p1[dataKey] / max) * 100;
-            
-            const cx = (x0 + x1) / 2;
-            path += ` C ${cx} ${y0}, ${cx} ${y1}, ${x1} ${y1}`;
+        if (points.length === 1) {
+            const only = points[0];
+            return `M 0 ${heightOf(only.values[lineIndex])} L 100 ${heightOf(only.values[lineIndex])}`;
         }
-        
+
+        let path = `M ${points[0].x} ${heightOf(points[0].values[lineIndex])}`;
+
+        for (let index = 0; index < points.length - 1; index += 1) {
+            const from = points[index];
+            const to = points[index + 1];
+            const control = (from.x + to.x) / 2;
+
+            path += ` C ${control} ${heightOf(from.values[lineIndex])},`
+                + ` ${control} ${heightOf(to.values[lineIndex])},`
+                + ` ${to.x} ${heightOf(to.values[lineIndex])}`;
+        }
+
         return path;
     };
 
-    // render conditions
-    if (!labels || labels.length === 0) {
-        return <p className="stat-empty">No history available</p>;
-    }
+    const stride = labelStride(points.length, MAX_LABELS);
+    const showDots = points.length <= MAX_STATIC_DOTS;
 
     // layout structure
     return (
-        <div style={{ position: 'relative', width: '100%', height: '260px', paddingBottom: '24px' }}>
-            
-            {/* grid layout */}
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: '24px', zIndex: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
-                {[...Array(5)].map((_, i) => (
-                    <div key={i} style={{ borderTop: '1px dashed #f3f4f6', width: '100%' }}></div>
+        <div className="stat-lines">
+            <div className="stat-lines-scale" aria-hidden="true">
+                {ticks.map(tick => <span key={tick}>{tick}</span>)}
+            </div>
+
+            <div className="stat-lines-plot">
+                <div className="stat-lines-grid" aria-hidden="true">
+                    {ticks.map(tick => <span key={tick} />)}
+                </div>
+
+                <svg
+                    className="stat-lines-svg"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                >
+                    <defs>
+                        {lines.map(line => (
+                            <linearGradient
+                                key={line.key}
+                                id={`${gradientID}-${line.key}`}
+                                x1="0" y1="0" x2="0" y2="1"
+                                style={{ '--tone': toneVariable(line.tone ?? line.key) }}
+                            >
+                                <stop offset="0%" stopColor="var(--tone)" stopOpacity="0.32" />
+                                <stop offset="100%" stopColor="var(--tone)" stopOpacity="0" />
+                            </linearGradient>
+                        ))}
+                    </defs>
+
+                    {lines.map((line, lineIndex) => {
+                        const stroke = pathFor(lineIndex);
+                        const first = points[0];
+                        const last = points[points.length - 1];
+                        const area = `${stroke} L ${last.x} 100 L ${first.x} 100 Z`;
+
+                        return (
+                            <g key={line.key} style={{ '--tone': toneVariable(line.tone ?? line.key) }}>
+                                <path d={area} fill={`url(#${gradientID}-${line.key})`} />
+                                <path
+                                    className="stat-lines-stroke"
+                                    d={stroke}
+                                    fill="none"
+                                    stroke="var(--tone)"
+                                    vectorEffect="non-scaling-stroke"
+                                />
+                            </g>
+                        );
+                    })}
+                </svg>
+
+                <div className="stat-lines-markers" aria-hidden="true">
+                    {points.map((point, index) => lines.map((line, lineIndex) => (
+                        <span
+                            className="stat-lines-dot"
+                            key={`${line.key}-${point.label}`}
+                            data-active={active === index || undefined}
+                            hidden={!showDots && active !== index}
+                            style={{
+                                '--tone': toneVariable(line.tone ?? line.key),
+                                left: `${point.x}%`,
+                                top: `${heightOf(point.values[lineIndex])}%`
+                            }}
+                        />
+                    )))}
+                </div>
+
+                <div className="stat-lines-hits">
+                    {points.map((point, index) => (
+                        <div
+                            className="stat-lines-hit"
+                            key={point.label}
+                            tabIndex={0}
+                            aria-label={`${point.label}: ${lines.map((line, i) => `${line.label} ${point.values[i]}`).join(', ')}`}
+                            data-active={active === index || undefined}
+                            data-align={index === 0 ? 'start' : index === points.length - 1 ? 'end' : undefined}
+                            onMouseEnter={() => setActive(index)}
+                            onMouseLeave={() => setActive(current => (current === index ? null : current))}
+                            onFocus={() => setActive(index)}
+                            onBlur={() => setActive(current => (current === index ? null : current))}
+                        >
+                            {active === index && (
+                                <>
+                                    <span className="stat-lines-guide" />
+
+                                    <div className="stat-lines-tip" role="tooltip">
+                                        <span className="stat-lines-tip-label">{point.label}</span>
+
+                                        {lines.map((line, lineIndex) => (
+                                            <span
+                                                className="stat-lines-tip-row"
+                                                key={line.key}
+                                                style={{ '--tone': toneVariable(line.tone ?? line.key) }}
+                                            >
+                                                <span className="stat-lines-swatch" />
+                                                <span className="stat-lines-tip-name">{line.label}</span>
+                                                <strong>{point.values[lineIndex]}</strong>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="stat-lines-axis" aria-hidden="true">
+                {points.map((point, index) => (
+                    <span key={point.label} data-active={active === index || undefined}>
+                        {showsLabel(index, points.length, stride) ? point.label : ''}
+                    </span>
                 ))}
             </div>
 
-            {/* svg containers */}
-            <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 'calc(100% - 24px)', overflow: 'visible' }} preserveAspectRatio="none" viewBox="0 0 100 100">
-                <defs>
-                    <linearGradient id="createdArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={COLORS.created} stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor={COLORS.created} stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="completedArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={COLORS.completed} stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor={COLORS.completed} stopOpacity={0}/>
-                    </linearGradient>
-                </defs>
-
-                {/* data loops */}
-                {lines.map((line) => {
-                    const linePath = buildSmoothPath(line.key);
-                    const areaPath = `${linePath} L 100 100 L 0 100 Z`;
-                    
-                    return (
-                        <g key={line.key}>
-                            <path d={areaPath} fill={`url(#${line.key}Area)`} vectorEffect="non-scaling-stroke" />
-                            <path d={linePath} fill="none" stroke={COLORS[line.key]} strokeWidth="3" vectorEffect="non-scaling-stroke" />
-                        </g>
-                    );
-                })}
-            </svg>
-
-            {/* overlay components */}
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', zIndex: 10 }}>
-                {points.map((pt, i) => {
-                    const isHovered = hovered === i;
-                    
-                    return (
-                        <div 
-                            key={i} 
-                            onMouseEnter={() => setHovered(i)}
-                            onMouseLeave={() => setHovered(null)}
-                            style={{ flex: 1, height: '100%', position: 'relative', cursor: 'crosshair' }}
-                        >
-                            {/* visual elements */}
-                            {isHovered && (
-                                <div style={{ position: 'absolute', left: '50%', top: 0, bottom: '24px', width: '1px', background: '#94a3b8', transform: 'translateX(-50%)', pointerEvents: 'none' }}></div>
-                            )}
-                            
-                            {/* popup layouts */}
-                            {isHovered && (
-                                <div style={{ position: 'absolute', left: '50%', top: '10px', transform: 'translateX(-50%)', background: '#fff', border: '1px solid #f3f4f6', padding: '8px 12px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 20, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-                                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', textAlign: 'center' }}>{pt.label}</div>
-                                    {lines.map(line => (
-                                        <div key={line.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', fontSize: '13px', fontWeight: 'bold' }}>
-                                            <span style={{ color: COLORS[line.key] }}>{line.label}:</span>
-                                            <span>{pt[line.key]}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* typography elements */}
-                            <span style={{ position: 'absolute', bottom: '0', left: '50%', transform: 'translateX(-50%)', fontSize: '12px', color: '#9ca3af', whiteSpace: 'nowrap' }}>
-                                {pt.label}
-                            </span>
-                        </div>
-                    );
-                })}
+            <div className="stat-lines-legend">
+                {lines.map(line => (
+                    <span
+                        className="stat-lines-key"
+                        key={line.key}
+                        style={{ '--tone': toneVariable(line.tone ?? line.key) }}
+                    >
+                        <span className="stat-lines-swatch" />
+                        {line.label}
+                    </span>
+                ))}
             </div>
         </div>
     );

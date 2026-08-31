@@ -81,11 +81,11 @@ export default function Overview() {
     const tagOf = id => boardData.tags.find(tag => tag.id === id) ?? null;
 
     if (loading) {
-        return <div className="overview-root" style={{ maxWidth: 'none', width: '100%' }}><p className="stat-empty">Loading overview…</p></div>;
+        return <div className="overview-root"><p className="stat-empty">Loading overview…</p></div>;
     }
 
     if (!stats) {
-        return <div className="overview-root" style={{ maxWidth: 'none', width: '100%' }}><p className="stat-empty">No data yet.</p></div>;
+        return <div className="overview-root"><p className="stat-empty">No data yet.</p></div>;
     }
 
     const headline = stats.headline ?? {};
@@ -101,7 +101,7 @@ export default function Overview() {
     const weeksLeft = rate > 0 ? Math.ceil(remaining / rate) : null;
 
     return (
-        <div className="overview-root" style={{ maxWidth: 'none', width: '100%' }}>
+        <div className="overview-root">
             <div className="overview-section">
                 <h2 className="overview-section-title">Overview</h2>
                 <div className="overview-grid">
@@ -160,7 +160,7 @@ export default function Overview() {
                 </div>
             </div>
 
-            <div className="overview-section" style={{ marginTop: '32px' }}>
+            <div className="overview-section">
                 <h2 className="overview-section-title">Load</h2>
                 <div className="overview-grid">
                     <StatCard title="Due next" hint="open work, soonest first">
@@ -203,7 +203,7 @@ export default function Overview() {
                             }))}
                         />
                     </StatCard>
-                    
+
                     <StatCard title="What kind of work" hint="open tasks by tag">
                         <StatRows
                             emptyLabel="No tagged work"
@@ -222,9 +222,9 @@ export default function Overview() {
                 </div>
             </div>
 
-            <div className="overview-section" style={{ marginTop: '32px' }}>
+            <div className="overview-section">
                 <h2 className="overview-section-title">Statistics</h2>
-                <div className="overview-grid">
+                <div className="overview-grid overview-grid--charts">
                     <StatCard title="Throughput" hint="completed per week">
                         <StatBars
                             emptyLabel="Nothing completed yet"
@@ -260,7 +260,7 @@ export default function Overview() {
                         <StatBars series={bucketSeries(stats.aging ?? [], AGING_LABELS, 'soon')} />
                     </StatCard>
 
-                    <StatCard title="History" hint="created against completed" wide>
+                    <StatCard title="History" hint="created against completed" full>
                         <StatLines
                             labels={visibleWeeks.map(shortDate)}
                             lines={[
