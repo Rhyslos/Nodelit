@@ -11,8 +11,44 @@ import StatLines from '../components/overview/StatLines';
 
 // configuration constants
 const HISTORY_WINDOW = 12;
+const MAX_WEEKS = 208;
 const CYCLE_LABELS = ['0-5d', '5-10d', '10-15d', '15-20d', '20-25d', '25-30d', '30d+'];
 const AGING_LABELS = ['0-15d', '15-30d', '30-45d', '45-60d', '60d+'];
+
+// week functions
+function parseDay(value) {
+    const [year, month, day] = String(value).split('-').map(Number);
+    if (!year || !month || !day) return null;
+
+    return new Date(year, month - 1, day);
+}
+
+function weekKey(date) {
+    const monday = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+
+    const month = String(monday.getMonth() + 1).padStart(2, '0');
+    const day = String(monday.getDate()).padStart(2, '0');
+
+    return `${monday.getFullYear()}-${month}-${day}`;
+}
+
+function weekRange(from, to) {
+    const start = parseDay(from);
+    const end = parseDay(to);
+
+    if (!start || !end || start > end) return [];
+
+    const weeks = [];
+    let cursor = start;
+
+    while (cursor <= end && weeks.length < MAX_WEEKS) {
+        weeks.push(weekKey(cursor));
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 7);
+    }
+
+    return weeks;
+}
 
 // formatting functions
 function whenLabel(days) {
@@ -31,11 +67,10 @@ function whenTone(days) {
 }
 
 function shortDate(value) {
-    const [year, month, day] = String(value).split('-').map(Number);
-    if (!year) return value;
+    const parsed = parseDay(value);
+    if (!parsed) return value;
 
-    return new Date(year, month - 1, day)
-        .toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return parsed.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 function bucketSeries(buckets, labels, tone) {
@@ -59,14 +94,21 @@ export default function Overview() {
 
     const [offset, setOffset] = useState(0);
 
+    const currentWeek = weekKey(new Date());
+
     const weeks = useMemo(() => {
-        const all = new Set([
+        const seen = [
             ...(stats?.throughput ?? []).map(entry => entry.week),
             ...(stats?.created ?? []).map(entry => entry.week)
-        ]);
+        ].sort();
 
-        return [...all].sort();
-    }, [stats]);
+        if (seen.length === 0) return [];
+
+        const earliest = seen[0] < currentWeek ? seen[0] : currentWeek;
+        const latest = seen[seen.length - 1] > currentWeek ? seen[seen.length - 1] : currentWeek;
+
+        return weekRange(earliest, latest);
+    }, [stats, currentWeek]);
 
     const visibleWeeks = useMemo(() => {
         if (weeks.length === 0) return [];
@@ -95,7 +137,9 @@ export default function Overview() {
     const completedPerWeek = weeklySeries(stats.throughput ?? [], visibleWeeks);
     const createdPerWeek = weeklySeries(stats.created ?? [], visibleWeeks);
 
-    const recent = completedPerWeek.slice(-4);
+    const finishedWeeks = weeks.filter(week => week < currentWeek);
+    const recent = weeklySeries(stats.throughput ?? [], finishedWeeks).slice(-4);
+
     const rate = recent.length > 0 ? recent.reduce((sum, n) => sum + n, 0) / recent.length : 0;
     const remaining = (headline.total ?? 0) - (headline.completed ?? 0);
     const weeksLeft = rate > 0 ? Math.ceil(remaining / rate) : null;
