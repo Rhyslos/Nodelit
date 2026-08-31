@@ -41,6 +41,13 @@
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
 }
 
+.overview-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 16px;
+}
+
 @media (max-width: 640px) {
     .overview-root {
         padding: 16px 12px;
@@ -301,16 +308,14 @@
     color: var(--muted);
 }
 
-.stat-bars-axis,
-.stat-lines-axis {
+.stat-bars-axis {
     display: flex;
     grid-column: 2;
     gap: 6px;
     min-width: 0;
 }
 
-.stat-bars-axis span,
-.stat-lines-axis span {
+.stat-bars-axis span {
     flex: 1 1 0;
     min-width: 0;
     font-size: 10px;
@@ -320,8 +325,7 @@
     overflow: visible;
 }
 
-.stat-bars-axis span[data-active],
-.stat-lines-axis span[data-active] {
+.stat-bars-axis span[data-active] {
     color: var(--ink);
     font-weight: 600;
 }
@@ -391,14 +395,13 @@
 
 .stat-lines-hits {
     position: absolute;
-    display: flex;
     inset: 0;
 }
 
 .stat-lines-hit {
-    position: relative;
-    flex: 1 1 0;
-    min-width: 0;
+    position: absolute;
+    top: 0;
+    bottom: 0;
     outline: none;
     cursor: crosshair;
 }
@@ -412,7 +415,6 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 50%;
     width: 1px;
     background: var(--chart-grid);
     transform: translateX(-50%);
@@ -422,7 +424,6 @@
 .stat-lines-tip {
     position: absolute;
     top: 8px;
-    left: 50%;
     z-index: 6;
     display: flex;
     flex-direction: column;
@@ -437,15 +438,12 @@
     pointer-events: none;
 }
 
-.stat-lines-hit[data-align='start'] .stat-lines-tip {
-    left: 0;
+.stat-lines-tip[data-align='start'] {
     transform: none;
 }
 
-.stat-lines-hit[data-align='end'] .stat-lines-tip {
-    right: 0;
-    left: auto;
-    transform: none;
+.stat-lines-tip[data-align='end'] {
+    transform: translateX(-100%);
 }
 
 .stat-lines-tip-label {
@@ -468,6 +466,36 @@
 .stat-lines-tip-row strong {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+}
+
+.stat-lines-axis {
+    position: relative;
+    grid-column: 2;
+    height: 13px;
+    min-width: 0;
+}
+
+.stat-lines-axis span {
+    position: absolute;
+    top: 0;
+    font-size: 10px;
+    line-height: 1.3;
+    color: var(--chart-tick);
+    white-space: nowrap;
+    transform: translateX(-50%);
+}
+
+.stat-lines-axis span[data-align='start'] {
+    transform: none;
+}
+
+.stat-lines-axis span[data-align='end'] {
+    transform: translateX(-100%);
+}
+
+.stat-lines-axis span[data-active] {
+    color: var(--ink);
+    font-weight: 600;
 }
 
 .stat-lines-legend {

@@ -303,8 +303,10 @@ export default function Overview() {
                     <StatCard title="How long tasks have sat" hint="open work by age">
                         <StatBars series={bucketSeries(stats.aging ?? [], AGING_LABELS, 'soon')} />
                     </StatCard>
+                </div>
 
-                    <StatCard title="History" hint="created against completed" full>
+                <div className="overview-stack">
+                    <StatCard title="History" hint="created against completed">
                         <StatLines
                             labels={visibleWeeks.map(shortDate)}
                             lines={[

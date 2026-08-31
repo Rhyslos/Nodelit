@@ -14,20 +14,21 @@ export default function StatLines({ labels, lines, emptyLabel = 'No history yet'
     const gradientID = useId().replace(/[^a-zA-Z0-9-_]/g, '');
 
     // data transformations
-    const { max, ticks, points } = useMemo(() => {
+    const { max, ticks, points, step } = useMemo(() => {
         const safeLabels = labels ?? [];
         const safeLines = lines ?? [];
 
         const peak = Math.max(...safeLines.flatMap(line => line.values ?? []), 0);
         const scale = buildScale(peak, GRID_STEPS);
+        const spacing = safeLabels.length > 1 ? 100 / (safeLabels.length - 1) : 100;
 
         const mapped = safeLabels.map((label, index) => ({
             label,
-            x: ((index + 0.5) / safeLabels.length) * 100,
+            x: safeLabels.length > 1 ? index * spacing : 50,
             values: safeLines.map(line => line.values?.[index] ?? 0)
         }));
 
-        return { ...scale, points: mapped };
+        return { ...scale, points: mapped, step: spacing };
     }, [labels, lines]);
 
     // render conditions
@@ -38,11 +39,18 @@ export default function StatLines({ labels, lines, emptyLabel = 'No history yet'
     // calculation functions
     const heightOf = value => 100 - (value / max) * 100;
 
+    const alignOf = index => {
+        if (index === 0) return 'start';
+        if (index === points.length - 1) return 'end';
+
+        return undefined;
+    };
+
     const pathFor = lineIndex => {
         if (points.length === 0) return '';
         if (points.length === 1) {
-            const only = points[0];
-            return `M 0 ${heightOf(only.values[lineIndex])} L 100 ${heightOf(only.values[lineIndex])}`;
+            const level = heightOf(points[0].values[lineIndex]);
+            return `M 0 ${level} L 100 ${level}`;
         }
 
         let path = `M ${points[0].x} ${heightOf(points[0].values[lineIndex])}`;
@@ -97,13 +105,14 @@ export default function StatLines({ labels, lines, emptyLabel = 'No history yet'
 
                     {lines.map((line, lineIndex) => {
                         const stroke = pathFor(lineIndex);
-                        const first = points[0];
-                        const last = points[points.length - 1];
-                        const area = `${stroke} L ${last.x} 100 L ${first.x} 100 Z`;
 
                         return (
                             <g key={line.key} style={{ '--tone': toneVariable(line.tone ?? line.key) }}>
-                                <path d={area} fill={`url(#${gradientID}-${line.key})`} />
+                                <path
+                                    d={`${stroke} L 100 100 L 0 100 Z`}
+                                    fill={`url(#${gradientID}-${line.key})`}
+                                />
+
                                 <path
                                     className="stat-lines-stroke"
                                     d={stroke}
@@ -117,6 +126,10 @@ export default function StatLines({ labels, lines, emptyLabel = 'No history yet'
                 </svg>
 
                 <div className="stat-lines-markers" aria-hidden="true">
+                    {active !== null && (
+                        <span className="stat-lines-guide" style={{ left: `${points[active].x}%` }} />
+                    )}
+
                     {points.map((point, index) => lines.map((line, lineIndex) => (
                         <span
                             className="stat-lines-dot"
@@ -130,53 +143,65 @@ export default function StatLines({ labels, lines, emptyLabel = 'No history yet'
                             }}
                         />
                     )))}
+
+                    {active !== null && (
+                        <div
+                            className="stat-lines-tip"
+                            role="tooltip"
+                            data-align={alignOf(active)}
+                            style={{ left: `${points[active].x}%` }}
+                        >
+                            <span className="stat-lines-tip-label">{points[active].label}</span>
+
+                            {lines.map((line, lineIndex) => (
+                                <span
+                                    className="stat-lines-tip-row"
+                                    key={line.key}
+                                    style={{ '--tone': toneVariable(line.tone ?? line.key) }}
+                                >
+                                    <span className="stat-lines-swatch" />
+                                    <span className="stat-lines-tip-name">{line.label}</span>
+                                    <strong>{points[active].values[lineIndex]}</strong>
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="stat-lines-hits">
-                    {points.map((point, index) => (
-                        <div
-                            className="stat-lines-hit"
-                            key={point.label}
-                            tabIndex={0}
-                            aria-label={`${point.label}: ${lines.map((line, i) => `${line.label} ${point.values[i]}`).join(', ')}`}
-                            data-active={active === index || undefined}
-                            data-align={index === 0 ? 'start' : index === points.length - 1 ? 'end' : undefined}
-                            onMouseEnter={() => setActive(index)}
-                            onMouseLeave={() => setActive(current => (current === index ? null : current))}
-                            onFocus={() => setActive(index)}
-                            onBlur={() => setActive(current => (current === index ? null : current))}
-                        >
-                            {active === index && (
-                                <>
-                                    <span className="stat-lines-guide" />
+                    {points.map((point, index) => {
+                        const from = Math.max(0, point.x - step / 2);
+                        const to = Math.min(100, point.x + step / 2);
 
-                                    <div className="stat-lines-tip" role="tooltip">
-                                        <span className="stat-lines-tip-label">{point.label}</span>
-
-                                        {lines.map((line, lineIndex) => (
-                                            <span
-                                                className="stat-lines-tip-row"
-                                                key={line.key}
-                                                style={{ '--tone': toneVariable(line.tone ?? line.key) }}
-                                            >
-                                                <span className="stat-lines-swatch" />
-                                                <span className="stat-lines-tip-name">{line.label}</span>
-                                                <strong>{point.values[lineIndex]}</strong>
-                                            </span>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    ))}
+                        return (
+                            <div
+                                className="stat-lines-hit"
+                                key={point.label}
+                                tabIndex={0}
+                                aria-label={`${point.label}: ${lines.map((line, i) => `${line.label} ${point.values[i]}`).join(', ')}`}
+                                style={{ left: `${from}%`, width: `${to - from}%` }}
+                                onMouseEnter={() => setActive(index)}
+                                onMouseLeave={() => setActive(current => (current === index ? null : current))}
+                                onFocus={() => setActive(index)}
+                                onBlur={() => setActive(current => (current === index ? null : current))}
+                            />
+                        );
+                    })}
                 </div>
             </div>
 
             <div className="stat-lines-axis" aria-hidden="true">
                 {points.map((point, index) => (
-                    <span key={point.label} data-active={active === index || undefined}>
-                        {showsLabel(index, points.length, stride) ? point.label : ''}
-                    </span>
+                    showsLabel(index, points.length, stride) ? (
+                        <span
+                            key={point.label}
+                            data-active={active === index || undefined}
+                            data-align={alignOf(index)}
+                            style={{ left: `${point.x}%` }}
+                        >
+                            {point.label}
+                        </span>
+                    ) : null
                 ))}
             </div>
 
