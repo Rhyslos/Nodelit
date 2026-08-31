@@ -235,7 +235,7 @@ export default function Overview() {
                         )}
                     </StatCard>
 
-                    <StatCard title="Who is carrying what" hint="open tasks">
+                    <StatCard title="Individual workload" hint="open tasks">
                         <StatRows
                             emptyLabel="Nothing assigned"
                             rows={(stats.workload ?? []).map(entry => ({
@@ -248,7 +248,7 @@ export default function Overview() {
                         />
                     </StatCard>
 
-                    <StatCard title="What kind of work" hint="open tasks by tag">
+                    <StatCard title="Focus areas" hint="open tasks by tag">
                         <StatRows
                             emptyLabel="No tagged work"
                             rows={(stats.tagMix ?? []).map(entry => {
@@ -300,7 +300,7 @@ export default function Overview() {
                         <StatBars series={bucketSeries(stats.cycle ?? [], CYCLE_LABELS, 'completed')} />
                     </StatCard>
 
-                    <StatCard title="How long tasks have sat" hint="open work by age">
+                    <StatCard title="Task decay" hint="open work by age">
                         <StatBars series={bucketSeries(stats.aging ?? [], AGING_LABELS, 'soon')} />
                     </StatCard>
                 </div>
