@@ -1585,13 +1585,22 @@ class Database {
                  FROM open_tasks
                  GROUP BY 1 ORDER BY 1
              ),
-             workload AS (
-                 SELECT ta.user_id AS "userID",
-                        count(*)::int AS total,
-                        count(*) FILTER (WHERE o.deadline < CURRENT_DATE)::int AS overdue
+             assigned_open AS (
+                 SELECT ta.user_id, o.id, o.deadline
                  FROM open_tasks o
                  JOIN task_assignees ta ON ta.task_id = o.id
-                 GROUP BY ta.user_id
+             ),
+             workload AS (
+                 SELECT u.id AS "userID",
+                        u.display_name AS "displayName",
+                        count(a.id)::int AS total,
+                        count(a.id) FILTER (WHERE a.deadline < CURRENT_DATE)::int AS overdue
+                 FROM memberships m
+                 JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+                 LEFT JOIN assigned_open a ON a.user_id = u.id
+                 WHERE m.workspace_id = $1
+                 GROUP BY u.id, u.display_name
+                 ORDER BY count(a.id) DESC, u.display_name
              ),
              unassigned AS (
                  SELECT count(*)::int AS total
@@ -1618,6 +1627,22 @@ class Database {
                  ORDER BY k.deadline, k.title
                  LIMIT 8
              ),
+             tracked AS (
+                 SELECT k.id,
+                        k.title,
+                        k.is_completed AS "isCompleted",
+                        to_char(k.deadline, 'YYYY-MM-DD') AS deadline,
+                        (k.deadline - CURRENT_DATE)::int AS "daysRemaining",
+                        t.name AS "tabName",
+                        t.color AS "tabColor"
+                 FROM tracked_tasks tr
+                 JOIN tasks k ON k.id = tr.task_id
+                 JOIN lists l ON l.id = k.list_id
+                 JOIN board_columns c ON c.id = l.column_id
+                 JOIN tabs t ON t.id = c.tab_id
+                 WHERE tr.workspace_id = $1
+                 ORDER BY tr.created_at
+             ),
              tag_mix AS (
                  SELECT tt.tag_id AS "tagID", count(*)::int AS total
                  FROM open_tasks o
@@ -1636,11 +1661,34 @@ class Database {
                  (SELECT coalesce(json_agg(workload), '[]'::json) FROM workload) AS workload,
                  (SELECT total FROM unassigned) AS "unassigned",
                  (SELECT coalesce(json_agg(tag_mix), '[]'::json) FROM tag_mix) AS "tagMix",
-                 (SELECT coalesce(json_agg(upcoming), '[]'::json) FROM upcoming) AS "upcoming"`,
+                 (SELECT coalesce(json_agg(upcoming), '[]'::json) FROM upcoming) AS "upcoming",
+                 (SELECT coalesce(json_agg(tracked), '[]'::json) FROM tracked) AS "tracked"`,
             [workspaceID, weeks]
         );
 
         return rows[0] ?? null;
+    }
+
+    // tracked task functions
+    async addTrackedTask(workspaceID, taskID, userID, limit) {
+        return queryOne(
+            `INSERT INTO tracked_tasks (workspace_id, task_id, created_by)
+             SELECT $1, $2, $3
+             WHERE EXISTS (SELECT 1 FROM tasks WHERE id = $2 AND workspace_id = $1)
+               AND (SELECT count(*) FROM tracked_tasks WHERE workspace_id = $1) < $4
+             ON CONFLICT DO NOTHING
+             RETURNING task_id AS "taskID"`,
+            [workspaceID, taskID, userID, limit]
+        );
+    }
+
+    async removeTrackedTask(workspaceID, taskID) {
+        return queryOne(
+            `DELETE FROM tracked_tasks
+             WHERE workspace_id = $1 AND task_id = $2
+             RETURNING task_id AS "taskID"`,
+            [workspaceID, taskID]
+        );
     }
 
     // tag functions

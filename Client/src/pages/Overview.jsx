@@ -1,10 +1,11 @@
 // page imports
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { api } from '../lib/api';
 import { useKanban } from '../contexts/KanbanContext';
-import { useWorkspacePresence } from '../hooks/useWorkspacePresence';
 import { useWorkspaceStats } from '../hooks/useWorkspaceStats';
 import StatCard from '../components/overview/StatCard';
+import TrackedTasks from '../components/overview/TrackedTasks';
 import StatBars from '../components/overview/StatBars';
 import StatRows from '../components/overview/StatRows';
 import StatLines from '../components/overview/StatLines';
@@ -12,6 +13,7 @@ import StatLines from '../components/overview/StatLines';
 // configuration constants
 const HISTORY_WINDOW = 12;
 const MAX_WEEKS = 208;
+const TRACKED_LIMIT = 5;
 const CYCLE_LABELS = ['0-5d', '5-10d', '10-15d', '15-20d', '20-25d', '25-30d', '30d+'];
 const AGING_LABELS = ['0-15d', '15-30d', '30-45d', '45-60d', '60d+'];
 
@@ -88,9 +90,8 @@ function weeklySeries(rows, weeks) {
 // component functions
 export default function Overview() {
     const { workspaceID } = useParams();
-    const { boardData } = useKanban();
-    const { members } = useWorkspacePresence(workspaceID);
-    const { stats, loading } = useWorkspaceStats(workspaceID);
+    const { boardData, canEdit } = useKanban();
+    const { stats, loading, reload } = useWorkspaceStats(workspaceID);
 
     const [offset, setOffset] = useState(0);
 
@@ -117,10 +118,20 @@ export default function Overview() {
         return weeks.slice(Math.max(0, end - HISTORY_WINDOW), end);
     }, [weeks, offset]);
 
-    const memberName = id =>
-        members.find(member => member.id === id)?.displayName ?? 'Unknown';
+    const tabByList = useMemo(() => {
+        const tabs = new Map(boardData.tabs.map(tab => [tab.id, tab]));
+        return new Map(boardData.lists.map(list => [list.id, tabs.get(list.tabID) ?? null]));
+    }, [boardData.tabs, boardData.lists]);
 
-    const tagOf = id => boardData.tags.find(tag => tag.id === id) ?? null;
+    async function trackTask(taskID) {
+        await api('/api/kanban/tracked', { method: 'POST', body: { workspaceID, taskID } });
+        reload();
+    }
+
+    async function untrackTask(taskID) {
+        await api(`/api/kanban/tracked/${taskID}`, { method: 'DELETE' });
+        reload();
+    }
 
     if (loading) {
         return <div className="overview-root"><p className="stat-empty">Loading overview…</p></div>;
@@ -206,7 +217,7 @@ export default function Overview() {
 
             <div className="overview-section">
                 <h2 className="overview-section-title">Load</h2>
-                <div className="overview-grid">
+                <div className="overview-grid overview-grid--load">
                     <StatCard title="Due next" hint="open work, soonest first">
                         {(stats.upcoming ?? []).length === 0 ? (
                             <p className="stat-empty">Nothing due in the next week.</p>
@@ -237,10 +248,10 @@ export default function Overview() {
 
                     <StatCard title="Individual workload" hint="open tasks">
                         <StatRows
-                            emptyLabel="Nothing assigned"
+                            emptyLabel="No members yet"
                             rows={(stats.workload ?? []).map(entry => ({
                                 key: entry.userID,
-                                label: memberName(entry.userID),
+                                label: entry.displayName,
                                 value: entry.total,
                                 tone: entry.overdue > 0 ? 'overdue' : 'soon',
                                 display: entry.overdue > 0 ? `${entry.total} · ${entry.overdue} late` : entry.total
@@ -248,19 +259,18 @@ export default function Overview() {
                         />
                     </StatCard>
 
-                    <StatCard title="Focus areas" hint="open tasks by tag">
-                        <StatRows
-                            emptyLabel="No tagged work"
-                            rows={(stats.tagMix ?? []).map(entry => {
-                                const tag = tagOf(entry.tagID);
-
-                                return {
-                                    key: entry.tagID,
-                                    label: tag?.name || 'Unnamed',
-                                    value: entry.total,
-                                    color: tag?.color
-                                };
-                            })}
+                    <StatCard
+                        title="Tracked"
+                        hint={`${(stats.tracked ?? []).length} of ${TRACKED_LIMIT}`}
+                    >
+                        <TrackedTasks
+                            tracked={stats.tracked ?? []}
+                            tasks={boardData.tasks}
+                            tabByList={tabByList}
+                            canEdit={canEdit}
+                            limit={TRACKED_LIMIT}
+                            onAdd={trackTask}
+                            onRemove={untrackTask}
                         />
                     </StatCard>
                 </div>

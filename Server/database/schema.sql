@@ -424,3 +424,15 @@ CREATE INDEX IF NOT EXISTS tasks_workspace_completed_idx
 
 CREATE INDEX IF NOT EXISTS tasks_workspace_deadline_idx
     ON tasks (workspace_id, deadline) WHERE deadline IS NOT NULL AND is_completed = false;
+
+-- tracked task tables
+CREATE TABLE IF NOT EXISTS tracked_tasks (
+    workspace_id text NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    task_id      text NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    created_at   timestamptz(3) NOT NULL DEFAULT now(),
+    created_by   text REFERENCES users(id) ON DELETE SET NULL,
+    PRIMARY KEY (workspace_id, task_id)
+);
+
+CREATE INDEX IF NOT EXISTS tracked_tasks_workspace_created_idx
+    ON tracked_tasks (workspace_id, created_at);

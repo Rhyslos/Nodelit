@@ -24,6 +24,7 @@ import {
 const STATS_WEEKS = 26;
 const STATS_MAX_WEEKS = 104;
 const STATS_CACHE_MS = 60000;
+const TRACKED_LIMIT = 5;
 
 // utility functions
 const statsCache = new Map();
@@ -423,6 +424,39 @@ export default function createKanbanRouter(authz) {
 
             res.setHeader('X-Stats-Cache', 'miss');
             res.json(stats);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.post('/tracked', authz.workspaceBodyEdit(), async (req, res, next) => {
+        try {
+            const taskID = requireID(req.body?.taskID, 'taskID');
+            const added = await db.addTrackedTask(req.workspaceID, taskID, req.user.id, TRACKED_LIMIT);
+
+            if (!added) {
+                return res.status(409).json({
+                    error: `You can track up to ${TRACKED_LIMIT} tasks, and only tasks from this workspace`
+                });
+            }
+
+            publish(req, {});
+            res.status(201).json(added);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.delete('/tracked/:id', authz.taskEdit(), async (req, res, next) => {
+        try {
+            const removed = await db.removeTrackedTask(req.workspaceID, req.params.id);
+
+            if (!removed) {
+                return res.status(404).json({ error: 'Not found' });
+            }
+
+            publish(req, {});
+            res.json(removed);
         } catch (error) {
             next(error);
         }
