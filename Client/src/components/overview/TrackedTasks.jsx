@@ -4,6 +4,57 @@ import { Plus, X } from 'lucide-react';
 
 // configuration constants
 const PICKER_RESULTS = 8;
+const DUE_SOON_DAYS = 2;
+
+// date functions
+function parseDay(value) {
+    const [year, month, day] = String(value).split('-').map(Number);
+    if (!year || !month || !day) return null;
+
+    return new Date(year, month - 1, day);
+}
+
+function startOfDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function daysBetween(from, to) {
+    return Math.round((to - from) / 86400000);
+}
+
+// progress functions
+function meterOf(task) {
+    const start = parseDay(task.createdOn);
+    const end = parseDay(task.deadline);
+
+    if (!start || !end) return null;
+
+    const marker = (task.isCompleted && parseDay(task.completedOn)) || startOfDay(new Date());
+
+    const span = daysBetween(start, end);
+    const elapsed = daysBetween(start, marker);
+    const ratio = span <= 0 ? 1 : Math.min(Math.max(elapsed / span, 0), 1);
+
+    return { span, elapsed, ratio };
+}
+
+function toneOf(task) {
+    if (task.isCompleted) return 'completed';
+    if (task.daysRemaining < 0) return 'overdue';
+    if (task.daysRemaining <= DUE_SOON_DAYS) return 'soon';
+
+    return 'ontrack';
+}
+
+function statusOf(task) {
+    if (task.isCompleted) return 'Done';
+    if (task.daysRemaining === null || task.daysRemaining === undefined) return 'No deadline';
+    if (task.daysRemaining < 0) return `${Math.abs(task.daysRemaining)}d late`;
+    if (task.daysRemaining === 0) return 'Due today';
+    if (task.daysRemaining === 1) return '1d left';
+
+    return `${task.daysRemaining}d left`;
+}
 
 // component functions
 export default function TrackedTasks({ tracked, tasks, tabByList, canEdit, limit, onAdd, onRemove }) {
@@ -47,34 +98,62 @@ export default function TrackedTasks({ tracked, tasks, tabByList, canEdit, limit
             {tracked.length === 0 && !picking ? (
                 <p className="stat-empty">Nothing tracked yet.</p>
             ) : (
-                <ul className="stat-list">
-                    {tracked.map(task => (
-                        <li className="stat-list-row" key={task.id}>
-                            <span className={`stat-list-title ${task.isCompleted ? 'is-done' : ''}`} title={task.title}>
-                                {task.title || 'Untitled task'}
-                            </span>
+                <ul className="stat-track">
+                    {tracked.map(task => {
+                        const meter = meterOf(task);
+                        const tone = toneOf(task);
 
-                            <span
-                                className="stat-list-where"
-                                style={{ '--tab-color': task.tabColor }}
-                                title={task.tabName}
-                            >
-                                {task.tabName}
-                            </span>
+                        return (
+                            <li className="stat-track-row" key={task.id} data-tone={tone}>
+                                <div className="stat-track-head">
+                                    <span
+                                        className={`stat-track-title ${task.isCompleted ? 'is-done' : ''}`}
+                                        title={task.title}
+                                    >
+                                        {task.title || 'Untitled task'}
+                                    </span>
 
-                            {canEdit && (
-                                <button
-                                    className="stat-list-drop"
-                                    type="button"
-                                    disabled={busy}
-                                    aria-label={`Stop tracking ${task.title || 'this task'}`}
-                                    onClick={() => handleRemove(task.id)}
-                                >
-                                    <X size={13} strokeWidth={2.5} />
-                                </button>
-                            )}
-                        </li>
-                    ))}
+                                    <span
+                                        className="stat-track-where"
+                                        style={{ '--tab-color': task.tabColor }}
+                                        title={task.tabName}
+                                    >
+                                        {task.tabName}
+                                    </span>
+
+                                    {canEdit && (
+                                        <button
+                                            className="stat-track-drop"
+                                            type="button"
+                                            disabled={busy}
+                                            aria-label={`Stop tracking ${task.title || 'this task'}`}
+                                            onClick={() => handleRemove(task.id)}
+                                        >
+                                            <X size={13} strokeWidth={2.5} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="stat-track-meter">
+                                    {meter ? (
+                                        <span
+                                            className="stat-track-bar"
+                                            title={`${task.createdOn} → ${task.deadline} · day ${meter.elapsed} of ${meter.span}`}
+                                        >
+                                            <span
+                                                className="stat-track-fill"
+                                                style={{ width: `${meter.ratio * 100}%` }}
+                                            />
+                                        </span>
+                                    ) : (
+                                        <span className="stat-track-bar is-empty" />
+                                    )}
+
+                                    <span className="stat-track-status">{statusOf(task)}</span>
+                                </div>
+                            </li>
+                        );
+                    })}
                 </ul>
             )}
 

@@ -1631,6 +1631,8 @@ class Database {
                  SELECT k.id,
                         k.title,
                         k.is_completed AS "isCompleted",
+                        to_char(k.created_at, 'YYYY-MM-DD') AS "createdOn",
+                        to_char(k.completed_at, 'YYYY-MM-DD') AS "completedOn",
                         to_char(k.deadline, 'YYYY-MM-DD') AS deadline,
                         (k.deadline - CURRENT_DATE)::int AS "daysRemaining",
                         t.name AS "tabName",

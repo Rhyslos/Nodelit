@@ -4,6 +4,7 @@
     --chart-overdue: var(--danger);
     --chart-soon: #e6a817;
     --chart-created: var(--danger);
+    --chart-ontrack: var(--accent);
     --chart-grid: color-mix(in srgb, var(--border) 75%, transparent);
     --chart-tick: var(--muted);
     --chart-plot-min: 160px;
@@ -758,12 +759,65 @@
     gap: 8px;
 }
 
-.stat-list-title.is-done {
+.stat-track {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.stat-track-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px 6px 8px;
+    border-radius: 8px;
+}
+
+.stat-track-row:hover {
+    background: var(--field);
+}
+
+.stat-track-row[data-tone='ontrack'] { --tone: var(--chart-ontrack); }
+.stat-track-row[data-tone='soon'] { --tone: var(--chart-soon); }
+.stat-track-row[data-tone='overdue'] { --tone: var(--chart-overdue); }
+.stat-track-row[data-tone='completed'] { --tone: var(--chart-completed); }
+
+.stat-track-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.stat-track-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stat-track-title.is-done {
     color: var(--muted);
     text-decoration: line-through;
 }
 
-.stat-list-drop {
+.stat-track-where {
+    flex: 0 0 clamp(84px, 22%, 140px);
+    padding-left: 8px;
+    border-left: 2px solid var(--tab-color, var(--border));
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stat-track-drop {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
@@ -780,13 +834,58 @@
     transition: opacity 0.12s, color 0.12s;
 }
 
-.stat-list-row:hover .stat-list-drop,
-.stat-list-drop:focus-visible {
+.stat-track-row:hover .stat-track-drop,
+.stat-track-drop:focus-visible {
     opacity: 1;
 }
 
-.stat-list-drop:hover {
+.stat-track-drop:hover {
     color: var(--danger);
+}
+
+.stat-track-meter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stat-track-bar {
+    position: relative;
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--field);
+    overflow: hidden;
+}
+
+.stat-track-row:hover .stat-track-bar {
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.stat-track-bar.is-empty {
+    background: repeating-linear-gradient(
+        90deg,
+        var(--field) 0 6px,
+        transparent 6px 10px
+    );
+}
+
+.stat-track-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--tone);
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stat-track-status {
+    flex: 0 0 auto;
+    min-width: 62px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--tone);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 .stat-add {
