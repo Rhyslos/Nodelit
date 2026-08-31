@@ -1221,6 +1221,7 @@
     gap: 2px;
     max-height: 240px;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .tag-picker-item {
@@ -1377,6 +1378,7 @@
     gap: 2px;
     max-height: 220px;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .assignee-dropdown-item {
@@ -1799,6 +1801,7 @@
     flex-direction: column;
     max-height: 320px;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 6px;
 }
 

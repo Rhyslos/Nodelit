@@ -47,7 +47,10 @@ export default function TabContextMenu({ open, x, y, onGroup, onRemoveFromGroup,
             onClose();
         }
 
-        function onScroll() { onClose(); }
+        function onScroll(e) {
+            if (menuRef.current && e.target instanceof Node && menuRef.current.contains(e.target)) return;
+            onClose();
+        }
         function onResize() { onClose(); }
 
         function onKey(e) {

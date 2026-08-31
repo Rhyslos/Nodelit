@@ -47,10 +47,15 @@ export default function AssigneeDropdown({ anchorRect, members, assigned = [], o
             if (e.key === 'Escape') onClose();
         }
 
+        function handleScroll(e) {
+            if (ref.current && e.target instanceof Node && ref.current.contains(e.target)) return;
+            onClose();
+        }
+
         const frame = requestAnimationFrame(() => {
             document.addEventListener('mousedown', handlePointerDown);
             document.addEventListener('keydown', handleKey);
-            window.addEventListener('scroll', onClose, true);
+            window.addEventListener('scroll', handleScroll, true);
             window.addEventListener('resize', onClose);
         });
 
@@ -58,7 +63,7 @@ export default function AssigneeDropdown({ anchorRect, members, assigned = [], o
             cancelAnimationFrame(frame);
             document.removeEventListener('mousedown', handlePointerDown);
             document.removeEventListener('keydown', handleKey);
-            window.removeEventListener('scroll', onClose, true);
+            window.removeEventListener('scroll', handleScroll, true);
             window.removeEventListener('resize', onClose);
         };
     }, [onClose]);
