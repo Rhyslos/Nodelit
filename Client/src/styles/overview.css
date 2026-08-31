@@ -722,9 +722,8 @@
 }
 
 .stat-list-where {
-    flex: 0 0 auto;
-    max-width: 96px;
-    padding-left: 7px;
+    flex: 0 0 clamp(96px, 26%, 150px);
+    padding-left: 8px;
     border-left: 2px solid var(--tab-color, var(--border));
     font-size: 11px;
     color: var(--muted);
