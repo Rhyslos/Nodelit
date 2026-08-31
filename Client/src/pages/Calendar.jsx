@@ -1,7 +1,7 @@
 // component imports
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, CalendarPlus, Pencil, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarPlus, CalendarClock, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useKanban } from '../contexts/KanbanContext';
 import { useWorkspacePresence } from '../hooks/useWorkspacePresence';
@@ -16,6 +16,8 @@ const DAY_END_HOUR = 21;
 const MAX_AVATARS = 5;
 const DURATIONS = [30, 60, 90, 120, 180];
 const ROW_STORAGE_KEY = 'nodelit:calendarrowheight';
+const DEADLINE_STORAGE_KEY = 'nodelit:calendardeadlines';
+const MONTH_DEADLINE_LIMIT = 3;
 const ROW_MIN = 20;
 const ROW_MAX = 72;
 const ROW_DEFAULT = 32;
@@ -97,6 +99,30 @@ function readRowHeight() {
     return ROW_DEFAULT;
 }
 
+function parseDeadline(value) {
+    const [year, month, day] = String(value).split('-').map(Number);
+    if (!year || !month || !day) return null;
+
+    return new Date(year, month - 1, day);
+}
+
+function readDeadlinePrefs() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(DEADLINE_STORAGE_KEY) ?? '{}');
+        return { show: stored.show === true, assignee: stored.assignee ?? 'all' };
+    } catch {
+        return { show: false, assignee: 'all' };
+    }
+}
+
+function persistDeadlinePrefs(show, assignee) {
+    try {
+        localStorage.setItem(DEADLINE_STORAGE_KEY, JSON.stringify({ show, assignee }));
+    } catch {
+        return;
+    }
+}
+
 function toDateValue(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -116,7 +142,7 @@ function formatDuration(minutes) {
 export default function Calendar() {
     const { workspaceID } = useParams();
     const { user } = useAuth();
-    const { canEdit } = useKanban();
+    const { canEdit, boardData } = useKanban();
     const { members } = useWorkspacePresence(workspaceID);
 
     // state variables
@@ -126,6 +152,7 @@ export default function Calendar() {
     const [rowHeight, setRowHeight] = useState(readRowHeight);
     const [resizing, setResizing] = useState(false);
     const [confirmMeeting, setConfirmMeeting] = useState(null);
+    const [deadlinePrefs, setDeadlinePrefs] = useState(readDeadlinePrefs);
 
     // drag references
     const paintRef = useRef(null);
@@ -221,6 +248,48 @@ export default function Calendar() {
         return stats;
     }, [slots]);
 
+    const tabByList = useMemo(() => {
+        const tabs = new Map(boardData.tabs.map(tab => [tab.id, tab]));
+        return new Map(boardData.lists.map(list => [list.id, tabs.get(list.tabID) ?? null]));
+    }, [boardData.tabs, boardData.lists]);
+
+    const deadlinesByDay = useMemo(() => {
+        if (!deadlinePrefs.show) return {};
+
+        const map = {};
+
+        for (const task of boardData.tasks) {
+            if (!task.deadline) continue;
+
+            if (deadlinePrefs.assignee !== 'all'
+                && !(task.assignedUsers ?? []).includes(deadlinePrefs.assignee)) continue;
+
+            const tab = tabByList.get(task.listID);
+            if (tab?.isArchived) continue;
+
+            const date = parseDeadline(task.deadline);
+            if (!date) continue;
+
+            const key = date.getTime();
+            if (!map[key]) map[key] = [];
+
+            map[key].push({
+                id: task.id,
+                title: task.title,
+                isCompleted: task.isCompleted,
+                tabName: tab?.name ?? 'Board',
+                tabColor: tab?.color ?? null
+            });
+        }
+
+        for (const entries of Object.values(map)) {
+            entries.sort((a, b) =>
+                Number(a.isCompleted) - Number(b.isCompleted) || a.title.localeCompare(b.title));
+        }
+
+        return map;
+    }, [boardData.tasks, tabByList, deadlinePrefs.show, deadlinePrefs.assignee]);
+
     const meetingsByDay = useMemo(() => {
         const map = {};
 
@@ -287,6 +356,17 @@ export default function Calendar() {
             window.removeEventListener('dragstart', handleCancel);
         };
     }, [setAvailability]);
+
+    useEffect(() => {
+        persistDeadlinePrefs(deadlinePrefs.show, deadlinePrefs.assignee);
+    }, [deadlinePrefs]);
+
+    useEffect(() => {
+        if (deadlinePrefs.assignee === 'all' || members.length === 0) return;
+        if (members.some(member => member.id === deadlinePrefs.assignee)) return;
+
+        setDeadlinePrefs(current => ({ ...current, assignee: 'all' }));
+    }, [members, deadlinePrefs.assignee]);
 
     // slot helpers
     function slotDate(day, time) {
@@ -486,6 +566,19 @@ export default function Calendar() {
         return blocks;
     }
 
+    function renderDeadline(task) {
+        return (
+            <span
+                key={task.id}
+                className={`calendar-deadline ${task.isCompleted ? 'is-done' : ''}`}
+                style={{ '--tab-color': task.tabColor || 'var(--border)' }}
+                title={`${task.title || 'Untitled task'} · ${task.tabName}${task.isCompleted ? ' · completed' : ''}`}
+            >
+                {task.title || 'Untitled task'}
+            </span>
+        );
+    }
+
     function renderAvatars(userIDs, compact) {
         const limit = compact ? COMPACT_AVATARS : MAX_AVATARS;
 
@@ -622,6 +715,18 @@ export default function Calendar() {
                     ))}
                 </div>
 
+                {deadlinePrefs.show && (
+                    <div className="calendar-deadline-row">
+                        <span className="calendar-deadline-gutter">Due</span>
+
+                        {days.map(day => (
+                            <div className="calendar-deadline-cell" key={day.getTime()}>
+                                {(deadlinesByDay[startOfDay(day).getTime()] ?? []).map(renderDeadline)}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 <div className="calendar-week-body">
                     <div className="calendar-gutter">
                         {hours.map(hour => (
@@ -661,6 +766,7 @@ export default function Calendar() {
                     {days.map(day => {
                         const stats = dayStats[startOfDay(day).getTime()];
                         const dayMeetings = meetingsByDay[startOfDay(day).getTime()] ?? [];
+                        const dayDeadlines = deadlinesByDay[startOfDay(day).getTime()] ?? [];
                         const ratio = stats ? stats.best / memberCount : 0;
 
                         return (
@@ -682,6 +788,18 @@ export default function Calendar() {
 
                                 {stats && (
                                     <span className="calendar-month-overlap">{stats.best}/{memberCount}</span>
+                                )}
+
+                                {dayDeadlines.length > 0 && (
+                                    <span className="calendar-month-deadlines">
+                                        {dayDeadlines.slice(0, MONTH_DEADLINE_LIMIT).map(renderDeadline)}
+
+                                        {dayDeadlines.length > MONTH_DEADLINE_LIMIT && (
+                                            <span className="calendar-deadline is-more">
+                                                +{dayDeadlines.length - MONTH_DEADLINE_LIMIT} more
+                                            </span>
+                                        )}
+                                    </span>
                                 )}
 
                                 {dayMeetings.length > 0 && (
@@ -707,7 +825,35 @@ export default function Calendar() {
     return (
         <div className="calendar-root" style={{ '--slot-h': `${rowHeight}px` }}>
             <div className="calendar-toolbar">
-                <div className="calendar-toolbar-side" />
+                <div className="calendar-toolbar-side">
+                    <span className="calendar-views">
+                        <button
+                            className={`calendar-view-btn ${deadlinePrefs.show ? 'active' : ''}`}
+                            aria-pressed={deadlinePrefs.show}
+                            onClick={() => setDeadlinePrefs(current => ({ ...current, show: !current.show }))}
+                        >
+                            <CalendarClock size={14} strokeWidth={2} />
+                            Deadlines
+                        </button>
+                    </span>
+
+                    {deadlinePrefs.show && (
+                        <select
+                            className="calendar-assignee"
+                            aria-label="Filter deadlines by assignee"
+                            value={deadlinePrefs.assignee}
+                            onChange={e => setDeadlinePrefs(current => ({ ...current, assignee: e.target.value }))}
+                        >
+                            <option value="all">Everyone</option>
+
+                            {members.map(member => (
+                                <option key={member.id} value={member.id}>
+                                    {member.displayName}
+                                </option>
+                            ))}
+                        </select>
+                    )}
+                </div>
 
                 <div className="calendar-nav">
                     <button className="calendar-nav-btn" onClick={() => shiftAnchor(-1)} aria-label="Previous period">

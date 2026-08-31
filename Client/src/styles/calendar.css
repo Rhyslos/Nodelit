@@ -685,3 +685,89 @@
 .calendar-meeting-delete:hover {
     color: var(--accent);
 }
+
+/* deadline styles */
+.calendar-view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.calendar-assignee {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--ink);
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+}
+
+.calendar-assignee:focus-visible {
+    border-color: var(--accent);
+}
+
+.calendar-deadline-row {
+    display: grid;
+    grid-template-columns: 56px repeat(7, 1fr);
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.calendar-deadline-gutter {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 6px 6px 6px 0;
+    border-right: 1px solid var(--border);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.calendar-deadline-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 92px;
+    padding: 5px 4px;
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.calendar-deadline {
+    padding: 2px 6px;
+    border-left: 3px solid var(--tab-color, var(--border));
+    border-radius: 4px;
+    background: var(--field);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--ink);
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.calendar-deadline.is-done {
+    opacity: 0.45;
+}
+
+.calendar-deadline.is-more {
+    border-left-color: transparent;
+    background: none;
+    color: var(--muted);
+}
+
+.calendar-month-deadlines {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    min-width: 0;
+}
