@@ -45,7 +45,7 @@ export default function Kanban() {
     const { columns, addColumn } = useColumns(workspaceID, activeTabId);
 
     const columnIDs = columns.map(c => c.id);
-    const { lists, addList, updateList, reorderLists, deleteList, setListTags } = useLists(columnIDs);
+    const { lists, addList, updateList, reorderLists, moveListToNewColumn, deleteList, setListTags } = useLists(columnIDs);
 
     const listIDs = lists.map(l => l.id);
     const { tasks, addTask, updateTask, duplicateTask, deleteTask, reorderTasks, setTaskTags } = useTasks(listIDs);
@@ -149,6 +149,7 @@ export default function Kanban() {
         isOverDeleteZone,
         registerList,
         registerTask,
+        registerColumn,
         registerGhost,
         registerDeleteZone,
         registerCloneOuter,
@@ -163,6 +164,10 @@ export default function Kanban() {
             reorderTasks(updates);
         },
         onReorderLists: handleReorderLists,
+        onMoveListToColumn: async (listID, columnIndex) => {
+            snapshotLists();
+            await moveListToNewColumn(listID, columnIndex);
+        },
         onDeleteDrop: (item, type) => {
             if (type === 'task') triggerTaskRemoval(item.id);
             else if (type === 'list') triggerListRemoval(item.id);
@@ -385,11 +390,19 @@ export default function Kanban() {
                             onListContextMenu={canEdit ? (e, list) => openMenu(e, 'list', list) : undefined}
                             registerList={registerList}
                             registerTask={registerTask}
+                            registerColumn={registerColumn}
                             registerGhost={registerGhost}
                             registerTaskElement={registerTaskElement}
                             registerListElement={registerListElement}
                         />
                     ))}
+
+                    {insertionPoint?.type === 'column' && (
+                        <div
+                            className="kanban-column-insertion-indicator"
+                            style={{ left: insertionPoint.columnIndex * (300 + 16) - 10 }}
+                        />
+                    )}
 
                     {isDragging && (
                         <div

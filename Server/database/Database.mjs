@@ -2217,6 +2217,71 @@ class Database {
         });
     }
 
+    async moveListToNewColumn(listID, columnIndex) {
+        const empty = { lists: [], columns: [], removed: emptyChangeSet() };
+
+        return withTransaction(async client => {
+            const scope = await client.query(
+                `SELECT c.tab_id AS "tabID"
+                 FROM lists l JOIN board_columns c ON c.id = l.column_id
+                 WHERE l.id = $1`,
+                [listID]
+            );
+
+            if (scope.rowCount === 0) return empty;
+
+            const { tabID } = scope.rows[0];
+
+            const total = await client.query(
+                'SELECT count(*)::int AS count FROM board_columns WHERE tab_id = $1',
+                [tabID]
+            );
+
+            const target = Math.max(0, Math.min(columnIndex, total.rows[0].count));
+
+            await client.query(
+                `UPDATE board_columns SET column_index = column_index + 1000000
+                 WHERE tab_id = $1 AND column_index >= $2`,
+                [tabID, target]
+            );
+
+            await client.query(
+                `UPDATE board_columns SET column_index = column_index - 999999
+                 WHERE tab_id = $1 AND column_index >= 1000000`,
+                [tabID]
+            );
+
+            const created = await client.query(
+                `INSERT INTO board_columns (id, tab_id, column_index)
+                 VALUES ($1, $2, $3)
+                 RETURNING id`,
+                [newID('col'), tabID, target]
+            );
+
+            await client.query(
+                'UPDATE lists SET column_id = $1, list_order = 0, updated_at = now() WHERE id = $2',
+                [created.rows[0].id, listID]
+            );
+
+            const { removedColumnIDs } = await normalizeColumns(client, [tabID]);
+
+            const { rows: columns } = await client.query(
+                `SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE c.tab_id = $1 ORDER BY c.column_index`,
+                [tabID]
+            );
+
+            const { rows: lists } = await client.query(
+                `SELECT ${LIST_SELECT} ${LIST_FROM} WHERE c.tab_id = $1 ORDER BY l.list_order`,
+                [tabID]
+            );
+
+            const removed = emptyChangeSet();
+            removed.columns = removedColumnIDs;
+
+            return { lists, columns, removed };
+        });
+    }
+
     async reorderLists(updates) {
         const empty = { lists: [], columns: [], removed: emptyChangeSet() };
         if (!updates || updates.length === 0) return empty;

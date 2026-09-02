@@ -2,12 +2,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 // hook functions
+const EDGE_RATIO = 0.28;
+
 export function useDragDrop({
     tasks,
     lists,
     columns,
     onReorderTasks,
     onReorderLists,
+    onMoveListToColumn,
     onGhostDrop,
     onDeleteDrop,
 }) {
@@ -20,6 +23,7 @@ export function useDragDrop({
 
     // dom references
     const listRefs = useRef({});
+    const columnRefs = useRef({});
     const taskRefs = useRef({});
     const ghostRefs = useRef({});
     const deleteZoneRef = useRef(null);
@@ -40,12 +44,14 @@ export function useDragDrop({
     const onReorderTasksRef = useRef(onReorderTasks);
     const onReorderListsRef = useRef(onReorderLists);
     const onDeleteDropRef = useRef(onDeleteDrop);
+    const onMoveListToColumnRef = useRef(onMoveListToColumn);
 
     // lifecycle functions
     useEffect(() => { onGhostDropRef.current = onGhostDrop; }, [onGhostDrop]);
     useEffect(() => { onReorderTasksRef.current = onReorderTasks; }, [onReorderTasks]);
     useEffect(() => { onReorderListsRef.current = onReorderLists; }, [onReorderLists]);
     useEffect(() => { onDeleteDropRef.current = onDeleteDrop; }, [onDeleteDrop]);
+    useEffect(() => { onMoveListToColumnRef.current = onMoveListToColumn; }, [onMoveListToColumn]);
     useEffect(() => { tasksRef.current = tasks; }, [tasks]);
     useEffect(() => { if (lists) listsRef.current = lists; }, [lists]);
     useEffect(() => { if (columns) columnsRef.current = columns; }, [columns]);
@@ -59,6 +65,11 @@ export function useDragDrop({
     function registerTask(taskId, el) {
         if (el) taskRefs.current[taskId] = el;
         else delete taskRefs.current[taskId];
+    }
+
+    function registerColumn(columnIndex, el) {
+        if (el) columnRefs.current[columnIndex] = el;
+        else delete columnRefs.current[columnIndex];
     }
 
     function registerGhost(key, el) {
@@ -119,6 +130,7 @@ export function useDragDrop({
             if (prev && point && prev.type === point.type) {
                 if (prev.type === 'task' && prev.listId === point.listId && prev.insertIndex === point.insertIndex) return prev;
                 if (prev.type === 'list' && prev.colIndex === point.colIndex && prev.insertIndex === point.insertIndex) return prev;
+                if (prev.type === 'column' && prev.columnIndex === point.columnIndex) return prev;
             }
             return point;
         });
@@ -141,8 +153,13 @@ export function useDragDrop({
                 : getTaskInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id);
 
             if (point) {
-                if (isListDrag) commitListReorder(draggingRef.current.item, point);
-                else commitTaskReorder(draggingRef.current.item, point);
+                if (point.type === 'column') {
+                    onMoveListToColumnRef.current?.(draggingRef.current.item.id, point.columnIndex);
+                } else if (isListDrag) {
+                    commitListReorder(draggingRef.current.item, point);
+                } else {
+                    commitTaskReorder(draggingRef.current.item, point);
+                }
             } else {
                 for (const [key, el] of Object.entries(ghostRefs.current)) {
                     const rect = el.getBoundingClientRect();
@@ -239,7 +256,35 @@ export function useDragDrop({
         return { type: 'task', listId: targetListId, insertIndex };
     }
 
+    function getColumnInsertionPoint(cx) {
+        const entries = Object.entries(columnRefs.current)
+            .map(([index, el]) => ({ index: Number(index), rect: el.getBoundingClientRect() }))
+            .sort((a, b) => a.index - b.index);
+
+        if (entries.length === 0) return null;
+
+        for (const entry of entries) {
+            const { left, right, width } = entry.rect;
+            if (cx < left || cx > right) continue;
+
+            const edge = width * EDGE_RATIO;
+
+            if (cx < left + edge) return { type: 'column', columnIndex: entry.index };
+            if (cx > right - edge) return { type: 'column', columnIndex: entry.index + 1 };
+
+            return null;
+        }
+
+        const first = entries[0];
+        if (cx < first.rect.left) return { type: 'column', columnIndex: first.index };
+
+        return null;
+    }
+
     function getListInsertionPoint(cx, cy, draggedId) {
+        const columnPoint = getColumnInsertionPoint(cx);
+        if (columnPoint) return columnPoint;
+
         let targetColumnId = null;
 
         for (const [listId, el] of Object.entries(listRefs.current)) {
@@ -329,6 +374,7 @@ export function useDragDrop({
         isOverDeleteZone,
         registerList,
         registerTask,
+        registerColumn,
         registerGhost,
         registerDeleteZone,
         registerCloneOuter,

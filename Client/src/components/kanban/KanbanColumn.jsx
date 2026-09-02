@@ -31,6 +31,7 @@ export default function KanbanColumn({
     onListContextMenu,
     registerList,
     registerTask,
+    registerColumn,
     registerGhost,
     registerTaskElement,
     registerListElement,
@@ -43,7 +44,11 @@ export default function KanbanColumn({
         : null;
 
     return (
-        <div className="kanban-column" style={{ '--col': column.columnIndex }}>
+        <div
+            className="kanban-column"
+            style={{ '--col': column.columnIndex }}
+            ref={el => registerColumn?.(column.columnIndex, el)}
+        >
             {sortedLists.map((list, index) => (
                 <div key={list.id} className="kanban-column-slot">
                     {listInsertionIndex === index && (

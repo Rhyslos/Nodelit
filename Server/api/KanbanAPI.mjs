@@ -320,6 +320,20 @@ export default function createKanbanRouter(authz) {
             }
         });
 
+    router.put('/lists/:id/column', authz.listEdit(), async (req, res, next) => {
+        try {
+            const columnIndex = requireInteger(req.body?.columnIndex, 'columnIndex', { min: 0, max: 500 });
+            const { lists, columns, removed } = await db.moveListToNewColumn(req.params.id, columnIndex);
+
+            if (lists.length === 0) return res.status(404).json({ error: 'Not found' });
+
+            publish(req, { upsert: { lists, columns }, remove: removed });
+            res.json({ lists, columns, removed });
+        } catch (error) {
+            next(error);
+        }
+    });
+
     router.put('/lists/:id', authz.listEdit(), async (req, res, next) => {
         try {
             const changes = {

@@ -84,6 +84,23 @@ export function useLists(columnIDs) {
         }
     }
 
+    async function moveListToNewColumn(listID, columnIndex) {
+        try {
+            const result = await api(`/api/kanban/lists/${listID}/column`, {
+                method: 'PUT',
+                body: { columnIndex }
+            });
+
+            setBoardData(prev => applyDelta(prev, {
+                upsert: { lists: result.lists, columns: result.columns },
+                remove: result.removed
+            }));
+        } catch (error) {
+            notifyError(error, 'Could not move the list');
+            refresh();
+        }
+    }
+
     async function deleteList(listID) {
         setBoardData(prev => {
             const removedTaskIDs = prev.tasks.filter(t => t.listID === listID).map(t => t.id);
@@ -121,5 +138,5 @@ export function useLists(columnIDs) {
         }
     }
 
-    return { lists, addList, updateList, deleteList, reorderLists, setListTags };
+    return { lists, addList, updateList, deleteList, reorderLists, moveListToNewColumn, setListTags };
 }

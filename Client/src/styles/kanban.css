@@ -2071,3 +2071,16 @@
     background: none;
     color: var(--muted);
 }
+
+/* column insertion styles */
+.kanban-column-insertion-indicator {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 999px;
+    background: var(--accent);
+    animation: insertFade 0.15s ease both;
+    pointer-events: none;
+    z-index: 3;
+}
