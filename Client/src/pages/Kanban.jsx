@@ -17,7 +17,8 @@ import KanbanTask from "../components/kanban/KanbanTask";
 import TaskModal from "../components/kanban/TaskModal";
 import DeleteDropZone from "../components/kanban/DeleteDropZone";
 import ConfirmModal from "../components/kanban/ConfirmModal";
-import { Plus } from "lucide-react";
+import BoardContextMenu from "../components/kanban/BoardContextMenu";
+import { Plus, Copy, CheckCheck, RotateCcw, UserPlus, UserMinus, SquarePen, Trash2, ListPlus, Columns3 } from "lucide-react";
 
 // page component
 export default function Kanban() {
@@ -47,7 +48,7 @@ export default function Kanban() {
     const { lists, addList, updateList, reorderLists, deleteList, setListTags } = useLists(columnIDs);
 
     const listIDs = lists.map(l => l.id);
-    const { tasks, addTask, updateTask, deleteTask, reorderTasks, setTaskTags } = useTasks(listIDs);
+    const { tasks, addTask, updateTask, duplicateTask, deleteTask, reorderTasks, setTaskTags } = useTasks(listIDs);
 
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
     const activeGroupID = activeTab?.groupID ?? null;
@@ -67,6 +68,7 @@ export default function Kanban() {
     const [pendingCombine, setPendingCombine] = useState(null);
     const [focusedListId, setFocusedListId] = useState(null);
     const [focusedTaskId, setFocusedTaskId] = useState(null);
+    const [menu, setMenu] = useState(null);
 
     const topbarRef = useRef(null);
     const boardRef = useRef(null);
@@ -231,6 +233,69 @@ export default function Kanban() {
         if (taskID) setFocusedTaskId(taskID);
     }
 
+    function openMenu(event, kind, target) {
+        setMenu({ kind, target, x: event.clientX, y: event.clientY });
+    }
+
+    function menuItems() {
+        if (!menu) return [];
+
+        if (menu.kind === 'task') {
+            const task = tasks.find(t => t.id === menu.target.id) ?? menu.target;
+            const mine = (task.assignedUsers ?? []).includes(user?.id);
+
+            return [
+                { key: 'duplicate', label: 'Duplicate task', icon: <Copy size={14} strokeWidth={2} />, onSelect: () => duplicateTask(task.id) },
+                { key: 'open', label: 'Open task', icon: <SquarePen size={14} strokeWidth={2} />, onSelect: () => setActiveTaskId(task.id) },
+                { key: 'sep1', separator: true },
+                {
+                    key: 'complete',
+                    label: task.isCompleted ? 'Mark as not done' : 'Mark as done',
+                    icon: task.isCompleted
+                        ? <RotateCcw size={14} strokeWidth={2} />
+                        : <CheckCheck size={14} strokeWidth={2} />,
+                    onSelect: () => updateTask(task.id, { isCompleted: !task.isCompleted })
+                },
+                {
+                    key: 'assign',
+                    label: mine ? 'Unassign me' : 'Assign to me',
+                    icon: mine
+                        ? <UserMinus size={14} strokeWidth={2} />
+                        : <UserPlus size={14} strokeWidth={2} />,
+                    disabled: !user?.id,
+                    onSelect: () => updateTask(task.id, {
+                        assignedUsers: mine
+                            ? (task.assignedUsers ?? []).filter(id => id !== user.id)
+                            : [...(task.assignedUsers ?? []), user.id]
+                    })
+                },
+                { key: 'sep2', separator: true },
+                { key: 'delete', label: 'Delete task', danger: true, icon: <Trash2 size={14} strokeWidth={2} />, onSelect: () => triggerTaskRemoval(task.id) }
+            ];
+        }
+
+        const list = menu.target;
+        const listTasks = tasks.filter(t => t.listID === list.id);
+        const done = listTasks.filter(t => t.isCompleted);
+
+        return [
+            { key: 'addtask', label: 'Add task', icon: <Plus size={14} strokeWidth={2} />, onSelect: () => handleAddTask(list.id) },
+            { key: 'rename', label: 'Rename list', icon: <SquarePen size={14} strokeWidth={2} />, onSelect: () => setFocusedListId(list.id) },
+            { key: 'sep1', separator: true },
+            { key: 'addlist', label: 'Add list to this column', icon: <ListPlus size={14} strokeWidth={2} />, onSelect: () => addList(list.columnID) },
+            { key: 'addcol', label: 'Add column at the end', icon: <Columns3 size={14} strokeWidth={2} />, onSelect: () => handleAddColumn(columns.length) },
+            { key: 'sep2', separator: true },
+            {
+                key: 'clear',
+                label: done.length > 0 ? `Delete ${done.length} completed` : 'No completed tasks',
+                icon: <CheckCheck size={14} strokeWidth={2} />,
+                disabled: done.length === 0,
+                onSelect: () => done.forEach(task => triggerTaskRemoval(task.id))
+            },
+            { key: 'delete', label: 'Delete list', danger: true, icon: <Trash2 size={14} strokeWidth={2} />, onSelect: () => triggerListRemoval(list.id) }
+        ];
+    }
+
     function handleFocusClear() {
         setFocusedListId(null);
         setFocusedTaskId(null);
@@ -316,6 +381,8 @@ export default function Kanban() {
                             }}
                             onOpenTask={task => setActiveTaskId(task.id)}
                             onFocusClear={handleFocusClear}
+                            onTaskContextMenu={canEdit ? (e, task) => openMenu(e, 'task', task) : undefined}
+                            onListContextMenu={canEdit ? (e, list) => openMenu(e, 'list', list) : undefined}
                             registerList={registerList}
                             registerTask={registerTask}
                             registerGhost={registerGhost}
@@ -381,6 +448,15 @@ export default function Kanban() {
                 visible={isDragging}
                 isOver={isOverDeleteZone}
                 registerDeleteZone={registerDeleteZone}
+            />
+
+            <BoardContextMenu
+                open={!!menu}
+                x={menu?.x ?? 0}
+                y={menu?.y ?? 0}
+                heading={menu?.kind === 'task' ? menu.target.title : menu?.target?.name}
+                items={menuItems()}
+                onClose={() => setMenu(null)}
             />
 
             <ConfirmModal

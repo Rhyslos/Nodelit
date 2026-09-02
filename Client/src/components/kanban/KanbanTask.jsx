@@ -19,6 +19,7 @@ export default function KanbanTask({
     onStartDrag,
     onOpen,
     onFocusClear,
+    onContextMenu,
     registerTask,
     registerElement,
 }) {
@@ -108,6 +109,12 @@ export default function KanbanTask({
                 task.isCompleted ? 'is-completed' : ''
             ].filter(Boolean).join(' ')}
             onClick={handleClick}
+            onContextMenu={e => {
+                if (!onContextMenu) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onContextMenu(e, task);
+            }}
         >
             <div className="kanban-task-banner" style={{ background: bannerColor }} />
 

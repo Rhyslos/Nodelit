@@ -2267,6 +2267,58 @@ class Database {
         return queryOne(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = $1`, [taskID]);
     }
 
+    async duplicateTask(taskID) {
+        return withTransaction(async client => {
+            const source = await client.query(
+                'SELECT list_id AS "listID", task_order AS "taskOrder" FROM tasks WHERE id = $1',
+                [taskID]
+            );
+
+            if (source.rowCount === 0) return null;
+
+            const { listID, taskOrder } = source.rows[0];
+
+            await client.query(
+                'UPDATE tasks SET task_order = task_order + 1 WHERE list_id = $1 AND task_order > $2',
+                [listID, taskOrder]
+            );
+
+            const copyID = newID('task');
+
+            const { rows } = await client.query(
+                `INSERT INTO tasks (id, list_id, workspace_id, title, description, is_completed, task_order, deadline, checklists)
+                 SELECT $1, k.list_id, k.workspace_id, left(k.title || ' (copy)', 200),
+                        k.description, false, k.task_order + 1, k.deadline, k.checklists
+                 FROM tasks k WHERE k.id = $2
+                 RETURNING id`,
+                [copyID, taskID]
+            );
+
+            if (rows.length === 0) return null;
+
+            await client.query(
+                `INSERT INTO task_tags (task_id, tag_id)
+                 SELECT $1, tt.tag_id FROM task_tags tt WHERE tt.task_id = $2
+                 ON CONFLICT DO NOTHING`,
+                [copyID, taskID]
+            );
+
+            await client.query(
+                `INSERT INTO task_assignees (task_id, user_id)
+                 SELECT $1, a.user_id FROM task_assignees a WHERE a.task_id = $2
+                 ON CONFLICT DO NOTHING`,
+                [copyID, taskID]
+            );
+
+            const { rows: tasks } = await client.query(
+                `SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.list_id = $1 ORDER BY k.task_order`,
+                [listID]
+            );
+
+            return { task: tasks.find(entry => entry.id === copyID) ?? null, tasks };
+        });
+    }
+
     async createTask(listID, fields = {}) {
         return withTransaction(async client => {
             const { rows } = await client.query(

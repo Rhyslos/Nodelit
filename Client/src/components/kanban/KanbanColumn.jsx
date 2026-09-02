@@ -27,6 +27,8 @@ export default function KanbanColumn({
     onStartListDrag,
     onOpenTask,
     onFocusClear,
+    onTaskContextMenu,
+    onListContextMenu,
     registerList,
     registerTask,
     registerGhost,
@@ -70,6 +72,8 @@ export default function KanbanColumn({
                         onStartListDrag={onStartListDrag}
                         onOpenTask={onOpenTask}
                         onFocusClear={onFocusClear}
+                        onTaskContextMenu={onTaskContextMenu}
+                        onListContextMenu={onListContextMenu}
                         registerList={registerList}
                         registerTask={registerTask}
                         registerTaskElement={registerTaskElement}

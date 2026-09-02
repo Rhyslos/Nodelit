@@ -294,6 +294,18 @@ export default function createKanbanRouter(authz) {
         }
     });
 
+    router.post('/tasks/:id/duplicate', authz.taskEdit(), async (req, res, next) => {
+        try {
+            const result = await db.duplicateTask(req.params.id);
+            if (!result) return res.status(404).json({ error: 'Not found' });
+
+            publish(req, { upsert: { tasks: result.tasks } });
+            res.status(201).json(result);
+        } catch (error) {
+            next(error);
+        }
+    });
+
     router.put('/lists/reorder',
         parseBatch(requireListReorder),
         resolveBatchScope(ids => db.getWorkspaceScopeForLists(ids), 'columnID', ids => db.getWorkspaceScopeForColumns(ids)),

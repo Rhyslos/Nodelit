@@ -74,6 +74,19 @@ export function useTasks(listIDs) {
         }
     }
 
+    async function duplicateTask(taskID) {
+        try {
+            const result = await api(`/api/kanban/tasks/${taskID}/duplicate`, { method: 'POST' });
+            setBoardData(prev => applyDelta(prev, { upsert: { tasks: result.tasks } }));
+
+            return result.task?.id ?? null;
+        } catch (error) {
+            notifyError(error, 'Could not duplicate the task');
+            refresh();
+            return null;
+        }
+    }
+
     async function deleteTask(taskID) {
         setBoardData(prev => applyDelta(prev, { remove: { tasks: [taskID] } }));
 
@@ -128,5 +141,5 @@ export function useTasks(listIDs) {
         }
     }
 
-    return { tasks, addTask, updateTask, deleteTask, reorderTasks, setTaskTags };
+    return { tasks, addTask, updateTask, duplicateTask, deleteTask, reorderTasks, setTaskTags };
 }

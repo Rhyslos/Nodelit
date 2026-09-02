@@ -28,6 +28,8 @@ export default function KanbanList({
     onStartListDrag,
     onOpenTask,
     onFocusClear,
+    onTaskContextMenu,
+    onListContextMenu,
     registerList,
     registerTask,
     registerTaskElement,
@@ -98,6 +100,12 @@ export default function KanbanList({
             <div
                 className={`kanban-list ${isDraggingList ? 'is-dragging-list' : ''}`}
                 ref={listRef}
+                onContextMenu={e => {
+                    if (!onListContextMenu) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onListContextMenu(e, list);
+                }}
             >
                 <div className="kanban-list-header">
                     {canEdit && (
@@ -178,6 +186,7 @@ export default function KanbanList({
                                     onStartDrag={onStartTaskDrag}
                                     onOpen={() => onOpenTask(task)}
                                     onFocusClear={onFocusClear}
+                                    onContextMenu={onTaskContextMenu}
                                     registerTask={registerTask}
                                     registerElement={registerTaskElement}
                                 />
