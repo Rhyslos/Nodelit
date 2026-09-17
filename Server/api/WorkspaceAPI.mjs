@@ -1,12 +1,20 @@
 // import modules
 import { Router } from 'express';
 import db from '../database/Database.mjs';
+import { revalidateStreams } from '../modules/Networking.mjs';
+import { revalidateCollaboration } from '../modules/Collaboration.mjs';
 import { requireText, requireID, optionalID, optionalColor, requireMemberRole } from '../modules/Validation.mjs';
 
 // configuration constants
 const UPCOMING_WINDOW_DAYS = 7;
 const UPCOMING_MAX_DAYS = 30;
 const UPCOMING_LIMIT = 25;
+
+// revocation functions
+function cutLiveConnections() {
+    revalidateStreams();
+    revalidateCollaboration();
+}
 
 // router configuration
 export default function createWorkspaceRouter(authz) {
@@ -100,6 +108,7 @@ export default function createWorkspaceRouter(authz) {
     router.delete('/:workspaceID', authz.workspaceOwnerParam(), async (req, res, next) => {
         try {
             await db.deleteWorkspace(req.workspaceID);
+            cutLiveConnections();
 
             await db.recordAudit({
                 actorID: req.user.id,
@@ -136,6 +145,7 @@ export default function createWorkspaceRouter(authz) {
             if (!target) return res.status(404).json({ error: 'Not found' });
 
             const membership = await db.setMemberRole(req.workspaceID, userID, role);
+            cutLiveConnections();
 
             await db.recordAudit({
                 actorID: req.user.id,
@@ -161,6 +171,8 @@ export default function createWorkspaceRouter(authz) {
             if (!removed) {
                 return res.status(400).json({ error: 'That member could not be removed' });
             }
+
+            cutLiveConnections();
 
             await db.recordAudit({
                 actorID: req.user.id,

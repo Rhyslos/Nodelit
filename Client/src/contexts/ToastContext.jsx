@@ -1,5 +1,5 @@
 // context imports
-import { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 
 // context initialization
 const ToastContext = createContext(null);
@@ -12,6 +12,24 @@ const MAX_TOASTS = 4;
 function describe(error, fallback) {
     const status = error?.status ?? null;
     const detail = typeof error?.message === 'string' ? error.message : '';
+
+    if (status === 413) {
+        return {
+            tone: 'warning',
+            title: fallback ?? 'That is too large to upload',
+            detail: detail || 'Try a smaller file.',
+            duration: DISMISSABLE_MS
+        };
+    }
+
+    if (status === 429) {
+        return {
+            tone: 'warning',
+            title: fallback ?? 'Slow down a little',
+            detail: detail || 'Too many requests. Your change was not saved; try again shortly.',
+            duration: DISMISSABLE_MS
+        };
+    }
 
     if (status === 400 || status === 403 || status === 404 || status === 409) {
         return {
@@ -67,11 +85,24 @@ export function ToastProvider({ children }) {
 
         if (seen && now - seen < DEDUPE_MS) return null;
 
+        for (const [key, at] of recent.current) {
+            if (now - at >= DEDUPE_MS) recent.current.delete(key);
+        }
+
         recent.current.set(signature, now);
 
         const id = `toast-${now}-${Math.random().toString(16).slice(2, 8)}`;
 
-        setToasts(current => [...current, { ...toast, id }].slice(-MAX_TOASTS));
+        setToasts(current => {
+            const next = [...current, { ...toast, id }];
+
+            for (const evicted of next.slice(0, -MAX_TOASTS)) {
+                clearTimeout(timers.current.get(evicted.id));
+                timers.current.delete(evicted.id);
+            }
+
+            return next.slice(-MAX_TOASTS);
+        });
 
         if (toast.duration) {
             timers.current.set(id, setTimeout(() => dismiss(id), toast.duration));
@@ -79,6 +110,14 @@ export function ToastProvider({ children }) {
 
         return id;
     }, [dismiss]);
+
+    useEffect(() => {
+        const pending = timers.current;
+        return () => {
+            for (const timer of pending.values()) clearTimeout(timer);
+            pending.clear();
+        };
+    }, []);
 
     const notifyError = useCallback((error, fallback) => {
         if (error?.status === 401) return null;

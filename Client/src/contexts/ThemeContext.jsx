@@ -62,11 +62,18 @@ function luminance(value) {
     return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
 }
 
+const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
 export function resolveTheme(theme) {
     const mode = theme?.mode ?? 'default';
 
     if (mode === 'custom') {
-        return { ...THEME_PRESETS.default, ...(theme?.custom ?? {}) };
+        const custom = Object.fromEntries(
+            Object.entries(theme?.custom ?? {})
+                .filter(([key, value]) => THEME_KEYS.includes(key) && HEX_PATTERN.test(value ?? ''))
+        );
+
+        return { ...THEME_PRESETS.default, ...custom };
     }
 
     return THEME_PRESETS[mode] ?? THEME_PRESETS.default;
@@ -114,7 +121,7 @@ export function ThemeProvider({ children }) {
             root.style.setProperty(key, value);
         }
 
-        root.style.colorScheme = palette.background === THEME_PRESETS.dark.background ? 'dark' : 'light';
+        root.style.colorScheme = luminance(palette.background) < 0.4 ? 'dark' : 'light';
     }, [palette]);
 
     return (

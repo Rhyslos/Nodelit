@@ -32,10 +32,15 @@ function applyDelta(notation, delta) {
     return next;
 }
 
+// access functions
+function accessLost(err) {
+    return err?.status === 403 || err?.status === 404;
+}
+
 // context providers
 export function NotationProvider({ children }) {
     const { workspaceID } = useParams();
-    const { subscribe } = useStream();
+    const { subscribe, attachWorkspace } = useStream();
 
     // state variables
     const [notationData, setNotationData] = useState(EMPTY_NOTATION);
@@ -46,6 +51,12 @@ export function NotationProvider({ children }) {
 
     const workspaceRef = useRef(workspaceID);
     workspaceRef.current = workspaceID;
+
+    const dropNotation = useCallback(err => {
+        setNotationData(EMPTY_NOTATION);
+        setMemberRole(null);
+        setError(err);
+    }, []);
 
     // data fetching
     const refresh = useCallback(async () => {
@@ -60,14 +71,17 @@ export function NotationProvider({ children }) {
             setNotationData({ ...EMPTY_NOTATION, ...notation });
             setError(null);
         } catch (err) {
-            if (workspaceRef.current === workspaceID) setError(err);
+            if (workspaceRef.current !== workspaceID) return;
+            if (accessLost(err)) dropNotation(err);
+            else setError(err);
         } finally {
             if (workspaceRef.current === workspaceID) setLoading(false);
         }
-    }, [workspaceID]);
+    }, [workspaceID, dropNotation]);
 
     useEffect(() => {
         setLoading(true);
+        setError(null);
         setNotationData(EMPTY_NOTATION);
         setActionError(null);
         refresh();
@@ -75,24 +89,32 @@ export function NotationProvider({ children }) {
 
     // stream subscription
     useEffect(() => {
+        if (!workspaceID) return undefined;
+        return attachWorkspace(workspaceID);
+    }, [workspaceID, attachWorkspace]);
+
+    useEffect(() => {
         const stopNotation = subscribe('notation', event => {
             setNotationData(current => applyDelta(current, event));
         });
 
         const stopReconnect = subscribe('reconnected', () => refresh());
 
-        const stopRevoked = subscribe('revoked', event => {
+        const lose = event => {
             if (event.workspaceID !== workspaceRef.current) return;
-            setNotationData(EMPTY_NOTATION);
-            setError(new Error('You no longer have access to this workspace'));
-        });
+            dropNotation(Object.assign(new Error('You no longer have access to this workspace'), { status: 403 }));
+        };
+
+        const stopRevoked = subscribe('revoked', lose);
+        const stopDenied = subscribe('presence-denied', lose);
 
         return () => {
             stopNotation();
             stopReconnect();
             stopRevoked();
+            stopDenied();
         };
-    }, [subscribe, refresh]);
+    }, [subscribe, refresh, dropNotation]);
 
     return (
         <NotationContext.Provider value={{ notationData, setNotationData, applyDelta, workspaceID, loading, error, actionError, setActionError, refresh, memberRole, canEdit: EDIT_ROLES.has(memberRole) }}>

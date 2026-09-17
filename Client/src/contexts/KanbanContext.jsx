@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStream } from './StreamContext';
+import { useAuth } from './AuthContext';
 
 // context initialization
 const KanbanContext = createContext(null);
@@ -14,9 +15,19 @@ const CHECKLIST_STORAGE_PREFIX = 'nodelit:checklists:';
 const BOARD_REFRESH_EVENT = 'nodelit:board-refresh';
 
 // utility functions
-function persistChecklists(workspaceID, taskIDs) {
+function checklistKey(userID, workspaceID) {
+    return `${CHECKLIST_STORAGE_PREFIX}${userID}:${workspaceID}`;
+}
+
+function accessLost(err) {
+    return err?.status === 403 || err?.status === 404;
+}
+
+function persistChecklists(key, taskIDs) {
+    if (!key) return;
+
     try {
-        localStorage.setItem(`${CHECKLIST_STORAGE_PREFIX}${workspaceID}`, JSON.stringify([...taskIDs]));
+        localStorage.setItem(key, JSON.stringify([...taskIDs]));
     } catch {
         return;
     }
@@ -45,7 +56,9 @@ function applyDelta(board, delta) {
 // context providers
 export function KanbanProvider({ children }) {
     const { workspaceID } = useParams();
-    const { subscribe, setWorkspace } = useStream();
+    const { subscribe, attachWorkspace } = useStream();
+    const { user } = useAuth();
+    const userID = user?.id ?? null;
 
     // state variables
     const [boardData, setBoardData] = useState(EMPTY_BOARD);
@@ -56,6 +69,17 @@ export function KanbanProvider({ children }) {
 
     const workspaceRef = useRef(workspaceID);
     workspaceRef.current = workspaceID;
+
+    const storageKey = userID && workspaceID ? checklistKey(userID, workspaceID) : null;
+    const storageKeyRef = useRef(storageKey);
+    storageKeyRef.current = storageKey;
+
+    // access functions
+    const dropBoard = useCallback(err => {
+        setBoardData(EMPTY_BOARD);
+        setMemberRole(null);
+        setError(err);
+    }, []);
 
     // data fetching
     const refresh = useCallback(async () => {
@@ -70,32 +94,35 @@ export function KanbanProvider({ children }) {
             setBoardData({ ...EMPTY_BOARD, ...board });
             setError(null);
         } catch (err) {
-            if (workspaceRef.current === workspaceID) setError(err);
+            if (workspaceRef.current !== workspaceID) return;
+            if (accessLost(err)) dropBoard(err);
+            else setError(err);
         } finally {
             if (workspaceRef.current === workspaceID) setLoading(false);
         }
-    }, [workspaceID]);
+    }, [workspaceID, dropBoard]);
 
     useEffect(() => {
         setLoading(true);
+        setError(null);
         setBoardData(EMPTY_BOARD);
         refresh();
     }, [refresh]);
 
     // checklist preferences
     useEffect(() => {
-        if (!workspaceID) {
+        if (!storageKey) {
             setExpandedChecklists(new Set());
             return;
         }
 
         try {
-            const stored = localStorage.getItem(`${CHECKLIST_STORAGE_PREFIX}${workspaceID}`);
+            const stored = localStorage.getItem(storageKey);
             setExpandedChecklists(new Set(stored ? JSON.parse(stored) : []));
         } catch {
             setExpandedChecklists(new Set());
         }
-    }, [workspaceID]);
+    }, [storageKey]);
 
     const toggleChecklist = useCallback(taskID => {
         setExpandedChecklists(previous => {
@@ -104,7 +131,7 @@ export function KanbanProvider({ children }) {
             if (next.has(taskID)) next.delete(taskID);
             else next.add(taskID);
 
-            persistChecklists(workspaceRef.current, next);
+            persistChecklists(storageKeyRef.current, next);
 
             return next;
         });
@@ -119,9 +146,9 @@ export function KanbanProvider({ children }) {
 
     // stream subscription
     useEffect(() => {
-        setWorkspace(workspaceID ?? null);
-        return () => setWorkspace(null);
-    }, [workspaceID, setWorkspace]);
+        if (!workspaceID) return undefined;
+        return attachWorkspace(workspaceID);
+    }, [workspaceID, attachWorkspace]);
 
     useEffect(() => {
         const stopKanban = subscribe('kanban', event => {
@@ -130,11 +157,21 @@ export function KanbanProvider({ children }) {
 
         const stopReconnect = subscribe('reconnected', () => refresh());
 
+        const lose = event => {
+            if (event.workspaceID !== workspaceRef.current) return;
+            dropBoard(Object.assign(new Error('You no longer have access to this workspace'), { status: 403 }));
+        };
+
+        const stopRevoked = subscribe('revoked', lose);
+        const stopDenied = subscribe('presence-denied', lose);
+
         return () => {
             stopKanban();
             stopReconnect();
+            stopRevoked();
+            stopDenied();
         };
-    }, [subscribe, refresh]);
+    }, [subscribe, refresh, dropBoard]);
 
     return (
         <KanbanContext.Provider value={{ boardData, setBoardData, applyDelta, workspaceID, loading, error, refresh, memberRole, canEdit: EDIT_ROLES.has(memberRole), expandedChecklists, toggleChecklist }}>

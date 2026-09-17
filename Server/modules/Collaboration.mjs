@@ -31,6 +31,9 @@ const CLOSE_TOO_LARGE = 4413;
 // state variables
 const rooms = new Map();
 let wss = null;
+let allowedOrigins = [];
+let revalidating = null;
+let rerunRequested = false;
 let revalidateTimer = null;
 let pingTimer = null;
 
@@ -347,6 +350,7 @@ function attachConnection(socket, context) {
             socket,
             room,
             userID: context.userID,
+            sessionID: context.sessionID,
             canEdit: context.canEdit,
             alive: true
         };
@@ -387,6 +391,9 @@ function attachConnection(socket, context) {
 
 // authorization functions
 async function authorize(request) {
+    const origin = request.headers.origin;
+    if (!origin || !allowedOrigins.includes(origin)) return { error: CLOSE_FORBIDDEN };
+
     const pageID = parsePageID(request.url);
     if (!pageID) return { error: CLOSE_GONE };
 
@@ -409,6 +416,7 @@ async function authorize(request) {
         pageID,
         workspaceID,
         userID: user.id,
+        sessionID,
         canEdit: EDIT_ROLES.has(membership.role),
         connectionID: `${user.id}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
     };
@@ -416,7 +424,19 @@ async function authorize(request) {
 
 // maintenance functions
 async function revalidateRooms() {
-    for (const [pageID, entry] of rooms) {
+    const open = [];
+
+    for (const entry of rooms.values()) {
+        if (!(entry instanceof Promise)) open.push(...entry.connections);
+    }
+
+    const live = await db.filterLiveSessions(open.map(connection => connection.sessionID));
+
+    for (const connection of open) {
+        if (!live.has(connection.sessionID)) closeConnection(connection, CLOSE_UNAUTHORIZED);
+    }
+
+    for (const [pageID, entry] of [...rooms]) {
         if (entry instanceof Promise) continue;
 
         const workspaceID = await db.getWorkspaceIDForNotationPage(pageID);
@@ -467,9 +487,30 @@ function checkHeartbeats() {
     }
 }
 
+// revocation functions
+export function revalidateCollaboration() {
+    if (revalidating) {
+        rerunRequested = true;
+        return revalidating;
+    }
+
+    revalidating = (async () => {
+        do {
+            rerunRequested = false;
+            await revalidateRooms().catch(error => {
+                console.error('Notation revalidation failed:', error.message);
+            });
+        } while (rerunRequested);
+    })().finally(() => { revalidating = null; });
+
+    return revalidating;
+}
+
 // lifecycle functions
-export function attachCollaboration(httpServer) {
+export function attachCollaboration(httpServer, { origins = [] } = {}) {
     if (wss) return wss;
+
+    allowedOrigins = origins;
 
     wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
 
@@ -502,11 +543,7 @@ export function attachCollaboration(httpServer) {
         wss.handleUpgrade(request, socket, head, ws => attachConnection(ws, context));
     });
 
-    revalidateTimer = setInterval(() => {
-        revalidateRooms().catch(error => {
-            console.error('Notation revalidation failed:', error.message);
-        });
-    }, REVALIDATE_INTERVAL_MS);
+    revalidateTimer = setInterval(revalidateCollaboration, REVALIDATE_INTERVAL_MS);
 
     pingTimer = setInterval(checkHeartbeats, PING_INTERVAL_MS);
 

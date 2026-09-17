@@ -241,7 +241,7 @@ class Server {
         this.httpServer.headersTimeout = 65000;
         this.httpServer.keepAliveTimeout = 61000;
 
-        attachCollaboration(this.httpServer);
+        attachCollaboration(this.httpServer, { origins: this.origins });
 
         return this.httpServer;
     }

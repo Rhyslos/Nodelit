@@ -3,6 +3,8 @@ import crypto from 'crypto';
 import { promisify } from 'node:util';
 import db, { SCRYPT_OPTIONS } from '../database/Database.mjs';
 import { requirePassword, requireText, optionalColor, optionalTheme, optionalPalette } from './Validation.mjs';
+import { revalidateStreams } from './Networking.mjs';
+import { revalidateCollaboration } from './Collaboration.mjs';
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -15,7 +17,8 @@ const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/;
 const MAX_AUDIT_TARGET_LENGTH = 64;
 
 const LOCKOUT_WINDOW_MINUTES = 15;
-const MAX_FAILURES_PER_USERNAME = 10;
+const MAX_FAILURES_PER_USERNAME_AND_IP = 10;
+const MAX_FAILURES_PER_USERNAME = 100;
 const MAX_FAILURES_PER_IP = 40;
 
 const COOKIE_OPTIONS = {
@@ -54,6 +57,12 @@ class Authentication {
         return crypto.timingSafeEqual(derived, storedBuffer);
     }
 
+    // revocation functions
+    cutLiveConnections() {
+        revalidateStreams();
+        revalidateCollaboration();
+    }
+
     // validation functions
     isUsableCredential(value) {
         return typeof value === 'string'
@@ -90,7 +99,11 @@ class Authentication {
                 minutes: LOCKOUT_WINDOW_MINUTES
             });
 
-            if (failures.byUsername >= MAX_FAILURES_PER_USERNAME || failures.byIP >= MAX_FAILURES_PER_IP) {
+            const blocked = failures.byUsernameAndIP >= MAX_FAILURES_PER_USERNAME_AND_IP
+                || failures.byUsername >= MAX_FAILURES_PER_USERNAME
+                || failures.byIP >= MAX_FAILURES_PER_IP;
+
+            if (blocked) {
                 await db.recordAudit({
                     action: 'login.blocked',
                     targetType: 'username',
@@ -120,7 +133,10 @@ class Authentication {
             }
 
             const previousSession = req.cookies?.[SESSION_COOKIE];
-            if (previousSession) await db.deleteSession(previousSession);
+
+            if (typeof previousSession === 'string' && previousSession.length === 64) {
+                if (await db.deleteSession(previousSession)) this.cutLiveConnections();
+            }
 
             const sessionID = await db.createSession(user.id);
             res.cookie(SESSION_COOKIE, sessionID, COOKIE_OPTIONS);
@@ -145,12 +161,15 @@ class Authentication {
             const sessionID = req.cookies?.[SESSION_COOKIE];
 
             if (typeof sessionID === 'string' && sessionID.length === 64) {
+                const actor = await db.getUserBySession(sessionID);
                 const removed = await db.deleteSession(sessionID);
 
                 if (removed) {
+                    this.cutLiveConnections();
+
                     await db.recordAudit({
-                        actorID: req.user?.id,
-                        actorName: req.user?.username,
+                        actorID: actor?.id,
+                        actorName: actor?.username,
                         action: 'logout',
                         ip: req.ip
                     });
@@ -194,6 +213,8 @@ class Authentication {
 
             const sessionID = await db.createSession(req.user.id);
             res.cookie(SESSION_COOKIE, sessionID, COOKIE_OPTIONS);
+
+            this.cutLiveConnections();
 
             await db.recordAudit({
                 actorID: req.user.id,

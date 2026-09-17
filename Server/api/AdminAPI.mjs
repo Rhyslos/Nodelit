@@ -1,6 +1,8 @@
 // import modules
 import { Router } from 'express';
 import db from '../database/Database.mjs';
+import { revalidateStreams } from '../modules/Networking.mjs';
+import { revalidateCollaboration } from '../modules/Collaboration.mjs';
 import {
     requireID,
     requireText,
@@ -9,6 +11,12 @@ import {
     requireRole,
     optionalColor
 } from '../modules/Validation.mjs';
+
+// revocation functions
+function cutLiveConnections() {
+    revalidateStreams();
+    revalidateCollaboration();
+}
 
 // audit functions
 function audit(req, entry) {
@@ -70,6 +78,7 @@ export default function createAdminRouter(authz) {
             }
 
             const result = await db.deleteUser(userID);
+            cutLiveConnections();
 
             await audit(req, {
                 action: 'user.deleted',
@@ -94,6 +103,7 @@ export default function createAdminRouter(authz) {
 
             await db.setUserPassword(userID, password);
             await db.deleteSessionsForUser(userID);
+            cutLiveConnections();
 
             await audit(req, {
                 action: 'password.reset',

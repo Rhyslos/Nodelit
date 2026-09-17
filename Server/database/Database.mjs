@@ -21,7 +21,7 @@ const LIST_FIELDS = ['name', 'columnID', 'listOrder'];
 const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'deadline', 'checklists'];
 const NOTATION_GROUP_FIELDS = ['name', 'color', 'groupOrder', 'parentID'];
 const NOTATION_PAGE_FIELDS = ['title', 'groupID', 'pageOrder', 'layout'];
-const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor', 'theme'];
+const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor', 'theme', 'palette'];
 
 const FIELD_DEFINITIONS = {
     name: { column: 'name' },
@@ -365,8 +365,11 @@ async function combineTabTagsIntoGroup(client, tabIDs, groupID) {
     if (tabIDs.length === 0 || !groupID) return result;
 
     const { rows: candidates } = await client.query(
-        `SELECT ${TAG_SELECT} FROM tags tg WHERE tg.tab_id = ANY($1::text[]) ORDER BY tg.id`,
-        [tabIDs]
+        `SELECT ${TAG_SELECT} FROM tags tg
+         WHERE tg.tab_id = ANY($1::text[])
+           AND tg.workspace_id = (SELECT workspace_id FROM tab_groups WHERE id = $2)
+         ORDER BY tg.id`,
+        [tabIDs, groupID]
     );
 
     if (candidates.length === 0) return result;
@@ -611,6 +614,29 @@ async function assertGroupPlacement(client, workspaceID, parentID, movingGroupID
     }
 }
 
+// scope validation functions
+async function assertTagScope(runner, workspaceID, scope) {
+    if (scope?.tabID && scope?.groupID) {
+        throw badRequest('A tag can be scoped to a board or a group, not both');
+    }
+
+    if (scope?.tabID) {
+        const { rowCount } = await runner.query(
+            'SELECT 1 FROM tabs WHERE id = $1 AND workspace_id = $2',
+            [scope.tabID, workspaceID]
+        );
+        if (rowCount === 0) throw badRequest('That board does not exist');
+    }
+
+    if (scope?.groupID) {
+        const { rowCount } = await runner.query(
+            'SELECT 1 FROM tab_groups WHERE id = $1 AND workspace_id = $2',
+            [scope.groupID, workspaceID]
+        );
+        if (rowCount === 0) throw badRequest('That group does not exist');
+    }
+}
+
 // database classes
 class Database {
     constructor() {
@@ -695,11 +721,28 @@ class Database {
         );
     }
 
+    async filterLiveSessions(sessionIDs) {
+        const unique = [...new Set(sessionIDs.filter(id => typeof id === 'string'))];
+        if (unique.length === 0) return new Set();
+
+        const hashed = new Map(unique.map(id => [hashSessionID(id), id]));
+
+        const { rows } = await query(
+            `SELECT s.id
+             FROM sessions s
+             JOIN users u ON u.id = s.user_id AND u.deleted_at IS NULL
+             WHERE s.id = ANY($1::text[]) AND s.expires_at > now()`,
+            [[...hashed.keys()]]
+        );
+
+        return new Set(rows.map(row => hashed.get(row.id)));
+    }
+
     // user functions
     async getUserByUsername(username) {
         return queryOne(
             `SELECT id, username, display_name AS "displayName", role,
-                    cursor_color AS "cursorColor", salt, hash
+                    cursor_color AS "cursorColor", theme, palette, salt, hash
              FROM users
              WHERE lower(username) = lower($1) AND deleted_at IS NULL`,
             [username]
@@ -936,7 +979,8 @@ class Database {
     async countRecentLoginFailures({ username, ip, minutes = 15 }) {
         const row = await queryOne(
             `SELECT
-                 COUNT(*) FILTER (WHERE target_id = lower($1))::int AS "byUsername",
+                 COUNT(*) FILTER (WHERE target_id = left(lower($1), 64) AND ip = $2)::int AS "byUsernameAndIP",
+                 COUNT(*) FILTER (WHERE target_id = left(lower($1), 64))::int AS "byUsername",
                  COUNT(*) FILTER (WHERE ip = $2)::int AS "byIP"
              FROM audit_log
              WHERE action = 'login.failed'
@@ -944,7 +988,11 @@ class Database {
             [username, ip ?? '', minutes]
         );
 
-        return { byUsername: row?.byUsername ?? 0, byIP: row?.byIP ?? 0 };
+        return {
+            byUsernameAndIP: row?.byUsernameAndIP ?? 0,
+            byUsername: row?.byUsername ?? 0,
+            byIP: row?.byIP ?? 0
+        };
     }
 
     async exportAll() {
@@ -1322,8 +1370,10 @@ class Database {
 
     async getMembership(workspaceID, userID) {
         return queryOne(
-            `SELECT workspace_id AS "workspaceID", user_id AS "userID", role
-             FROM memberships WHERE workspace_id = $1 AND user_id = $2`,
+            `SELECT m.workspace_id AS "workspaceID", m.user_id AS "userID", m.role
+             FROM memberships m
+             JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+             WHERE m.workspace_id = $1 AND m.user_id = $2`,
             [workspaceID, userID]
         );
     }
@@ -1708,6 +1758,8 @@ class Database {
     }
 
     async createTag(workspaceID, name, color, scope = {}) {
+        await assertTagScope({ query }, workspaceID, scope);
+
         try {
             return await queryOne(
                 `INSERT INTO tags (id, workspace_id, tab_id, group_id, name, color)
@@ -1741,6 +1793,11 @@ class Database {
         }
 
         if (changes.scope !== undefined) {
+            const owner = await queryOne('SELECT workspace_id AS "workspaceID" FROM tags WHERE id = $1', [tagID]);
+            if (!owner) return null;
+
+            await assertTagScope({ query }, owner.workspaceID, changes.scope);
+
             assignments.push(`tab_id = $${assignments.length + 1}`);
             values.push(changes.scope.tabID ?? null);
             assignments.push(`group_id = $${assignments.length + 1}`);
@@ -1884,8 +1941,19 @@ class Database {
         return row?.workspaceID ?? null;
     }
 
-    async createTabGroup(workspaceID, fields = {}, tabIDs = [], combineTags = false) {
+    async createTabGroup(workspaceID, fields = {}, requestedTabIDs = [], combineTags = false) {
         return withTransaction(async client => {
+            const { rows: owned } = await client.query(
+                'SELECT id FROM tabs WHERE id = ANY($1::text[]) AND workspace_id = $2',
+                [requestedTabIDs, workspaceID]
+            );
+
+            if (owned.length !== new Set(requestedTabIDs).size) {
+                throw Object.assign(new Error('One or more boards could not be found'), { status: 404 });
+            }
+
+            const tabIDs = owned.map(row => row.id);
+
             const { rows } = await client.query(
                 `INSERT INTO tab_groups (id, workspace_id, name, color)
                  VALUES ($1, $2, COALESCE($3, 'New group'), COALESCE($4, '#6c8ebf'))

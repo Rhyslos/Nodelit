@@ -10,18 +10,32 @@ export function AuthProvider({ children }) {
     // state variables
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [restoreError, setRestoreError] = useState(null);
+    const [restoreAttempt, setRestoreAttempt] = useState(0);
 
     // session restoration
     useEffect(() => {
         let active = true;
 
+        setLoading(true);
+
         api('/api/auth/session')
-            .then(data => { if (active) setUser(data); })
-            .catch(() => { if (active) setUser(null); })
+            .then(data => {
+                if (!active) return;
+                setUser(data);
+                setRestoreError(null);
+            })
+            .catch(err => {
+                if (!active) return;
+                setUser(null);
+                setRestoreError(err?.status === 401 ? null : err);
+            })
             .finally(() => { if (active) setLoading(false); });
 
         return () => { active = false; };
-    }, []);
+    }, [restoreAttempt]);
+
+    const retryRestore = useCallback(() => setRestoreAttempt(value => value + 1), []);
 
     useEffect(() => onUnauthorized(() => setUser(null)), []);
 
@@ -33,6 +47,7 @@ export function AuthProvider({ children }) {
         });
 
         setUser(userData);
+        setRestoreError(null);
         return userData;
     }, []);
 
@@ -47,7 +62,7 @@ export function AuthProvider({ children }) {
     const updateUser = useCallback(next => setUser(next), []);
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
+        <AuthContext.Provider value={{ user, loading, restoreError, retryRestore, login, logout, updateUser }}>
             {children}
         </AuthContext.Provider>
     );
