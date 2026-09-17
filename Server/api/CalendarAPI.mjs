@@ -12,6 +12,7 @@ import {
 
 // configuration constants
 export const SLOT_MINUTES = 30;
+const LEGACY_SLOT_MINUTES = 15;
 const MAX_RANGE_DAYS = 45;
 
 // utility functions
@@ -57,7 +58,7 @@ export default function createCalendarRouter(authz) {
     router.put('/:workspaceID/availability', authz.workspaceParamEdit('workspaceID'), async (req, res, next) => {
         try {
             const added = requireSlotList(req.body?.added ?? [], 'added', SLOT_MINUTES);
-            const removed = requireSlotList(req.body?.removed ?? [], 'removed', SLOT_MINUTES);
+            const removed = requireSlotList(req.body?.removed ?? [], 'removed', LEGACY_SLOT_MINUTES);
 
             const result = await db.setAvailability(req.workspaceID, req.user.id, added, removed);
 
@@ -97,8 +98,16 @@ export default function createCalendarRouter(authz) {
             const startsAt = optionalTimestamp(req.body?.startsAt, 'startsAt');
             const endsAt = optionalTimestamp(req.body?.endsAt, 'endsAt');
 
-            if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) {
-                return res.status(400).json({ error: 'endsAt must be after startsAt' });
+            if (startsAt || endsAt) {
+                const current = await db.getMeeting(req.params.id);
+                if (!current) return res.status(404).json({ error: 'Not found' });
+
+                const effectiveStart = startsAt ?? current.startsAt;
+                const effectiveEnd = endsAt ?? current.endsAt;
+
+                if (Date.parse(effectiveEnd) <= Date.parse(effectiveStart)) {
+                    return res.status(400).json({ error: 'endsAt must be after startsAt' });
+                }
             }
 
             const meeting = await db.updateMeeting(req.params.id, {

@@ -10,6 +10,7 @@ import {
     optionalInteger,
     optionalBoolean,
     optionalDate,
+    optionalTimestamp,
     optionalChecklists,
     optionalIDList,
     requireIDList,
@@ -402,7 +403,7 @@ export default function createKanbanRouter(authz) {
                 assignedUsers: optionalIDList(req.body?.assignedUsers, 'assignedUsers')
             };
 
-            const expectedUpdatedAt = typeof req.body?.updatedAt === 'string' ? req.body.updatedAt : undefined;
+            const expectedUpdatedAt = optionalTimestamp(req.body?.updatedAt, 'updatedAt');
             const result = await db.updateTask(req.params.id, changes, expectedUpdatedAt);
 
             if (result.error) {

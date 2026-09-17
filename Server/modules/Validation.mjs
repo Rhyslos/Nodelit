@@ -7,6 +7,8 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BATCH_SIZE = 200;
 const MAX_SUBTASKS = 50;
 const MAX_CHECKLISTS = 10;
+const MAX_CHECKLIST_NAME = 80;
+const MAX_CHECKLIST_ITEM = 200;
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,32}$/;
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_LENGTH = 200;
@@ -136,15 +138,25 @@ export function optionalChecklists(value, field) {
             throw new ValidationError(`${field} entries must be objects`);
         }
 
-        const items = Array.isArray(entry.items) ? entry.items : [];
+        if (entry.items !== undefined && entry.items !== null && !Array.isArray(entry.items)) {
+            throw new ValidationError(`${field} items must be a list`);
+        }
+
+        const items = entry.items ?? [];
 
         if (items.length > MAX_SUBTASKS) {
             throw new ValidationError(`a checklist cannot contain more than ${MAX_SUBTASKS} items`);
         }
 
-        const name = typeof entry.name === 'string' && entry.name.trim()
-            ? entry.name.trim().slice(0, 80)
-            : 'Checklist';
+        if (entry.name !== undefined && entry.name !== null && typeof entry.name !== 'string') {
+            throw new ValidationError(`${field} names must be text`);
+        }
+
+        const name = entry.name?.trim() || 'Checklist';
+
+        if (name.length > MAX_CHECKLIST_NAME) {
+            throw new ValidationError(`a checklist name cannot be longer than ${MAX_CHECKLIST_NAME} characters`);
+        }
 
         return {
             id: requireID(entry.id, `${field}.id`),
@@ -154,9 +166,19 @@ export function optionalChecklists(value, field) {
                     throw new ValidationError(`${field} items must be objects`);
                 }
 
+                if (item.text !== undefined && item.text !== null && typeof item.text !== 'string') {
+                    throw new ValidationError(`${field} item text must be text`);
+                }
+
+                const text = item.text ?? '';
+
+                if (text.length > MAX_CHECKLIST_ITEM) {
+                    throw new ValidationError(`a checklist item cannot be longer than ${MAX_CHECKLIST_ITEM} characters`);
+                }
+
                 return {
                     id: requireID(item.id, `${field}.items.id`),
-                    text: typeof item.text === 'string' ? item.text.slice(0, 200) : '',
+                    text,
                     done: Boolean(item.done)
                 };
             })
@@ -185,8 +207,6 @@ export function optionalBoolean(value, field) {
 
     return Boolean(value);
 }
-
-const SLOT_ALIGNMENT_MS = 15 * 60 * 1000;
 
 const IMAGE_SIGNATURES = [
     { mime: 'image/png', bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
@@ -255,7 +275,7 @@ export function requireSlotList(value, field, slotMinutes, max = 400) {
     const parsed = value.map(entry => {
         const iso = requireTimestamp(entry, field);
 
-        if (Date.parse(iso) % SLOT_ALIGNMENT_MS !== 0) {
+        if (Date.parse(iso) % (slotMinutes * 60 * 1000) !== 0) {
             throw new ValidationError(`${field} must align to ${slotMinutes} minute boundaries`);
         }
 

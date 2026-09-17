@@ -319,6 +319,11 @@ CREATE TABLE IF NOT EXISTS meetings (
 
 CREATE INDEX IF NOT EXISTS meetings_workspace_start_idx ON meetings (workspace_id, starts_at);
 
+ALTER TABLE meetings DROP CONSTRAINT IF EXISTS meetings_time_order_check;
+
+ALTER TABLE meetings ADD CONSTRAINT meetings_time_order_check
+    CHECK (ends_at > starts_at) NOT VALID;
+
 -- colour normalisation
 UPDATE users SET cursor_color = lower(cursor_color) WHERE cursor_color <> lower(cursor_color);
 UPDATE categories SET color = lower(color) WHERE color <> lower(color);

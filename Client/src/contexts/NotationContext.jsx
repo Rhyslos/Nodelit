@@ -48,6 +48,7 @@ export function NotationProvider({ children }) {
     const [error, setError] = useState(null);
     const [actionError, setActionError] = useState(null);
     const [memberRole, setMemberRole] = useState(null);
+    const [removedImageIDs, setRemovedImageIDs] = useState(() => new Set());
 
     const workspaceRef = useRef(workspaceID);
     workspaceRef.current = workspaceID;
@@ -84,6 +85,7 @@ export function NotationProvider({ children }) {
         setError(null);
         setNotationData(EMPTY_NOTATION);
         setActionError(null);
+        setRemovedImageIDs(new Set());
         refresh();
     }, [refresh]);
 
@@ -100,6 +102,10 @@ export function NotationProvider({ children }) {
 
         const stopReconnect = subscribe('reconnected', () => refresh());
 
+        const stopImages = subscribe('notation-images', event => {
+            setRemovedImageIDs(current => new Set([...current, ...(event.removed ?? [])]));
+        });
+
         const lose = event => {
             if (event.workspaceID !== workspaceRef.current) return;
             dropNotation(Object.assign(new Error('You no longer have access to this workspace'), { status: 403 }));
@@ -110,6 +116,7 @@ export function NotationProvider({ children }) {
 
         return () => {
             stopNotation();
+            stopImages();
             stopReconnect();
             stopRevoked();
             stopDenied();
@@ -117,7 +124,7 @@ export function NotationProvider({ children }) {
     }, [subscribe, refresh, dropNotation]);
 
     return (
-        <NotationContext.Provider value={{ notationData, setNotationData, applyDelta, workspaceID, loading, error, actionError, setActionError, refresh, memberRole, canEdit: EDIT_ROLES.has(memberRole) }}>
+        <NotationContext.Provider value={{ notationData, setNotationData, applyDelta, workspaceID, loading, error, actionError, setActionError, refresh, memberRole, canEdit: EDIT_ROLES.has(memberRole), removedImageIDs }}>
             {children}
         </NotationContext.Provider>
     );

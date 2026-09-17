@@ -656,7 +656,14 @@ export function attachCollaboration(httpServer, { origins = [] } = {}) {
 
     httpServer.on('upgrade', async (request, socket, head) => {
         const path = (request.url ?? '').split('?')[0];
-        if (path !== SOCKET_PATH && !path.startsWith(`${SOCKET_PATH}/`)) return;
+
+        if (path !== SOCKET_PATH && !path.startsWith(`${SOCKET_PATH}/`)) {
+            if (httpServer.listenerCount('upgrade') === 1) {
+                socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+                socket.destroy();
+            }
+            return;
+        }
 
         socket.on('error', () => socket.destroy());
 

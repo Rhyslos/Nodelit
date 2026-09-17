@@ -1,7 +1,7 @@
 // import modules
 import { Router, raw } from 'express';
 import db from '../database/Database.mjs';
-import { broadcastNotationChange } from '../modules/Networking.mjs';
+import { broadcastNotationChange, broadcastToWorkspace } from '../modules/Networking.mjs';
 import { closeRoom } from '../modules/Collaboration.mjs';
 import {
     requireID,
@@ -371,6 +371,8 @@ export default function createNotationRouter(authz) {
         try {
             const removed = await db.deleteNotationImage(req.params.id);
             if (!removed) return res.status(404).json({ error: 'Not found' });
+
+            broadcastToWorkspace(req.workspaceID, { type: 'notation-images', removed: [req.params.id] }, originOf(req));
 
             res.json({ removed: [req.params.id] });
         } catch (error) {

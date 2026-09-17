@@ -158,7 +158,10 @@ const TASK_SELECT = `
     k.updated_at AS "updatedAt",
     COALESCE((
         SELECT array_agg(a.user_id ORDER BY a.user_id)
-        FROM task_assignees a WHERE a.task_id = k.id
+        FROM task_assignees a
+        JOIN memberships am ON am.user_id = a.user_id AND am.workspace_id = k.workspace_id
+        JOIN users au ON au.id = a.user_id AND au.deleted_at IS NULL
+        WHERE a.task_id = k.id
     ), '{}') AS "assignedUsers",
     COALESCE((
         SELECT array_agg(tt.tag_id ORDER BY tt.tag_id)
@@ -1156,6 +1159,8 @@ class Database {
                 `SELECT to_char(a.slot_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "slotStart",
                         array_agg(a.user_id ORDER BY a.user_id) AS "userIDs"
                  FROM availability_slots a
+                 JOIN memberships am ON am.user_id = a.user_id AND am.workspace_id = a.workspace_id
+                 JOIN users au ON au.id = a.user_id AND au.deleted_at IS NULL
                  WHERE a.workspace_id = $1 AND a.slot_start >= $2 AND a.slot_start < $3
                  GROUP BY a.slot_start
                  ORDER BY a.slot_start`,
@@ -1210,6 +1215,8 @@ class Database {
                 `SELECT to_char(a.slot_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "slotStart",
                         array_agg(a.user_id ORDER BY a.user_id) AS "userIDs"
                  FROM availability_slots a
+                 JOIN memberships am ON am.user_id = a.user_id AND am.workspace_id = a.workspace_id
+                 JOIN users au ON au.id = a.user_id AND au.deleted_at IS NULL
                  WHERE a.workspace_id = $1 AND a.slot_start = ANY($2::timestamptz[])
                  GROUP BY a.slot_start`,
                 [workspaceID, touched]
@@ -1268,7 +1275,8 @@ class Database {
 
         if (assignments.length === 0) return this.getMeeting(meetingID);
 
-        return queryOne(
+        try {
+            return await queryOne(
             `UPDATE meetings SET ${assignments.join(', ')}, updated_at = now()
              WHERE id = $${values.length + 1}
              RETURNING id, workspace_id AS "workspaceID", title, description,
@@ -1276,8 +1284,12 @@ class Database {
                        to_char(ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
                        created_by AS "createdBy",
                        updated_at AS "updatedAt"`,
-            [...values, meetingID]
-        );
+                [...values, meetingID]
+            );
+        } catch (error) {
+            if (error.code === '23514') throw badRequest('endsAt must be after startsAt');
+            throw error;
+        }
     }
 
     async deleteMeeting(meetingID) {
@@ -1751,7 +1763,12 @@ class Database {
              unassigned AS (
                  SELECT count(*)::int AS total
                  FROM open_tasks o
-                 WHERE NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = o.id)
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM task_assignees ta
+                     JOIN memberships am ON am.user_id = ta.user_id AND am.workspace_id = $1
+                     JOIN users au ON au.id = ta.user_id AND au.deleted_at IS NULL
+                     WHERE ta.task_id = o.id
+                 )
              ),
              upcoming AS (
                  SELECT k.id,
@@ -2681,7 +2698,16 @@ class Database {
             }
 
             if (assignees !== undefined) {
-                await client.query('DELETE FROM task_assignees WHERE task_id = $1', [taskID]);
+                await client.query(
+                    `DELETE FROM task_assignees
+                     WHERE task_id = $1
+                       AND user_id IN (
+                           SELECT m.user_id FROM memberships m
+                           JOIN users u ON u.id = m.user_id AND u.deleted_at IS NULL
+                           WHERE m.workspace_id = (SELECT workspace_id FROM tasks WHERE id = $1)
+                       )`,
+                    [taskID]
+                );
 
                 if (assignees.length > 0) {
                     await client.query(
