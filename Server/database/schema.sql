@@ -371,7 +371,7 @@ CREATE INDEX IF NOT EXISTS notation_images_workspace_id_idx ON notation_images (
 ALTER TABLE notation_images DROP CONSTRAINT IF EXISTS notation_images_mime_check;
 
 ALTER TABLE notation_images ADD CONSTRAINT notation_images_mime_check
-    CHECK (mime IN ('image/png', 'image/jpeg', 'image/webp')) NOT VALID;
+    CHECK (mime IN ('image/png', 'image/jpeg', 'image/webp', 'image/gif')) NOT VALID;
 
 CREATE TABLE IF NOT EXISTS notation_image_data (
     image_id text PRIMARY KEY REFERENCES notation_images(id) ON DELETE CASCADE,

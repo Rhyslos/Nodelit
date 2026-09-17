@@ -1,5 +1,5 @@
 // helper imports
-import { API_BASE, clientID } from './api';
+import { API_BASE, api } from './api';
 
 // configuration constants
 const MAX_EDGE = 1600;
@@ -14,7 +14,7 @@ export function isSupportedImage(file) {
 }
 
 export function imageURL(imageID) {
-    return `${API_BASE}/api/notation/images/${imageID}`;
+    return `${API_BASE}/api/notation/images/${encodeURIComponent(imageID)}`;
 }
 
 function scaledSize(width, height) {
@@ -29,8 +29,16 @@ function scaledSize(width, height) {
     };
 }
 
+async function decode(file) {
+    try {
+        return await createImageBitmap(file);
+    } catch {
+        throw new Error('That image could not be read');
+    }
+}
+
 async function readDimensions(file) {
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await decode(file);
     const size = { width: bitmap.width, height: bitmap.height };
 
     bitmap.close();
@@ -53,7 +61,7 @@ export async function prepareImage(file) {
         return { blob: file, ...size };
     }
 
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await decode(file);
     const target = scaledSize(bitmap.width, bitmap.height);
 
     const canvas = document.createElement('canvas');
@@ -86,22 +94,9 @@ export async function uploadImage(workspaceID, file) {
         height: String(prepared.height)
     });
 
-    const response = await fetch(`${API_BASE}/api/notation/${workspaceID}/images?${query}`, {
+    return api(`/api/notation/${encodeURIComponent(workspaceID)}/images?${query}`, {
         method: 'POST',
-        credentials: 'include',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-Client-Id': clientID,
-            'Content-Type': prepared.blob.type
-        },
-        body: prepared.blob
+        rawBody: prepared.blob,
+        contentType: prepared.blob.type
     });
-
-    const payload = await response.json().catch(() => null);
-
-    if (!response.ok) {
-        throw new Error(payload?.error ?? 'The image could not be uploaded');
-    }
-
-    return payload;
 }

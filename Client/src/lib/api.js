@@ -26,20 +26,28 @@ function notifyUnauthorized() {
 }
 
 // request functions
-export async function api(path, { method = 'GET', body, signal } = {}) {
+export async function api(path, { method = 'GET', body, rawBody, contentType, signal } = {}) {
     const headers = {
         'X-Requested-With': 'XMLHttpRequest',
         'X-Client-Id': clientID
     };
 
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    let requestBody;
+
+    if (rawBody !== undefined) {
+        headers['Content-Type'] = contentType ?? 'application/octet-stream';
+        requestBody = rawBody;
+    } else if (body !== undefined) {
+        headers['Content-Type'] = 'application/json';
+        requestBody = JSON.stringify(body);
+    }
 
     const response = await fetch(`${API_BASE}${path}`, {
         method,
         headers,
         credentials: 'include',
         signal,
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: requestBody
     });
 
     const isJSON = response.headers.get('content-type')?.includes('application/json');

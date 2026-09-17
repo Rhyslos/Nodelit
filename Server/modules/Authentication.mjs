@@ -189,7 +189,7 @@ class Authentication {
             const proposed = requirePassword(req.body?.newPassword, 'newPassword');
 
             if (!this.isUsableCredential(current)) {
-                return res.status(401).json({ error: 'Current password is incorrect' });
+                return res.status(400).json({ error: 'Current password is incorrect' });
             }
 
             const credentials = await db.getCredentials(req.user.id);
@@ -205,7 +205,7 @@ class Authentication {
                     ip: req.ip
                 });
 
-                return res.status(401).json({ error: 'Current password is incorrect' });
+                return res.status(400).json({ error: 'Current password is incorrect' });
             }
 
             await db.setUserPassword(req.user.id, proposed);
