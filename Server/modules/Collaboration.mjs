@@ -18,6 +18,9 @@ const SYNC_STEP_2 = 1;
 const SYNC_UPDATE = 2;
 const MAX_PAYLOAD_BYTES = 1024 * 1024;
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
+const EXACT_SIZE_INTERVAL_MS = 2000;
+const MAX_AWARENESS_CLIENTS = 4;
+const MAX_AWARENESS_STATE_CHARS = 8192;
 const MAX_CONNECTIONS_PER_PAGE = 40;
 const MAX_CONNECTIONS_PER_USER_PER_PAGE = 4;
 const MAX_CONNECTIONS_PER_USER = 20;
@@ -160,6 +163,9 @@ async function loadRoom(pageID) {
         doc,
         awareness: new awarenessProtocol.Awareness(doc),
         connections: new Set(),
+        awarenessOwners: new Map(),
+        byteEstimate: record?.state && loaded ? record.state.length : 0,
+        exactAt: 0,
         saveTimer: null,
         dirty: false
     };
@@ -233,10 +239,10 @@ async function saveRoom(room) {
     const state = Y.encodeStateAsUpdate(room.doc);
 
     if (state.length > MAX_DOCUMENT_BYTES) {
-        console.error(`Notation document ${room.pageID} exceeds the size limit and was not saved`);
-        for (const connection of [...room.connections]) closeConnection(connection, CLOSE_TOO_LARGE);
-        return;
+        console.warn(`Notation document ${room.pageID} is ${state.length} bytes, above the ${MAX_DOCUMENT_BYTES} byte limit`);
     }
+
+    room.byteEstimate = state.length;
 
     room.dirty = false;
 
@@ -260,7 +266,13 @@ function closeConnection(connection, code) {
     const room = connection.room;
 
     if (room?.connections.delete(connection)) {
-        awarenessProtocol.removeAwarenessStates(room.awareness, [connection.id], null);
+        const owned = [...connection.clientIDs];
+
+        for (const clientID of owned) {
+            if (room.awarenessOwners.get(clientID) === connection) room.awarenessOwners.delete(clientID);
+        }
+
+        if (owned.length > 0) awarenessProtocol.removeAwarenessStates(room.awareness, owned, null);
     }
 
     try {
@@ -308,6 +320,88 @@ export function closeRoom(pageID, code = CLOSE_GONE) {
         .finally(finish);
 }
 
+// capacity functions
+function fitsInRoom(room, update) {
+    if (room.byteEstimate + update.length <= MAX_DOCUMENT_BYTES) {
+        room.byteEstimate += update.length;
+        return true;
+    }
+
+    const now = Date.now();
+
+    if (now - room.exactAt >= EXACT_SIZE_INTERVAL_MS) {
+        room.exactAt = now;
+        room.byteEstimate = Y.encodeStateAsUpdate(room.doc).length;
+    }
+
+    if (room.byteEstimate + update.length > MAX_DOCUMENT_BYTES) return false;
+
+    room.byteEstimate += update.length;
+    return true;
+}
+
+// awareness functions
+function stampIdentity(raw, connection) {
+    const state = JSON.parse(raw);
+
+    if (state && typeof state === 'object' && state.user && typeof state.user === 'object') {
+        state.user.id = connection.userID;
+        state.user.name = connection.displayName;
+        state.user.color = connection.cursorColor;
+    }
+
+    return JSON.stringify(state);
+}
+
+function filterAwareness(connection, payload) {
+    const room = connection.room;
+    const decoder = decoding.createDecoder(payload);
+    const count = decoding.readVarUint(decoder);
+    const accepted = [];
+
+    for (let index = 0; index < count; index += 1) {
+        const clientID = decoding.readVarUint(decoder);
+        const clock = decoding.readVarUint(decoder);
+        const raw = decoding.readVarString(decoder);
+
+        if (clientID === room.doc.clientID) continue;
+        if (raw.length > MAX_AWARENESS_STATE_CHARS) continue;
+
+        const owner = room.awarenessOwners.get(clientID);
+        if (owner && owner !== connection) continue;
+
+        let stamped;
+
+        try {
+            stamped = stampIdentity(raw, connection);
+        } catch {
+            continue;
+        }
+
+        if (!owner) {
+            if (connection.clientIDs.size >= MAX_AWARENESS_CLIENTS) continue;
+            room.awarenessOwners.set(clientID, connection);
+            connection.clientIDs.add(clientID);
+        }
+
+        accepted.push({ clientID, clock, stamped });
+    }
+
+    if (accepted.length === 0) return null;
+
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, accepted.length);
+
+    for (const entry of accepted) {
+        encoding.writeVarUint(encoder, entry.clientID);
+        encoding.writeVarUint(encoder, entry.clock);
+        encoding.writeVarString(encoder, entry.stamped);
+    }
+
+    return encoding.toUint8Array(encoder);
+}
+
+// message functions
 function handleSyncMessage(connection, decoder) {
     const room = connection.room;
     const messageType = decoding.readVarUint(decoder);
@@ -323,7 +417,14 @@ function handleSyncMessage(connection, decoder) {
     if (messageType !== SYNC_STEP_2 && messageType !== SYNC_UPDATE) return;
     if (!connection.canEdit) return;
 
-    Y.applyUpdate(room.doc, decoding.readVarUint8Array(decoder), connection);
+    const update = decoding.readVarUint8Array(decoder);
+
+    if (!fitsInRoom(room, update)) {
+        closeConnection(connection, CLOSE_TOO_LARGE);
+        return;
+    }
+
+    Y.applyUpdate(room.doc, update, connection);
 }
 
 function handleMessage(connection, data) {
@@ -337,11 +438,8 @@ function handleMessage(connection, data) {
         }
 
         if (messageType === MESSAGE_AWARENESS) {
-            awarenessProtocol.applyAwarenessUpdate(
-                connection.room.awareness,
-                decoding.readVarUint8Array(decoder),
-                connection
-            );
+            const filtered = filterAwareness(connection, decoding.readVarUint8Array(decoder));
+            if (filtered) awarenessProtocol.applyAwarenessUpdate(connection.room.awareness, filtered, connection);
         }
     } catch (error) {
         console.error('Notation message rejected:', error.message);
@@ -387,7 +485,10 @@ function attachConnection(socket, context) {
             socket,
             room,
             userID: context.userID,
+            displayName: context.displayName,
+            cursorColor: context.cursorColor,
             sessionID: context.sessionID,
+            clientIDs: new Set(),
             canEdit: context.canEdit,
             alive: true
         };
@@ -453,6 +554,8 @@ async function authorize(request) {
         pageID,
         workspaceID,
         userID: user.id,
+        displayName: user.displayName,
+        cursorColor: user.cursorColor,
         sessionID,
         canEdit: EDIT_ROLES.has(membership.role),
         connectionID: `${user.id}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
