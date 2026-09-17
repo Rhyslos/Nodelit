@@ -20,6 +20,7 @@ const LOCKOUT_WINDOW_MINUTES = 15;
 const MAX_FAILURES_PER_USERNAME_AND_IP = 10;
 const MAX_FAILURES_PER_USERNAME = 100;
 const MAX_FAILURES_PER_IP = 40;
+const MAX_FALLBACK_KEYS = 10000;
 
 const COOKIE_OPTIONS = {
     httpOnly: true,
@@ -32,6 +33,8 @@ const COOKIE_OPTIONS = {
 // authentication classes
 class Authentication {
     constructor() {
+        this.fallbackFailures = new Map();
+
         this.decoyReady = this.buildDecoy();
         this.decoyReady.catch(() => {});
     }
@@ -63,6 +66,59 @@ class Authentication {
         revalidateCollaboration();
     }
 
+    // lockout functions
+    fallbackKeys(target, ip) {
+        return {
+            byUsernameAndIP: `pair:${target}:${ip}`,
+            byUsername: `user:${target}`,
+            byIP: `ip:${ip}`
+        };
+    }
+
+    recentFallback(key, now) {
+        const cutoff = now - LOCKOUT_WINDOW_MINUTES * 60 * 1000;
+        const entries = (this.fallbackFailures.get(key) ?? []).filter(at => at > cutoff);
+
+        if (entries.length === 0) this.fallbackFailures.delete(key);
+        else this.fallbackFailures.set(key, entries);
+
+        return entries.length;
+    }
+
+    rememberFailure(target, ip) {
+        const now = Date.now();
+
+        if (this.fallbackFailures.size >= MAX_FALLBACK_KEYS) {
+            for (const key of [...this.fallbackFailures.keys()]) this.recentFallback(key, now);
+        }
+
+        if (this.fallbackFailures.size >= MAX_FALLBACK_KEYS) {
+            const oldest = this.fallbackFailures.keys().next().value;
+            this.fallbackFailures.delete(oldest);
+        }
+
+        for (const key of Object.values(this.fallbackKeys(target, ip))) {
+            this.fallbackFailures.set(key, [...(this.fallbackFailures.get(key) ?? []), now]);
+        }
+    }
+
+    async recordFailure(entry, target, ip) {
+        const recorded = await db.recordAudit({ ...entry, action: 'login.failed', targetType: 'username', targetID: target, ip });
+        if (!recorded) this.rememberFailure(target ?? '', ip);
+    }
+
+    async countFailures(username, ip) {
+        const stored = await db.countRecentLoginFailures({ username, ip, minutes: LOCKOUT_WINDOW_MINUTES });
+        const keys = this.fallbackKeys(this.auditTarget(username), ip);
+        const now = Date.now();
+
+        return {
+            byUsernameAndIP: stored.byUsernameAndIP + this.recentFallback(keys.byUsernameAndIP, now),
+            byUsername: stored.byUsername + this.recentFallback(keys.byUsername, now),
+            byIP: stored.byIP + this.recentFallback(keys.byIP, now)
+        };
+    }
+
     // validation functions
     isUsableCredential(value) {
         return typeof value === 'string'
@@ -82,22 +138,16 @@ class Authentication {
             const ip = req.ip;
 
             if (!this.isUsableCredential(username) || !this.isUsableCredential(password)) {
-                await db.recordAudit({
-                    action: 'login.failed',
-                    targetType: 'username',
-                    targetID: typeof username === 'string' ? this.auditTarget(username) : null,
-                    detail: { reason: 'malformed credential' },
+                await this.recordFailure(
+                    { detail: { reason: 'malformed credential' } },
+                    typeof username === 'string' ? this.auditTarget(username) : null,
                     ip
-                });
+                );
 
                 return res.status(401).json({ error: 'Invalid credentials' });
             }
 
-            const failures = await db.countRecentLoginFailures({
-                username,
-                ip,
-                minutes: LOCKOUT_WINDOW_MINUTES
-            });
+            const failures = await this.countFailures(username, ip);
 
             const blocked = failures.byUsernameAndIP >= MAX_FAILURES_PER_USERNAME_AND_IP
                 || failures.byUsername >= MAX_FAILURES_PER_USERNAME
@@ -122,12 +172,7 @@ class Authentication {
             const isValid = await this.verifyPassword(password, credential.salt, credential.hash);
 
             if (!user || !isValid) {
-                await db.recordAudit({
-                    action: 'login.failed',
-                    targetType: 'username',
-                    targetID: this.auditTarget(username),
-                    ip
-                });
+                await this.recordFailure({}, this.auditTarget(username), ip);
 
                 return res.status(401).json({ error: 'Invalid credentials' });
             }

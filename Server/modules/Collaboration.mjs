@@ -19,6 +19,8 @@ const SYNC_UPDATE = 2;
 const MAX_PAYLOAD_BYTES = 1024 * 1024;
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 const MAX_CONNECTIONS_PER_PAGE = 40;
+const MAX_CONNECTIONS_PER_USER_PER_PAGE = 4;
+const MAX_CONNECTIONS_PER_USER = 20;
 const MAX_CONTENT_CHARS = 200000;
 const SAVE_DEBOUNCE_MS = 2000;
 const REVALIDATE_INTERVAL_MS = 60000;
@@ -27,6 +29,7 @@ const CLOSE_UNAUTHORIZED = 4401;
 const CLOSE_FORBIDDEN = 4403;
 const CLOSE_GONE = 4410;
 const CLOSE_TOO_LARGE = 4413;
+const CLOSE_TOO_MANY = 4429;
 
 // state variables
 const rooms = new Map();
@@ -69,6 +72,29 @@ function send(connection, payload) {
     } catch {
         closeConnection(connection);
     }
+}
+
+function countUserConnections(userID, room) {
+    let total = 0;
+    let inRoom = 0;
+
+    for (const entry of rooms.values()) {
+        if (entry instanceof Promise) continue;
+
+        for (const connection of entry.connections) {
+            if (connection.userID !== userID) continue;
+            total += 1;
+            if (entry === room) inRoom += 1;
+        }
+    }
+
+    return { total, inRoom };
+}
+
+function releaseIfIdle(room) {
+    setTimeout(() => {
+        if (rooms.get(room.pageID) === room && room.connections.size === 0) closeRoom(room.pageID);
+    }, 0);
 }
 
 function broadcast(room, payload, exclude) {
@@ -338,10 +364,21 @@ function attachConnection(socket, context) {
     });
 
     getRoom(context.pageID).then(room => {
-        if (socket.readyState !== socket.OPEN) return;
+        if (socket.readyState !== socket.OPEN) {
+            releaseIfIdle(room);
+            return;
+        }
 
         if (room.connections.size >= MAX_CONNECTIONS_PER_PAGE) {
             socket.close(CLOSE_FORBIDDEN);
+            return;
+        }
+
+        const usage = countUserConnections(context.userID, room);
+
+        if (usage.inRoom >= MAX_CONNECTIONS_PER_USER_PER_PAGE || usage.total >= MAX_CONNECTIONS_PER_USER) {
+            socket.close(CLOSE_TOO_MANY);
+            releaseIfIdle(room);
             return;
         }
 

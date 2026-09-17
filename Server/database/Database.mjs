@@ -12,6 +12,18 @@ const AUDIT_RETENTION_DAYS = 90;
 const KEY_LENGTH = 64;
 const MAX_PAGES_PER_WORKSPACE = 500;
 const MAX_GROUPS_PER_WORKSPACE = 100;
+const MAX_IMAGE_BYTES_PER_WORKSPACE = 50 * 1024 * 1024;
+const MAX_IMAGES_PER_WORKSPACE = 500;
+const MAX_TABS_PER_WORKSPACE = 100;
+const MAX_TAB_GROUPS_PER_WORKSPACE = 50;
+const MAX_COLUMNS_PER_TAB = 50;
+const MAX_LISTS_PER_COLUMN = 200;
+const MAX_TASKS_PER_WORKSPACE = 10000;
+const MAX_TAGS_PER_WORKSPACE = 500;
+const MAX_MEETINGS_PER_WORKSPACE = 5000;
+const MAX_SLOTS_PER_MEMBER = 3000;
+const MAX_WORKSPACES_PER_OWNER = 50;
+const MAX_CATEGORIES_PER_USER = 50;
 
 export const SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
@@ -235,6 +247,19 @@ function buildAssignments(changes, allowed, startIndex) {
     }
 
     return { assignments, values, nextIndex: index };
+}
+
+// capacity functions
+async function assertBelow(runner, sql, params, limit, message) {
+    const { rows } = await runner.query(sql, params);
+
+    if ((rows[0]?.total ?? 0) >= limit) {
+        throw badRequest(message);
+    }
+}
+
+async function lockWorkspace(client, workspaceID) {
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`capacity:${workspaceID}`]);
 }
 
 // normalization functions
@@ -557,10 +582,11 @@ async function groupDepth(client, groupID) {
 
     const { rows } = await client.query(
         `WITH RECURSIVE ancestors AS (
-             SELECT id, parent_id, 1 AS depth FROM notation_groups WHERE id = $1
+             SELECT id, parent_id, 1 AS depth, ARRAY[id] AS path FROM notation_groups WHERE id = $1
              UNION ALL
-             SELECT g.id, g.parent_id, a.depth + 1
+             SELECT g.id, g.parent_id, a.depth + 1, a.path || g.id
              FROM notation_groups g JOIN ancestors a ON g.id = a.parent_id
+             WHERE NOT g.id = ANY(a.path)
          )
          SELECT COALESCE(MAX(depth), 0) AS depth FROM ancestors`,
         [groupID]
@@ -572,10 +598,11 @@ async function groupDepth(client, groupID) {
 async function groupSubtree(client, groupID) {
     const { rows } = await client.query(
         `WITH RECURSIVE descendants AS (
-             SELECT id, 1 AS depth FROM notation_groups WHERE id = $1
+             SELECT id, 1 AS depth, ARRAY[id] AS path FROM notation_groups WHERE id = $1
              UNION ALL
-             SELECT g.id, d.depth + 1
+             SELECT g.id, d.depth + 1, d.path || g.id
              FROM notation_groups g JOIN descendants d ON g.parent_id = d.id
+             WHERE NOT g.id = ANY(d.path)
          )
          SELECT id, depth FROM descendants`,
         [groupID]
@@ -634,6 +661,36 @@ async function assertTagScope(runner, workspaceID, scope) {
             [scope.groupID, workspaceID]
         );
         if (rowCount === 0) throw badRequest('That group does not exist');
+    }
+}
+
+async function assertGroupTree(client, workspaceID) {
+    const { rows } = await client.query(
+        'SELECT id, parent_id AS "parentID" FROM notation_groups WHERE workspace_id = $1',
+        [workspaceID]
+    );
+
+    const parents = new Map(rows.map(row => [row.id, row.parentID]));
+
+    for (const id of parents.keys()) {
+        const seen = new Set([id]);
+        let depth = 1;
+        let current = parents.get(id);
+
+        while (current) {
+            if (seen.has(current)) {
+                throw badRequest('A group cannot be moved inside itself');
+            }
+
+            seen.add(current);
+            depth += 1;
+
+            if (depth > MAX_GROUP_DEPTH) {
+                throw badRequest(`Groups can only be nested ${MAX_GROUP_DEPTH} levels deep`);
+            }
+
+            current = parents.get(current);
+        }
     }
 }
 
@@ -958,8 +1015,11 @@ class Database {
                     ip ?? null
                 ]
             );
+
+            return true;
         } catch (error) {
             console.error('Audit write failed:', error.message);
+            return false;
         }
     }
 
@@ -1067,6 +1127,14 @@ class Database {
     }
 
     async createCategory(userID, name, color) {
+        await assertBelow(
+            { query },
+            'SELECT COUNT(*)::int AS total FROM categories WHERE user_id = $1',
+            [userID],
+            MAX_CATEGORIES_PER_USER,
+            `You cannot have more than ${MAX_CATEGORIES_PER_USER} categories`
+        );
+
         return queryOne(
             `INSERT INTO categories (id, user_id, name, color)
              VALUES ($1, $2, $3, $4)
@@ -1116,6 +1184,16 @@ class Database {
             }
 
             if (added.length > 0) {
+                const { rows: counted } = await client.query(
+                    `SELECT COUNT(*)::int AS total FROM availability_slots
+                     WHERE workspace_id = $1 AND user_id = $2 AND NOT slot_start = ANY($3::timestamptz[])`,
+                    [workspaceID, userID, added]
+                );
+
+                if (counted[0].total + added.length > MAX_SLOTS_PER_MEMBER) {
+                    throw badRequest(`You cannot mark more than ${MAX_SLOTS_PER_MEMBER} available slots in one workspace`);
+                }
+
                 await client.query(
                     `INSERT INTO availability_slots (workspace_id, user_id, slot_start)
                      SELECT $1, $2, unnest($3::timestamptz[])
@@ -1156,6 +1234,14 @@ class Database {
     }
 
     async createMeeting(workspaceID, userID, fields) {
+        await assertBelow(
+            { query },
+            'SELECT COUNT(*)::int AS total FROM meetings WHERE workspace_id = $1',
+            [workspaceID],
+            MAX_MEETINGS_PER_WORKSPACE,
+            `A workspace cannot contain more than ${MAX_MEETINGS_PER_WORKSPACE} meetings`
+        );
+
         return queryOne(
             `INSERT INTO meetings (id, workspace_id, title, description, starts_at, ends_at, created_by)
              VALUES ($1, $2, COALESCE($3, 'Meeting'), COALESCE($4, ''), $5, $6, $7)
@@ -1284,6 +1370,16 @@ class Database {
                 );
                 if (rowCount === 0) throw badRequest('That category does not exist');
             }
+
+            await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`capacity:owner:${userID}`]);
+
+            await assertBelow(
+                client,
+                'SELECT COUNT(*)::int AS total FROM workspaces WHERE owner_id = $1 AND deleted_at IS NULL',
+                [userID],
+                MAX_WORKSPACES_PER_OWNER,
+                `You cannot own more than ${MAX_WORKSPACES_PER_OWNER} workspaces`
+            );
 
             const workspaceID = newID('ws');
 
@@ -1760,6 +1856,14 @@ class Database {
     async createTag(workspaceID, name, color, scope = {}) {
         await assertTagScope({ query }, workspaceID, scope);
 
+        await assertBelow(
+            { query },
+            'SELECT COUNT(*)::int AS total FROM tags WHERE workspace_id = $1',
+            [workspaceID],
+            MAX_TAGS_PER_WORKSPACE,
+            `A workspace cannot contain more than ${MAX_TAGS_PER_WORKSPACE} tags`
+        );
+
         try {
             return await queryOne(
                 `INSERT INTO tags (id, workspace_id, tab_id, group_id, name, color)
@@ -1954,6 +2058,14 @@ class Database {
 
             const tabIDs = owned.map(row => row.id);
 
+            await assertBelow(
+                client,
+                'SELECT COUNT(*)::int AS total FROM tab_groups WHERE workspace_id = $1',
+                [workspaceID],
+                MAX_TAB_GROUPS_PER_WORKSPACE,
+                `A workspace cannot contain more than ${MAX_TAB_GROUPS_PER_WORKSPACE} groups`
+            );
+
             const { rows } = await client.query(
                 `INSERT INTO tab_groups (id, workspace_id, name, color)
                  VALUES ($1, $2, COALESCE($3, 'New group'), COALESCE($4, '#6c8ebf'))
@@ -2093,6 +2205,14 @@ class Database {
     }
 
     async createTab(workspaceID, fields = {}) {
+        await assertBelow(
+            { query },
+            'SELECT COUNT(*)::int AS total FROM tabs WHERE workspace_id = $1',
+            [workspaceID],
+            MAX_TABS_PER_WORKSPACE,
+            `A workspace cannot contain more than ${MAX_TABS_PER_WORKSPACE} boards`
+        );
+
         return queryOne(
             `INSERT INTO tabs (id, workspace_id, name, color, tab_order)
              VALUES (
@@ -2176,6 +2296,14 @@ class Database {
     }
 
     async createColumn(tabID, columnIndex) {
+        await assertBelow(
+            { query },
+            'SELECT COUNT(*)::int AS total FROM board_columns WHERE tab_id = $1',
+            [tabID],
+            MAX_COLUMNS_PER_TAB,
+            `A board cannot contain more than ${MAX_COLUMNS_PER_TAB} columns`
+        );
+
         const created = await queryOne(
             `INSERT INTO board_columns (id, tab_id, column_index)
              VALUES ($1, $2, LEAST($3, (SELECT COUNT(*) FROM board_columns WHERE tab_id = $2)))
@@ -2229,6 +2357,14 @@ class Database {
     }
 
     async createList(columnID, fields = {}) {
+        await assertBelow(
+            { query },
+            'SELECT COUNT(*)::int AS total FROM lists WHERE column_id = $1',
+            [columnID],
+            MAX_LISTS_PER_COLUMN,
+            `A column cannot contain more than ${MAX_LISTS_PER_COLUMN} lists`
+        );
+
         const created = await queryOne(
             `INSERT INTO lists (id, column_id, name, list_order)
              VALUES (
@@ -2409,6 +2545,14 @@ class Database {
 
             if (source.rowCount === 0) return null;
 
+            await assertBelow(
+                client,
+                'SELECT COUNT(*)::int AS total FROM tasks WHERE workspace_id = (SELECT workspace_id FROM tasks WHERE id = $1)',
+                [taskID],
+                MAX_TASKS_PER_WORKSPACE,
+                `A workspace cannot contain more than ${MAX_TASKS_PER_WORKSPACE} tasks`
+            );
+
             const { listID, taskOrder } = source.rows[0];
 
             await client.query(
@@ -2454,6 +2598,20 @@ class Database {
 
     async createTask(listID, fields = {}) {
         return withTransaction(async client => {
+            await assertBelow(
+                client,
+                `SELECT COUNT(*)::int AS total FROM tasks
+                 WHERE workspace_id = (
+                     SELECT t.workspace_id FROM lists l
+                     JOIN board_columns c ON c.id = l.column_id
+                     JOIN tabs t ON t.id = c.tab_id
+                     WHERE l.id = $1
+                 )`,
+                [listID],
+                MAX_TASKS_PER_WORKSPACE,
+                `A workspace cannot contain more than ${MAX_TASKS_PER_WORKSPACE} tasks`
+            );
+
             const { rows } = await client.query(
                 `INSERT INTO tasks (id, list_id, workspace_id, title, description, task_order)
                  VALUES (
@@ -2620,6 +2778,22 @@ class Database {
     // notation image functions
     async createNotationImage(workspaceID, userID, meta, bytes) {
         return withTransaction(async client => {
+            await lockWorkspace(client, workspaceID);
+
+            const { rows: usage } = await client.query(
+                `SELECT COUNT(*)::int AS count, COALESCE(SUM(byte_size), 0)::bigint AS bytes
+                 FROM notation_images WHERE workspace_id = $1`,
+                [workspaceID]
+            );
+
+            if (usage[0].count >= MAX_IMAGES_PER_WORKSPACE) {
+                throw badRequest(`A workspace cannot contain more than ${MAX_IMAGES_PER_WORKSPACE} images`);
+            }
+
+            if (Number(usage[0].bytes) + bytes.length > MAX_IMAGE_BYTES_PER_WORKSPACE) {
+                throw badRequest('This workspace has used all of its image storage');
+            }
+
             const { rows } = await client.query(
                 `INSERT INTO notation_images (id, workspace_id, uploaded_by, mime, byte_size, width, height)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -2764,11 +2938,13 @@ class Database {
             const { rows } = await client.query(
                 `UPDATE notation_groups SET ${assignments.join(', ')}, updated_at = now()
                  WHERE id = $${nextIndex}
-                 RETURNING id`,
+                 RETURNING id, workspace_id AS "workspaceID"`,
                 [...values, groupID]
             );
 
             if (rows.length === 0) return null;
+
+            if (changes.parentID !== undefined) await assertGroupTree(client, rows[0].workspaceID);
 
             const { rows: records } = await client.query(
                 `SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g WHERE g.id = $1`,
@@ -3051,6 +3227,8 @@ class Database {
             );
 
             if (rows.length === 0) return [];
+
+            await assertGroupTree(client, workspaceID);
 
             const { rows: records } = await client.query(
                 `SELECT ${NOTATION_GROUP_SELECT} FROM notation_groups g
