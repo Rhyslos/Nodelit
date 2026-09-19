@@ -22,6 +22,7 @@ import { attachCollaboration, stopCollaboration } from './modules/Collaboration.
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const SHUTDOWN_GRACE_MS = 10000;
 const HEALTH_CACHE_MS = 5000;
+const HEALTH_PROBE_MS = 2000;
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const CLIENT_DIST = process.env.CLIENT_DIST
@@ -94,7 +95,7 @@ class Server {
             limit: 600,
             standardHeaders: true,
             legacyHeaders: false,
-            skip: req => req.path === '/healthz',
+            skip: req => req.path === '/healthz' || req.path === '/readyz',
             message: { error: 'Too many requests. Please slow down.' }
         }));
 
@@ -152,23 +153,15 @@ class Server {
         });
 
         this.app.get('/healthz', async (req, res) => {
-            if (Date.now() - this.healthCheckedAt < HEALTH_CACHE_MS) {
-                return res
-                    .status(this.healthy ? 200 : 503)
-                    .json({ status: this.healthy ? 'ok' : 'degraded' });
-            }
+            const database = await this.probeDatabase();
 
-            try {
-                await pool.query('SELECT 1');
-                this.healthy = true;
-            } catch {
-                this.healthy = false;
-            }
+            res.status(200).json({ status: 'ok', database: database ? 'ok' : 'degraded' });
+        });
 
-            this.healthCheckedAt = Date.now();
+        this.app.get('/readyz', async (req, res) => {
+            const database = await this.probeDatabase();
 
-            res.status(this.healthy ? 200 : 503)
-               .json({ status: this.healthy ? 'ok' : 'degraded' });
+            res.status(database ? 200 : 503).json({ status: database ? 'ok' : 'degraded' });
         });
 
         // authentication routes
@@ -187,6 +180,22 @@ class Server {
         this.app.use('/api/admin', this.authn.authenticate, createAdminRouter(this.authz));
 
         this.setupClientRoutes();
+    }
+
+    // health functions
+    async probeDatabase() {
+        if (Date.now() - this.healthCheckedAt < HEALTH_CACHE_MS) return this.healthy;
+
+        const probe = pool.query('SELECT 1').then(() => true, () => false);
+        const timeout = new Promise(resolve => {
+            const timer = setTimeout(() => resolve(false), HEALTH_PROBE_MS);
+            timer.unref?.();
+        });
+
+        this.healthy = await Promise.race([probe, timeout]);
+        this.healthCheckedAt = Date.now();
+
+        return this.healthy;
     }
 
     // client configuration
