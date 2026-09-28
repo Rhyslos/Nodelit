@@ -1,7 +1,14 @@
 // component functions
-export default function WorkspaceCard({ workspace, onOpen, onDelete }) {
+export default function WorkspaceCard({ workspace, onOpen, onMenu }) {
     return (
-        <div className="workspace-card" onClick={onOpen}>
+        <div
+            className="workspace-card"
+            onClick={onOpen}
+            onContextMenu={event => {
+                event.preventDefault();
+                onMenu({ x: event.clientX, y: event.clientY });
+            }}
+        >
             {workspace.categoryName && (
                 <span
                     className="workspace-card-tag"
@@ -14,13 +21,6 @@ export default function WorkspaceCard({ workspace, onOpen, onDelete }) {
             <p className="workspace-card-date">
                 {new Date(workspace.createdAt).toLocaleDateString()}
             </p>
-            <button
-                className="workspace-card-delete"
-                onClick={e => { e.stopPropagation(); onDelete(); }}
-                aria-label={`Delete ${workspace.name}`}
-            >
-                ✕
-            </button>
         </div>
     );
 }

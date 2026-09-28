@@ -7,7 +7,7 @@ export default function WorkspaceGrid({
     workspaces, categories, loading,
     filterCategory, filterText,
     onFilterCategory, onFilterText,
-    onOpen, onDelete, onCreateNew
+    onOpen, onMenu, onCreateNew
 }) {
     return (
         <div className="grid-root">
@@ -35,7 +35,7 @@ export default function WorkspaceGrid({
                             key={ws.id}
                             workspace={ws}
                             onOpen={() => onOpen(ws.id)}
-                            onDelete={() => onDelete(ws.id)}
+                            onMenu={position => onMenu(ws, position)}
                         />
                     ))}
                 </div>

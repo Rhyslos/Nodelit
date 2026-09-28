@@ -5,6 +5,7 @@ import { Waypoints } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspacePresence } from '../../hooks/useWorkspacePresence';
 import HamburgerMenu from './HamburgerMenu';
+import AssignedTasksModal from './AssignedTasksModal';
 import MembersModal from '../workspace/MembersModal';
 import TagManager from '../kanban/TagManager';
 import { appName } from '../../App';
@@ -54,9 +55,11 @@ export default function Navbar() {
     const [menuOpen, setMenuOpen] = useState(false);
     const [membersOpen, setMembersOpen] = useState(false);
     const [tagsOpen, setTagsOpen] = useState(false);
+    const [assignedMemberID, setAssignedMemberID] = useState(null);
 
     const { members } = useWorkspacePresence(workspaceID);
     const isOwner = members.some(m => m.id === user?.id && m.memberRole === 'owner');
+    const assignedMember = members.find(m => m.id === assignedMemberID) ?? null;
 
     // navigation functions
     function navTo(page) {
@@ -109,14 +112,17 @@ export default function Navbar() {
                             )}
 
                             {members.map(member => (
-                                <div
+                                <button
                                     key={member.id}
+                                    type="button"
                                     className={`navbar-avatar ${member.isOnline ? 'online' : 'offline'}`}
                                     style={{ backgroundColor: getAvatarColor(member) }}
-                                    title={member.displayName}
+                                    title={`${member.displayName}: show assigned tasks`}
+                                    aria-label={`Show tasks assigned to ${member.displayName}`}
+                                    onClick={() => setAssignedMemberID(member.id)}
                                 >
                                     {getAvatarLetter(member)}
-                                </div>
+                                </button>
                             ))}
                         </div>
                     </>
@@ -134,6 +140,14 @@ export default function Navbar() {
 
             {tagsOpen && workspaceID && (
                 <TagManager workspaceID={workspaceID} onClose={() => setTagsOpen(false)} />
+            )}
+
+            {assignedMember && workspaceID && (
+                <AssignedTasksModal
+                    workspaceID={workspaceID}
+                    member={assignedMember}
+                    onClose={() => setAssignedMemberID(null)}
+                />
             )}
 
             {membersOpen && workspaceID && (
