@@ -633,28 +633,11 @@
     cursor: default;
 }
 
-/* forecast styles */
-.stat-forecast {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
-
-.stat-forecast strong {
-    font-size: 30px;
-    font-weight: 600;
-    color: var(--accent);
-    line-height: 1;
-}
-
-.stat-forecast span {
-    font-size: 12px;
-    color: var(--ink);
-}
-
-.stat-forecast-rate {
-    font-size: 11px;
-    color: var(--muted);
+/* meeting styles */
+.stat-list-where.stat-list-time {
+    flex: 0 0 auto;
+    border-left-color: var(--border);
+    font-variant-numeric: tabular-nums;
 }
 
 /* task list styles */

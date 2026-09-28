@@ -75,10 +75,12 @@ export function useWorkspaceStats(workspaceID, weeks = DEFAULT_WEEKS) {
 
     useEffect(() => {
         const stopKanban = subscribe('kanban', schedule);
+        const stopCalendar = subscribe('calendar', schedule);
         const stopReconnect = subscribe('reconnected', schedule);
 
         return () => {
             stopKanban();
+            stopCalendar();
             stopReconnect();
         };
     }, [subscribe, schedule]);

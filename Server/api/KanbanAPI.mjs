@@ -42,7 +42,7 @@ function storeStats(key, value) {
     statsCache.set(key, { at: Date.now(), value });
 }
 
-function clearStats(workspaceID) {
+export function clearStats(workspaceID) {
     for (const key of statsCache.keys()) {
         if (key.startsWith(`${workspaceID}:`)) statsCache.delete(key);
     }

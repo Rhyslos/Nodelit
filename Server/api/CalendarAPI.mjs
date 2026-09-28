@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import db from '../database/Database.mjs';
 import { broadcastToWorkspace } from '../modules/Networking.mjs';
+import { clearStats } from './KanbanAPI.mjs';
 import {
     requireText,
     optionalText,
@@ -21,6 +22,7 @@ function originOf(req) {
 }
 
 function publish(req, payload) {
+    clearStats(req.workspaceID);
     broadcastToWorkspace(req.workspaceID, { type: 'calendar', ...payload }, originOf(req));
 }
 

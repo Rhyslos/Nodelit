@@ -1808,6 +1808,17 @@ class Database {
                  WHERE tr.workspace_id = $1
                  ORDER BY tr.created_at
              ),
+             meetings_ahead AS (
+                 SELECT mt.id,
+                        mt.title,
+                        to_char(mt.starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt",
+                        to_char(mt.ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt"
+                 FROM meetings mt
+                 WHERE mt.workspace_id = $1
+                   AND mt.ends_at > now()
+                 ORDER BY mt.starts_at, mt.title
+                 LIMIT 4
+             ),
              tag_mix AS (
                  SELECT tt.tag_id AS "tagID", count(*)::int AS total
                  FROM open_tasks o
@@ -1827,7 +1838,8 @@ class Database {
                  (SELECT total FROM unassigned) AS "unassigned",
                  (SELECT coalesce(json_agg(tag_mix), '[]'::json) FROM tag_mix) AS "tagMix",
                  (SELECT coalesce(json_agg(upcoming), '[]'::json) FROM upcoming) AS "upcoming",
-                 (SELECT coalesce(json_agg(tracked), '[]'::json) FROM tracked) AS "tracked"`,
+                 (SELECT coalesce(json_agg(tracked), '[]'::json) FROM tracked) AS "tracked",
+                 (SELECT coalesce(json_agg(meetings_ahead), '[]'::json) FROM meetings_ahead) AS "meetings"`,
             [workspaceID, weeks]
         );
 

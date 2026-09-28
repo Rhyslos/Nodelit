@@ -75,6 +75,26 @@ function shortDate(value) {
     return parsed.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
+function clockTime(date) {
+    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function meetingDay(startsAt, endsAt, now) {
+    if (startsAt <= now && endsAt > now) return { label: 'Now', tone: 'today' };
+
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const day = new Date(startsAt.getFullYear(), startsAt.getMonth(), startsAt.getDate());
+    const days = Math.round((day - today) / 86400000);
+
+    if (days === 0) return { label: 'Today', tone: 'today' };
+    if (days === 1) return { label: 'Tomorrow', tone: 'soon' };
+
+    return {
+        label: startsAt.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }),
+        tone: 'soon'
+    };
+}
+
 function bucketSeries(buckets, labels, tone) {
     return labels.map((label, index) => {
         const match = buckets.find(entry => entry.bucket === index + 1);
@@ -148,12 +168,15 @@ export default function Overview() {
     const completedPerWeek = weeklySeries(stats.throughput ?? [], visibleWeeks);
     const createdPerWeek = weeklySeries(stats.created ?? [], visibleWeeks);
 
-    const finishedWeeks = weeks.filter(week => week < currentWeek);
-    const recent = weeklySeries(stats.throughput ?? [], finishedWeeks).slice(-4);
-
-    const rate = recent.length > 0 ? recent.reduce((sum, n) => sum + n, 0) / recent.length : 0;
     const remaining = (headline.total ?? 0) - (headline.completed ?? 0);
-    const weeksLeft = rate > 0 ? Math.ceil(remaining / rate) : null;
+
+    const now = new Date();
+    const meetings = (stats.meetings ?? []).map(meeting => {
+        const startsAt = new Date(meeting.startsAt);
+        const endsAt = new Date(meeting.endsAt);
+
+        return { ...meeting, startsAt, endsAt, day: meetingDay(startsAt, endsAt, now) };
+    });
 
     return (
         <div className="overview-root">
@@ -180,15 +203,27 @@ export default function Overview() {
                         </div>
                     </StatCard>
 
-                    <StatCard title="Forecast" hint="at the recent rate">
-                        {weeksLeft === null ? (
-                            <p className="stat-empty">Not enough completed work to project.</p>
+                    <StatCard title="Upcoming meetings" hint="next on the calendar">
+                        {meetings.length === 0 ? (
+                            <p className="stat-empty">No meetings scheduled.</p>
                         ) : (
-                            <div className="stat-forecast">
-                                <strong>{weeksLeft}</strong>
-                                <span>{weeksLeft === 1 ? 'week' : 'weeks'} to clear {remaining} open tasks</span>
-                                <span className="stat-forecast-rate">{rate.toFixed(1)} finished per week recently</span>
-                            </div>
+                            <ul className="stat-list">
+                                {meetings.map(meeting => (
+                                    <li className="stat-list-row" key={meeting.id}>
+                                        <span className={`stat-list-when is-${meeting.day.tone}`}>
+                                            {meeting.day.label}
+                                        </span>
+
+                                        <span className="stat-list-title" title={meeting.title}>
+                                            {meeting.title || 'Meeting'}
+                                        </span>
+
+                                        <span className="stat-list-where stat-list-time">
+                                            {clockTime(meeting.startsAt)} – {clockTime(meeting.endsAt)}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
                         )}
                     </StatCard>
 
