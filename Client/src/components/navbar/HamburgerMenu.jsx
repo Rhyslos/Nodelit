@@ -28,6 +28,10 @@ export default function HamburgerMenu({ open, onClose }) {
                         Profile
                     </button>
 
+                    <button className="hamburger-item" onClick={() => { navigate('/privacy'); onClose(); }}>
+                        Privacy policy
+                    </button>
+
                     <hr className="hamburger-divider" />
 
                     <button className="hamburger-item hamburger-item--danger" onClick={handleLogout}>

@@ -1,6 +1,6 @@
 // hook imports
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { appName } from '../App';
 
@@ -74,6 +74,8 @@ export default function Login() {
                         {submitting ? 'Signing in…' : 'Sign in'}
                     </button>
                 </form>
+
+                <Link className="auth-footer-link" to="/privacy">Privacy policy</Link>
             </div>
         </div>
     );

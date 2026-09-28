@@ -16,6 +16,7 @@ import Notation from './pages/Notation';
 import Calendar from './pages/Calendar';
 import Admin from './pages/Admin';
 import Profile from './pages/Profile';
+import Privacy from './pages/Privacy';
 
 // application constants
 export const appName = 'Nodelit';
@@ -68,8 +69,9 @@ function NotationLayout() {
 }
 
 function AppLayout() {
+    const { user } = useAuth();
     const location = useLocation();
-    const hideNavbar = location.pathname === '/login';
+    const hideNavbar = location.pathname === '/login' || (location.pathname === '/privacy' && !user);
 
     return (
         <>
@@ -99,6 +101,8 @@ function AppLayout() {
                         </Route>
                     </Route>
                 </Route>
+
+                <Route path="/privacy" element={<Privacy />} />
 
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />

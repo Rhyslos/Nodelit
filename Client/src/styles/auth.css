@@ -137,3 +137,17 @@
     opacity: 0.45;
     cursor: not-allowed;
 }
+/* footer styles */
+.auth-footer-link {
+    display: block;
+    margin-top: 20px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+}
+
+.auth-footer-link:hover {
+    color: var(--ink);
+    text-decoration: underline;
+}
