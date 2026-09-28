@@ -27,8 +27,6 @@ export default function HamburgerMenu({ open, onClose }) {
                     <button className="hamburger-item" onClick={() => { navigate('/profile'); onClose(); }}>
                         Profile
                     </button>
-                    <button className="hamburger-item">Settings</button>
-                    <button className="hamburger-item">Help</button>
 
                     <hr className="hamburger-divider" />
 
