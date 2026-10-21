@@ -1,0 +1,283 @@
+/* phone styles: loaded last so these win on small screens */
+
+/* tab bar styles */
+:root {
+    --tabbar-h: 0px;
+}
+
+.tabbar {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    :root {
+        --navbar-h: 52px;
+        --tabbar-h: calc(62px + env(safe-area-inset-bottom));
+    }
+
+    /* the page tabs move to the bottom tab bar, so the top bar is one row again */
+    .navbar.has-pages {
+        height: var(--navbar-h);
+    }
+
+    .navbar.has-pages > .navbar-pages {
+        display: none;
+    }
+
+    .navbar {
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(8px, env(safe-area-inset-right));
+    }
+
+    .tabbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 150;
+        display: flex;
+        height: var(--tabbar-h);
+        padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        background: var(--navbar-bg);
+        border-top: 1px solid var(--border);
+        box-shadow: 0 -4px 16px var(--shadow);
+    }
+
+    .tabbar-btn {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        min-height: 62px;
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--muted);
+        font-family: 'Noto Sans', sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .tabbar-btn.active {
+        color: var(--accent);
+    }
+
+    .tabbar-btn:active {
+        background: var(--accent-lt);
+    }
+
+    body:has(.tabbar) {
+        padding-bottom: var(--tabbar-h);
+    }
+
+    .kanban-root,
+    .notation-root {
+        height: calc(100vh - var(--navbar-h) - var(--tabbar-h));
+        height: calc(100dvh - var(--navbar-h) - var(--tabbar-h));
+    }
+
+    body:has(.tabbar) .toast-stack {
+        bottom: calc(var(--tabbar-h) + 12px);
+    }
+}
+
+/* touch target styles */
+@media (max-width: 640px) {
+    .navbar-hamburger {
+        width: 44px;
+        height: 44px;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+
+    .navbar-hamburger span {
+        width: 22px;
+    }
+
+    .navbar-avatar {
+        width: 36px;
+        height: 36px;
+    }
+
+    .navbar-brand {
+        min-height: 44px;
+    }
+
+    .hamburger-item {
+        min-height: 48px;
+        font-size: 16px;
+    }
+
+    /* inputs under 16px make iOS Safari zoom in when tapped */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+    select {
+        min-height: 44px;
+    }
+
+    .modal-cancel,
+    .modal-submit,
+    .admin-btn,
+    .calendar-set-btn,
+    .calendar-booking-submit,
+    .calendar-booking-cancel {
+        min-height: 44px;
+    }
+
+    .admin-tab {
+        min-height: 44px;
+    }
+
+    /* kanban */
+    .kanban-tab {
+        min-height: 44px;
+        padding: 10px 16px;
+    }
+
+    .kanban-tab-name {
+        font-size: 15px;
+    }
+
+    .kanban-check {
+        width: 22px;
+        height: 22px;
+    }
+
+    .kanban-task-drag-handle {
+        align-self: stretch;
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
+        margin: -10px -10px -10px 0;
+        color: var(--muted);
+        touch-action: none;
+    }
+
+    .kanban-list-drag-handle {
+        min-width: 36px;
+        min-height: 40px;
+        justify-content: center;
+        touch-action: none;
+    }
+
+    .kanban-task-title {
+        font-size: 16px;
+    }
+
+    /* one column at a time when swiping across the board */
+    .kanban-board {
+        scroll-snap-type: x proximity;
+        scroll-padding-left: 12px;
+    }
+
+    .kanban-column {
+        scroll-snap-align: start;
+    }
+
+    /* calendar */
+    .calendar-nav-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .calendar-view-btn {
+        min-height: 40px;
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .calendar-meeting-edit,
+    .calendar-meeting-delete {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .calendar-slot {
+        touch-action: pan-x pan-y;
+    }
+}
+
+/* controls that only appear on hover are always shown on touch screens */
+@media (hover: none) {
+    .calendar-block .calendar-block-book,
+    .calendar-meeting-block-edit,
+    .color-picker-forget,
+    .notation-image-tools,
+    .notation-image-resize {
+        opacity: 1;
+    }
+
+    .notation-sidebar-group-pill .notation-sidebar-group-add,
+    .notation-sidebar-group-pill .notation-sidebar-group-color-btn {
+        display: flex;
+    }
+
+    .kanban-task:hover {
+        transform: none;
+    }
+}
+
+/* remaining small controls */
+@media (max-width: 640px) {
+    .calendar-block-book {
+        width: 32px;
+        height: 32px;
+    }
+
+    .calendar-meeting-block-edit {
+        width: 30px;
+        height: 30px;
+    }
+
+    .kanban-add-task-btn,
+    .kanban-add-col-btn,
+    .stat-add {
+        min-height: 44px;
+    }
+
+    .kanban-list-tag-btn,
+    .kanban-tab-color-btn {
+        min-width: 36px;
+        min-height: 36px;
+        justify-content: center;
+    }
+
+    .tiptap-menu > button,
+    .tiptap-toolbar-more {
+        min-height: 40px;
+        min-width: 44px;
+    }
+
+    .notation-sidebar-toggle {
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+    }
+
+    .notation-sidebar-page-wrapper,
+    .notation-sidebar-group-pill {
+        min-height: 40px;
+    }
+
+    .profile-swatch {
+        width: 32px;
+        height: 32px;
+    }
+}
+
+@media (max-width: 640px) {
+    .kanban-task-drag-handle svg,
+    .kanban-list-drag-handle svg {
+        width: 20px;
+        height: 20px;
+    }
+}

@@ -50,6 +50,22 @@ export default function Kanban() {
     const listIDs = lists.map(l => l.id);
     const { tasks, addTask, updateTask, duplicateTask, deleteTask, reorderTasks, setTaskTags } = useTasks(listIDs);
 
+    // lists in board order, for the task window's list picker
+    const orderedLists = useMemo(() => {
+        const columnIndex = new Map(columns.map(column => [column.id, column.columnIndex]));
+        return [...lists].sort((a, b) =>
+            (columnIndex.get(a.columnID) ?? 0) - (columnIndex.get(b.columnID) ?? 0) || a.listOrder - b.listOrder);
+    }, [lists, columns]);
+
+    // moves a task to the end of another list, the same way a drag and drop does
+    function moveTaskToList(task, listID) {
+        if (!task || task.listID === listID) return;
+
+        const end = tasks.filter(t => t.listID === listID).length;
+        snapshotTasks();
+        reorderTasks([{ id: task.id, listID, taskOrder: end }]);
+    }
+
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
     const activeGroupID = activeTab?.groupID ?? null;
 
@@ -61,6 +77,7 @@ export default function Kanban() {
 
     // ui state
     const [activeTaskId, setActiveTaskId] = useState(null);
+    const [newTaskOpen, setNewTaskOpen] = useState(false);
     const activeTask = useMemo(
         () => tasks.find(t => t.id === activeTaskId) ?? null,
         [tasks, activeTaskId]
@@ -235,7 +252,15 @@ export default function Kanban() {
 
     async function handleAddTask(listID) {
         const taskID = await addTask(listID);
-        if (taskID) setFocusedTaskId(taskID);
+        if (!taskID) return;
+
+        // touch screens name the new task in its window, with the keyboard ready
+        if (window.matchMedia('(pointer: coarse)').matches) {
+            setNewTaskOpen(true);
+            setActiveTaskId(taskID);
+        } else {
+            setFocusedTaskId(taskID);
+        }
     }
 
     function openMenu(event, kind, target) {
@@ -492,9 +517,12 @@ export default function Kanban() {
                     task={activeTask}
                     tags={tags}
                     members={members}
+                    lists={orderedLists}
+                    focusTitle={newTaskOpen ? true : undefined}
+                    onMove={listID => moveTaskToList(activeTask, listID)}
                     onSetTags={tagIDs => setTaskTags(activeTask.id, tagIDs)}
                     onChange={changes => updateTask(activeTask.id, changes)}
-                    onClose={() => setActiveTaskId(null)}
+                    onClose={() => { setActiveTaskId(null); setNewTaskOpen(false); }}
                 />
             )}
         </div>
