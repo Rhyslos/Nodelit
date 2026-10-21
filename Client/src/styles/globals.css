@@ -39,3 +39,58 @@ body {
     background: var(--paper);
     color: var(--ink);
 }
+/* meeting timer styles */
+.meeting-timer {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.5;
+    white-space: nowrap;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.meeting-timer.is-live {
+    border-color: transparent;
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.meeting-timer.is-soon {
+    border-color: transparent;
+    background: var(--accent-lt);
+    color: var(--accent);
+}
+
+.meeting-timer.is-today {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.meeting-timer.is-ended {
+    opacity: 0.6;
+}
+
+.meeting-timer-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: meeting-timer-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes meeting-timer-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .meeting-timer-dot { animation: none; }
+}

@@ -9,6 +9,7 @@ import TrackedTasks from '../components/overview/TrackedTasks';
 import StatBars from '../components/overview/StatBars';
 import StatRows from '../components/overview/StatRows';
 import StatLines from '../components/overview/StatLines';
+import MeetingTimer from '../components/MeetingTimer';
 
 // configuration constants
 const HISTORY_WINDOW = 12;
@@ -221,6 +222,8 @@ export default function Overview() {
                                         <span className="stat-list-where stat-list-time">
                                             {clockTime(meeting.startsAt)} – {clockTime(meeting.endsAt)}
                                         </span>
+
+                                        <MeetingTimer startsAt={meeting.startsAt} endsAt={meeting.endsAt} />
                                     </li>
                                 ))}
                             </ul>
