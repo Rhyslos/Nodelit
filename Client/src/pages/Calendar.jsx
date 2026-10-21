@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, CalendarPlus, CalendarClock, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { useKanban } from '../contexts/KanbanContext';
 import { useWorkspacePresence } from '../hooks/useWorkspacePresence';
 import { useCalendar } from '../hooks/useCalendar';
@@ -29,6 +30,11 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const OVERLAP_COLOR = '#16a34a';
 const OVERLAP_MIN_STRENGTH = 28;
 const OVERLAP_MAX_STRENGTH = 78;
+// dark theme: overlaps shift from marine green (few people) to lime (everyone)
+const DARK_OVERLAP_FROM = '#1f8f7a';
+const DARK_OVERLAP_TO = '#9ad61f';
+const DARK_MIN_STRENGTH = 42;
+const DARK_MAX_STRENGTH = 72;
 const SINGLE_STRENGTH = 30;
 const NOW_TICK_MS = 30000;
 
@@ -86,7 +92,7 @@ function memberName(member) {
 }
 
 // one person: their own colour; two or more: green, stronger the more people overlap
-function blockColors(userIDs, memberByID, memberCount) {
+function blockColors(userIDs, memberByID, memberCount, isDark) {
     if (userIDs.length === 0) return {};
 
     if (userIDs.length === 1) {
@@ -101,6 +107,17 @@ function blockColors(userIDs, memberByID, memberCount) {
     const ratio = memberCount > 2
         ? Math.min(1, (userIDs.length - 2) / (memberCount - 2))
         : 1;
+
+    if (isDark) {
+        const hue = `color-mix(in oklch, ${DARK_OVERLAP_TO} ${Math.round(ratio * 100)}%, ${DARK_OVERLAP_FROM})`;
+        const darkStrength = Math.round(DARK_MIN_STRENGTH + ratio * (DARK_MAX_STRENGTH - DARK_MIN_STRENGTH));
+
+        return {
+            background: `color-mix(in srgb, ${hue} ${darkStrength}%, var(--panel))`,
+            borderColor: hue
+        };
+    }
+
     const strength = Math.round(OVERLAP_MIN_STRENGTH + ratio * (OVERLAP_MAX_STRENGTH - OVERLAP_MIN_STRENGTH));
 
     return {
@@ -173,6 +190,7 @@ export default function Calendar() {
     const { user } = useAuth();
     const { canEdit, boardData } = useKanban();
     const { members } = useWorkspacePresence(workspaceID);
+    const { isDark } = useTheme();
 
     // state variables
     const [view, setView] = useState('week');
@@ -710,7 +728,7 @@ export default function Calendar() {
                             style={{
                                 top: `calc(var(--slot-h) * ${segment.startIndex})`,
                                 height: `calc(var(--slot-h) * ${segment.span} - 2px)`,
-                                ...blockColors(segment.userIDs, memberByID, memberCount)
+                                ...blockColors(segment.userIDs, memberByID, memberCount, isDark)
                             }}
                             title={`${formatRange(start, end)} · ${segment.userIDs.length}/${memberCount} free · ${names}`}
                         >

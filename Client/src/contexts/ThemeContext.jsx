@@ -125,7 +125,7 @@ export function ThemeProvider({ children }) {
     }, [palette]);
 
     return (
-        <ThemeContext.Provider value={{ palette, mode: user?.theme?.mode ?? 'default' }}>
+        <ThemeContext.Provider value={{ palette, mode: user?.theme?.mode ?? 'default', isDark: luminance(palette.background) < 0.4 }}>
             {children}
         </ThemeContext.Provider>
     );
