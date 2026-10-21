@@ -36,7 +36,7 @@ Each workspace has its own settings, so several workspaces can post to one Disco
    - `DISCORD_BOT_TOKEN`: the bot token
    - `DISCORD_APPLICATION_ID`: the Application ID from **General Information** (this makes the invite link appear in Nodelit)
    - `PUBLIC_URL` (optional): Nodelit's address, e.g. `https://nodelit.onrender.com`. Used for links in posts and as the event location. Falls back to the first `CLIENT_ORIGIN`.
-4. Redeploy. Then in Nodelit's **Discord** window, click **Invite the bot to your Discord server** and pick the server. It only asks for the **Create Events** permission.
+4. Redeploy. Then in Nodelit's **Discord** window, click **Invite the bot to your Discord server** and pick the server. It asks for the **Create Events** and **Manage Events** permissions.
 5. Paste the **Discord server ID** (in Discord: Settings → Advanced → turn on Developer Mode, then right-click the server icon → **Copy Server ID**), tick **Create a Discord event for each meeting**, **Save**, then **Send test**.
 
 ## Notes
