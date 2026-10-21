@@ -74,7 +74,7 @@ export default function Navbar() {
 
     return (
         <>
-            <nav className="navbar">
+            <nav className={`navbar ${inWorkspace ? 'has-pages' : ''}`}>
                 <div className="navbar-brand" onClick={() => navigate('/dashboard')} role="button" tabIndex={0}>
                     <span className="navbar-logo"><Waypoints size={18} strokeWidth={2} /></span>
                     <span className="navbar-name">{appName}</span>
@@ -148,7 +148,18 @@ export default function Navbar() {
                 </div>
             </nav>
 
-            <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+            <HamburgerMenu
+                open={menuOpen}
+                onClose={() => setMenuOpen(false)}
+                userName={user?.displayName ?? user?.username}
+                workspaceActions={inWorkspace ? [
+                    { key: 'tags', label: 'Tags', onSelect: () => setTagsOpen(true) },
+                    ...(isOwner ? [
+                        { key: 'invite', label: 'Invite and access', onSelect: () => setMembersOpen(true) },
+                        { key: 'discord', label: 'Discord', onSelect: () => setDiscordOpen(true) }
+                    ] : [])
+                ] : []}
+            />
 
             {tagsOpen && workspaceID && (
                 <TagManager workspaceID={workspaceID} onClose={() => setTagsOpen(false)} />

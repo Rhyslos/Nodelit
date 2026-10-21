@@ -204,6 +204,7 @@ export default function Calendar() {
 
     // drag references
     const paintRef = useRef(null);
+    const weekRef = useRef(null);
     const resizeRef = useRef(null);
     const rowHeightRef = useRef(rowHeight);
     const [pending, setPending] = useState({ added: new Set(), removed: new Set() });
@@ -420,6 +421,19 @@ export default function Calendar() {
     useEffect(() => {
         persistDeadlinePrefs(deadlinePrefs.show, deadlinePrefs.assignee);
     }, [deadlinePrefs]);
+
+    // on narrow screens the week scrolls sideways, so start with today in view
+    useEffect(() => {
+        const week = weekRef.current;
+        if (view !== 'week' || !week || week.scrollWidth <= week.clientWidth) return;
+
+        const today = week.querySelector('.calendar-day-head.is-today');
+        const gutter = week.querySelector('.calendar-gutter-head')?.getBoundingClientRect().width ?? 0;
+
+        week.scrollLeft = today
+            ? week.scrollLeft + today.getBoundingClientRect().left - week.getBoundingClientRect().left - gutter
+            : 0;
+    }, [view, range.from]);
 
 
     // slot helpers
@@ -804,7 +818,7 @@ export default function Calendar() {
 
     function renderWeek() {
         return (
-            <div className="calendar-week">
+            <div className="calendar-week" ref={weekRef}>
                 <div className="calendar-week-head">
                     <div className="calendar-gutter-head" />
 

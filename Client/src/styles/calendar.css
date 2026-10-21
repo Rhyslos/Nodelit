@@ -932,3 +932,115 @@
     border-radius: 50%;
     background: var(--danger);
 }
+
+/* responsive calendar styles */
+@media (max-width: 1100px) {
+    .calendar-meeting-block-body {
+        padding: 0 4px;
+    }
+
+    .calendar-meeting-block-time {
+        white-space: normal;
+        line-height: 1.2;
+    }
+
+    .calendar-toolbar {
+        flex-wrap: wrap;
+        row-gap: 10px;
+    }
+
+    .calendar-nav {
+        order: -1;
+        flex: 0 0 100%;
+    }
+
+    .calendar-toolbar-side {
+        flex: 1 1 auto;
+    }
+}
+
+@media (max-width: 640px) {
+    .calendar-root {
+        padding: 12px 12px 20px;
+        gap: 12px;
+    }
+
+    .calendar-period {
+        min-width: 0;
+        font-size: 15px;
+    }
+
+    .calendar-toolbar-side {
+        flex-wrap: wrap;
+    }
+
+    .calendar-toolbar-side--end {
+        flex: 1 1 100%;
+        justify-content: space-between;
+    }
+
+    /* the week scrolls sideways with readable columns, keeping the time column pinned */
+    .calendar-week {
+        flex: none;
+        overflow-x: auto;
+        overflow-y: visible;
+        overscroll-behavior-x: contain;
+    }
+
+    .calendar-week-head,
+    .calendar-week-body,
+    .calendar-deadline-row {
+        grid-template-columns: 48px repeat(7, minmax(112px, 1fr));
+        min-width: calc(48px + 7 * 112px);
+    }
+
+    .calendar-resize {
+        min-width: calc(48px + 7 * 112px);
+    }
+
+    .calendar-week-body {
+        overflow-y: visible;
+    }
+
+    .calendar-gutter,
+    .calendar-gutter-head,
+    .calendar-deadline-gutter {
+        position: sticky;
+        left: 0;
+        z-index: 6;
+        background: var(--panel);
+    }
+
+    .calendar-month-day {
+        min-height: 64px;
+        padding: 4px;
+    }
+
+    .calendar-meeting {
+        flex-wrap: wrap;
+        row-gap: 6px;
+        padding: 10px 12px;
+    }
+
+    .calendar-meeting-title {
+        flex: 1 1 100%;
+        order: -1;
+        white-space: normal;
+    }
+
+    .calendar-meeting-when {
+        flex: 1 1 auto;
+    }
+
+    .calendar-booking-fields .calendar-field {
+        flex: 1 1 140px;
+    }
+
+    .calendar-booking-fields .calendar-field-input {
+        width: 100%;
+    }
+
+    .calendar-booking-actions {
+        flex-wrap: wrap;
+    }
+}

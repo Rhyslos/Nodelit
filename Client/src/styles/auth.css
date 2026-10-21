@@ -151,3 +151,16 @@
     color: var(--ink);
     text-decoration: underline;
 }
+
+/* responsive auth styles */
+@media (max-width: 640px) {
+    .auth-root {
+        padding: 16px;
+        min-height: 100dvh;
+    }
+
+    .auth-panel {
+        padding: 32px 24px 28px;
+        border-radius: 16px;
+    }
+}
