@@ -788,7 +788,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
 
                             <ContextMenuItem
                                 onSelect={() => {
-                                    setPickerPos({ top: contextTarget.y, left: contextTarget.x });
+                                    setPickerRect({ top: contextTarget.y, bottom: contextTarget.y, left: contextTarget.x, right: contextTarget.x });
                                     setColorPickerID(contextTarget.entity.id);
                                     closeContext();
                                 }}

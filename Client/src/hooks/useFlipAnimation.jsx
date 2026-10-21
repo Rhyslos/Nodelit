@@ -2,7 +2,7 @@
 import { useRef, useLayoutEffect } from 'react';
 
 // hook functions
-export function useFlipAnimation(deps) {
+export function useFlipAnimation() {
     // dom references
     const snapshotRects = useRef({});
     const elementsRef = useRef({});

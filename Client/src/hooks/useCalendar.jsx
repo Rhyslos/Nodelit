@@ -1,5 +1,5 @@
 // hook imports
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../lib/api';
 import { useStream } from '../contexts/StreamContext';
 import { useToast } from '../contexts/ToastContext';
@@ -23,7 +23,10 @@ export function useCalendar(workspaceID, rangeStart, rangeEnd, userID) {
     const fromISO = rangeStart.toISOString();
     const toISO = rangeEnd.toISOString();
     const rangeRef = useRef({ fromISO, toISO });
-    rangeRef.current = { fromISO, toISO };
+
+    useLayoutEffect(() => {
+        rangeRef.current = { fromISO, toISO };
+    }, [fromISO, toISO]);
 
     // data fetching
     const refresh = useCallback(async () => {

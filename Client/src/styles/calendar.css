@@ -161,7 +161,7 @@
 }
 
 .calendar-day-name {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -186,7 +186,7 @@
     justify-content: flex-end;
     height: calc(var(--slot-h) * 2);
     padding: 2px 6px 0 0;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--muted);
 }
@@ -264,6 +264,10 @@
     border-color: var(--ink);
 }
 
+.calendar-block.is-overlap {
+    color: var(--ink);
+}
+
 .calendar-block.is-full {
     border-color: var(--accent);
     border-width: 2px;
@@ -284,7 +288,7 @@
 
 .calendar-block.is-compact .calendar-block-time {
     flex: 0 0 auto;
-    font-size: 9px;
+    font-size: 10px;
     line-height: 1;
 }
 
@@ -298,7 +302,7 @@
     width: 14px;
     height: 14px;
     border-width: 1px;
-    font-size: 8px;
+    font-size: 9px;
 }
 
 .calendar-block.is-compact .calendar-block-book {
@@ -310,11 +314,11 @@
 }
 
 .calendar-meeting-block.is-compact .calendar-meeting-block-title {
-    font-size: 10px;
+    font-size: 11px;
 }
 
 .calendar-block-time {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     color: var(--ink);
     opacity: 0.75;
@@ -335,7 +339,7 @@
     height: 18px;
     border-radius: 50%;
     border: 1.5px solid transparent;
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     color: #FFFFFF;
 }
@@ -433,7 +437,7 @@
 }
 
 .calendar-meeting-block-title {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--on-ink);
     white-space: nowrap;
@@ -454,7 +458,7 @@
 }
 
 .calendar-meeting-block-time {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     color: var(--on-ink);
     opacity: 0.7;
@@ -501,7 +505,7 @@
 .calendar-month-weekday {
     padding: 8px;
     text-align: center;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -546,7 +550,7 @@
 }
 
 .calendar-month-overlap {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--muted);
 }
 
@@ -580,7 +584,7 @@
 }
 
 .calendar-booking-head {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -617,7 +621,7 @@
 }
 
 .calendar-field-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -680,33 +684,59 @@
 }
 
 .calendar-meetings-title {
-    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
 }
 
+.calendar-meetings-count {
+    padding: 0 7px;
+    border-radius: 20px;
+    background: var(--accent-lt);
+    color: var(--accent);
+    font-size: 12px;
+    letter-spacing: 0;
+}
+
 .calendar-meeting {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
+    gap: 14px;
+    padding: 12px 16px;
     border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
     border-radius: 10px;
     background: var(--panel);
 }
 
+.calendar-meeting.is-ended {
+    border-left-color: var(--border);
+    opacity: 0.6;
+}
+
+.calendar-meeting .meeting-timer {
+    padding: 3px 10px;
+    font-size: 12px;
+}
+
 .calendar-meeting-when {
     flex: 0 0 auto;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .calendar-meeting-title {
     flex: 1;
     min-width: 0;
-    font-size: 13px;
+    font-size: 15px;
+    font-weight: 600;
     color: var(--ink);
     white-space: nowrap;
     overflow: hidden;
@@ -763,7 +793,7 @@
     justify-content: flex-end;
     padding: 6px 6px 6px 0;
     border-right: 1px solid var(--border);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -786,7 +816,7 @@
     border-left: 3px solid var(--tab-color, var(--border));
     border-radius: 4px;
     background: var(--field);
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.4;
     color: var(--ink);
     text-align: left;
@@ -811,4 +841,94 @@
     gap: 2px;
     width: 100%;
     min-width: 0;
+}
+
+/* availability overlap labels */
+.calendar-block-count {
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ink) 14%, transparent);
+    font-size: 11px;
+}
+
+.calendar-block-names {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    min-width: 0;
+    padding-right: 22px;
+}
+
+.calendar-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 1px 6px 1px 4px;
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.calendar-name::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--member-color);
+}
+
+.calendar-name.is-me {
+    box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.calendar-block.is-compact .calendar-block-names {
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+
+.calendar-block.is-compact .calendar-name {
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    font-size: 0;
+}
+
+.calendar-block.is-compact .calendar-name::before {
+    width: 9px;
+    height: 9px;
+}
+
+/* today and current time */
+.calendar-day-col.is-today {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.calendar-now {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    margin-top: -1px;
+    background: var(--danger);
+    pointer-events: none;
+    z-index: 4;
+}
+
+.calendar-now::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--danger);
 }

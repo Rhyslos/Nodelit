@@ -175,7 +175,7 @@
 
 .color-channel-label {
     width: 12px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--muted);
 }
@@ -195,12 +195,12 @@
     background: var(--field);
     color: var(--ink);
     font-family: 'Noto Sans', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     outline: none;
 }
 
 .color-grid-note {
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.04em;
     color: var(--muted);
     text-align: right;
@@ -293,7 +293,7 @@
 }
 
 .color-field-label {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -309,7 +309,7 @@
     background: var(--field);
     color: var(--ink);
     font-family: 'Noto Sans', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     text-align: center;
     outline: none;
 }

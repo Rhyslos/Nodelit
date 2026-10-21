@@ -1,5 +1,5 @@
 // component imports
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, CalendarPlus, CalendarClock, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +8,7 @@ import { useWorkspacePresence } from '../hooks/useWorkspacePresence';
 import { useCalendar } from '../hooks/useCalendar';
 import ConfirmModal from '../components/kanban/ConfirmModal';
 import MeetingTimer from '../components/MeetingTimer';
+import { useNow } from '../hooks/useNow';
 
 // configuration constants
 const SLOT_MINUTES = 30;
@@ -25,6 +26,11 @@ const ROW_DEFAULT = 32;
 const COMPACT_HEIGHT = 46;
 const COMPACT_AVATARS = 3;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const OVERLAP_COLOR = '#16a34a';
+const OVERLAP_MIN_STRENGTH = 28;
+const OVERLAP_MAX_STRENGTH = 78;
+const SINGLE_STRENGTH = 30;
+const NOW_TICK_MS = 30000;
 
 // utility functions
 function startOfDay(date) {
@@ -75,18 +81,32 @@ function avatarColor(member) {
     return member?.cursorColor || 'var(--muted)';
 }
 
-function blockBackground(userIDs, memberByID) {
-    const colors = userIDs.map(id => avatarColor(memberByID.get(id)));
-    if (colors.length === 0) return undefined;
+function memberName(member) {
+    return member?.displayName || member?.username || 'Member';
+}
 
-    const soften = color => `color-mix(in srgb, ${color} 55%, var(--panel))`;
+// one person: their own colour; two or more: green, stronger the more people overlap
+function blockColors(userIDs, memberByID, memberCount) {
+    if (userIDs.length === 0) return {};
 
-    if (colors.length === 1) return soften(colors[0]);
+    if (userIDs.length === 1) {
+        const color = avatarColor(memberByID.get(userIDs[0]));
 
-    const step = 100 / colors.length;
-    const stops = colors.map((color, index) => `${soften(color)} ${index * step}% ${(index + 1) * step}%`);
+        return {
+            background: `color-mix(in srgb, ${color} ${SINGLE_STRENGTH}%, var(--panel))`,
+            borderColor: `color-mix(in srgb, ${color} 75%, var(--panel))`
+        };
+    }
 
-    return `linear-gradient(90deg, ${stops.join(', ')})`;
+    const ratio = memberCount > 2
+        ? Math.min(1, (userIDs.length - 2) / (memberCount - 2))
+        : 1;
+    const strength = Math.round(OVERLAP_MIN_STRENGTH + ratio * (OVERLAP_MAX_STRENGTH - OVERLAP_MIN_STRENGTH));
+
+    return {
+        background: `color-mix(in srgb, ${OVERLAP_COLOR} ${strength}%, var(--panel))`,
+        borderColor: OVERLAP_COLOR
+    };
 }
 
 function readRowHeight() {
@@ -98,6 +118,14 @@ function readRowHeight() {
     }
 
     return ROW_DEFAULT;
+}
+
+function persistRowHeight(value) {
+    try {
+        localStorage.setItem(ROW_STORAGE_KEY, String(value));
+    } catch {
+        return;
+    }
 }
 
 function parseDeadline(value) {
@@ -154,15 +182,19 @@ export default function Calendar() {
     const [resizing, setResizing] = useState(false);
     const [confirmMeeting, setConfirmMeeting] = useState(null);
     const [deadlinePrefs, setDeadlinePrefs] = useState(readDeadlinePrefs);
+    const now = useNow(NOW_TICK_MS);
 
     // drag references
     const paintRef = useRef(null);
     const resizeRef = useRef(null);
     const rowHeightRef = useRef(rowHeight);
-    rowHeightRef.current = rowHeight;
     const [pending, setPending] = useState({ added: new Set(), removed: new Set() });
     const pendingRef = useRef(pending);
-    pendingRef.current = pending;
+
+    useLayoutEffect(() => {
+        rowHeightRef.current = rowHeight;
+        pendingRef.current = pending;
+    }, [rowHeight, pending]);
 
     // range variables
     const range = useMemo(() => {
@@ -179,7 +211,6 @@ export default function Calendar() {
         slots,
         meetings,
         loading,
-        slotMinutes,
         setAvailability,
         createMeeting,
         updateMeeting,
@@ -211,22 +242,25 @@ export default function Calendar() {
         return result;
     }, []);
 
+    const draftTime = draft?.time;
+    const draftMinutes = draft?.minutes;
+
     const timeOptions = useMemo(() => {
         const base = times.map(time =>
             `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`);
 
-        if (draft?.time && !base.includes(draft.time)) return [...base, draft.time].sort();
+        if (draftTime && !base.includes(draftTime)) return [...base, draftTime].sort();
 
         return base;
-    }, [times, draft?.time]);
+    }, [times, draftTime]);
 
     const durationOptions = useMemo(() => {
-        if (draft && !DURATIONS.includes(draft.minutes)) {
-            return [...DURATIONS, draft.minutes].sort((a, b) => a - b);
+        if (draftMinutes !== undefined && !DURATIONS.includes(draftMinutes)) {
+            return [...DURATIONS, draftMinutes].sort((a, b) => a - b);
         }
 
         return DURATIONS;
-    }, [draft?.minutes]);
+    }, [draftMinutes]);
 
     const hours = useMemo(
         () => Array.from({ length: DAY_END_HOUR - DAY_START_HOUR }, (_, index) => DAY_START_HOUR + index),
@@ -254,6 +288,13 @@ export default function Calendar() {
         return new Map(boardData.lists.map(list => [list.id, tabs.get(list.tabID) ?? null]));
     }, [boardData.tabs, boardData.lists]);
 
+    // falls back to everyone when the chosen member has left the workspace
+    const assignee = deadlinePrefs.assignee !== 'all'
+        && members.length > 0
+        && !members.some(member => member.id === deadlinePrefs.assignee)
+        ? 'all'
+        : deadlinePrefs.assignee;
+
     const deadlinesByDay = useMemo(() => {
         if (!deadlinePrefs.show) return {};
 
@@ -262,8 +303,8 @@ export default function Calendar() {
         for (const task of boardData.tasks) {
             if (!task.deadline) continue;
 
-            if (deadlinePrefs.assignee !== 'all'
-                && !(task.assignedUsers ?? []).includes(deadlinePrefs.assignee)) continue;
+            if (assignee !== 'all'
+                && !(task.assignedUsers ?? []).includes(assignee)) continue;
 
             const tab = tabByList.get(task.listID);
             if (tab?.isArchived) continue;
@@ -289,7 +330,7 @@ export default function Calendar() {
         }
 
         return map;
-    }, [boardData.tasks, tabByList, deadlinePrefs.show, deadlinePrefs.assignee]);
+    }, [boardData.tasks, tabByList, deadlinePrefs.show, assignee]);
 
     const meetingsByDay = useMemo(() => {
         const map = {};
@@ -362,12 +403,6 @@ export default function Calendar() {
         persistDeadlinePrefs(deadlinePrefs.show, deadlinePrefs.assignee);
     }, [deadlinePrefs]);
 
-    useEffect(() => {
-        if (deadlinePrefs.assignee === 'all' || members.length === 0) return;
-        if (members.some(member => member.id === deadlinePrefs.assignee)) return;
-
-        setDeadlinePrefs(current => ({ ...current, assignee: 'all' }));
-    }, [members, deadlinePrefs.assignee]);
 
     // slot helpers
     function slotDate(day, time) {
@@ -492,14 +527,6 @@ export default function Calendar() {
         setDraft(null);
     }
 
-    function persistRowHeight(value) {
-        try {
-            localStorage.setItem(ROW_STORAGE_KEY, String(value));
-        } catch {
-            return;
-        }
-    }
-
     function handleResizeDown(e) {
         if (e.button !== 0) return;
 
@@ -607,12 +634,50 @@ export default function Calendar() {
         );
     }
 
+    function renderNames(userIDs) {
+        return (
+            <span className="calendar-block-names">
+                {userIDs.map(id => {
+                    const member = memberByID.get(id);
+
+                    return (
+                        <span
+                            key={id}
+                            className={`calendar-name ${id === user?.id ? 'is-me' : ''}`}
+                            style={{ '--member-color': avatarColor(member) }}
+                        >
+                            {memberName(member)}
+                        </span>
+                    );
+                })}
+            </span>
+        );
+    }
+
+    function renderNowLine(day) {
+        if (!sameDay(day, now)) return null;
+
+        const minutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+        const total = (DAY_END_HOUR - DAY_START_HOUR) * 60;
+
+        if (minutes < 0 || minutes > total) return null;
+
+        return (
+            <div
+                className="calendar-now"
+                style={{ top: `calc(var(--slot-h) * ${minutes / SLOT_MINUTES})` }}
+                title={`Now · ${formatTime(now)}`}
+                aria-hidden="true"
+            />
+        );
+    }
+
     function renderDayColumn(day) {
         const segments = daySegments(day);
         const blocks = dayMeetingBlocks(day);
 
         return (
-            <div className="calendar-day-col" key={day.getTime()}>
+            <div className={`calendar-day-col ${sameDay(day, now) ? 'is-today' : ''}`} key={day.getTime()}>
                 {times.map((time, index) => (
                     <div
                         key={index}
@@ -628,6 +693,8 @@ export default function Calendar() {
                     const end = new Date(start.getTime() + segment.span * SLOT_MS);
                     const everyone = members.length > 0 && segment.userIDs.length >= members.length;
                     const compact = segment.span * rowHeight < COMPACT_HEIGHT;
+                    const overlap = segment.userIDs.length > 1;
+                    const names = segment.userIDs.map(id => memberName(memberByID.get(id))).join(', ');
 
                     return (
                         <div
@@ -635,6 +702,7 @@ export default function Calendar() {
                             className={[
                                 'calendar-block',
                                 compact ? 'is-compact' : '',
+                                overlap ? 'is-overlap' : '',
                                 everyone ? 'is-full' : '',
                                 segment.userIDs.includes(user?.id) ? 'is-mine' : '',
                                 draft && draftRange(draft)?.start.getTime() === start.getTime() ? 'is-selected' : ''
@@ -642,13 +710,16 @@ export default function Calendar() {
                             style={{
                                 top: `calc(var(--slot-h) * ${segment.startIndex})`,
                                 height: `calc(var(--slot-h) * ${segment.span} - 2px)`,
-                                background: blockBackground(segment.userIDs, memberByID)
+                                ...blockColors(segment.userIDs, memberByID, memberCount)
                             }}
-                            title={`${formatRange(start, end)} · ${segment.userIDs.length}/${memberCount} free`}
+                            title={`${formatRange(start, end)} · ${segment.userIDs.length}/${memberCount} free · ${names}`}
                         >
-                            <span className="calendar-block-time">{formatRange(start, end)}</span>
+                            <span className="calendar-block-time">
+                                {formatRange(start, end)}
+                                {overlap && <span className="calendar-block-count">{segment.userIDs.length}/{memberCount}</span>}
+                            </span>
 
-                            {renderAvatars(segment.userIDs, compact)}
+                            {overlap ? renderNames(segment.userIDs) : renderAvatars(segment.userIDs, compact)}
 
                             {canEdit && (
                                 <button
@@ -707,6 +778,8 @@ export default function Calendar() {
                         )}
                     </div>
                 ))}
+
+                {renderNowLine(day)}
             </div>
         );
     }
@@ -831,6 +904,8 @@ export default function Calendar() {
     }
 
     // derived variables
+    const bookedMeetings = [...meetings].sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+
     const periodLabel = view === 'week'
         ? `${range.from.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${addDays(range.from, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
         : anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -854,7 +929,7 @@ export default function Calendar() {
                         <select
                             className="calendar-assignee"
                             aria-label="Filter deadlines by assignee"
-                            value={deadlinePrefs.assignee}
+                            value={assignee}
                             onChange={e => setDeadlinePrefs(current => ({ ...current, assignee: e.target.value }))}
                         >
                             <option value="all">Everyone</option>
@@ -989,12 +1064,18 @@ export default function Calendar() {
                 </div>
             )}
 
-            {meetings.length > 0 && (
+            {bookedMeetings.length > 0 && (
                 <div className="calendar-meetings">
-                    <span className="calendar-meetings-title">Booked</span>
+                    <span className="calendar-meetings-title">
+                        Booked
+                        <span className="calendar-meetings-count">{bookedMeetings.length}</span>
+                    </span>
 
-                    {meetings.map(meeting => (
-                        <div className="calendar-meeting" key={meeting.id}>
+                    {bookedMeetings.map(meeting => (
+                        <div
+                            className={`calendar-meeting ${new Date(meeting.endsAt) <= now ? 'is-ended' : ''}`}
+                            key={meeting.id}
+                        >
                             <span className="calendar-meeting-when">
                                 {new Date(meeting.startsAt).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
                                 {' · '}

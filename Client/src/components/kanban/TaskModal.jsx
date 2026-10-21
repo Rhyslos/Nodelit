@@ -1,5 +1,5 @@
 // component imports
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { UserPlus, Plus, X, Tag as TagIcon } from 'lucide-react';
 import AssigneeDropdown from './AssigneeDropdown';
@@ -78,7 +78,9 @@ export default function TaskModal({ task, tags = [], members = [], onChange, onS
         }
     }, [onChange]);
 
-    flushRef.current = flush;
+    useLayoutEffect(() => {
+        flushRef.current = flush;
+    }, [flush]);
 
     const schedule = useCallback(immediate => {
         dirty.current = true;

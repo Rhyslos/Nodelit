@@ -112,7 +112,7 @@
     border: none;
     border-radius: 4px;
     background: transparent;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--muted);
     cursor: pointer;
 }
@@ -134,7 +134,7 @@
     border-radius: 20px;
     background: transparent;
     font-family: 'Noto Sans', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--muted);
     cursor: pointer;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -153,7 +153,7 @@
 
 .notation-search-status {
     margin-left: auto;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--faint);
 }
 
@@ -161,7 +161,7 @@
     padding: 4px 8px;
     border-radius: 6px;
     background: var(--accent-lt);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--accent);
 }
 
@@ -452,7 +452,7 @@
 
 .notation-context-label {
     padding: 4px 10px;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--muted);
     white-space: normal;
     overflow: hidden;
@@ -1360,7 +1360,7 @@
     padding: 1px 6px;
     border-radius: 4px 4px 4px 0;
     font-family: 'Noto Sans', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     line-height: 1.4;
     color: #ffffff;
@@ -1453,7 +1453,7 @@
     background: none;
     color: var(--muted);
     font-family: 'Noto Sans', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.4;
     cursor: pointer;
 }

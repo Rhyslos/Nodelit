@@ -1,5 +1,5 @@
 // context imports
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStream } from './StreamContext';
@@ -51,7 +51,10 @@ export function NotationProvider({ children }) {
     const [removedImageIDs, setRemovedImageIDs] = useState(() => new Set());
 
     const workspaceRef = useRef(workspaceID);
-    workspaceRef.current = workspaceID;
+
+    useLayoutEffect(() => {
+        workspaceRef.current = workspaceID;
+    }, [workspaceID]);
 
     const dropNotation = useCallback(err => {
         setNotationData(EMPTY_NOTATION);

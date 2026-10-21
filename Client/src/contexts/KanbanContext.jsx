@@ -1,5 +1,5 @@
 // context imports
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStream } from './StreamContext';
@@ -68,11 +68,14 @@ export function KanbanProvider({ children }) {
     const [expandedChecklists, setExpandedChecklists] = useState(() => new Set());
 
     const workspaceRef = useRef(workspaceID);
-    workspaceRef.current = workspaceID;
 
     const storageKey = userID && workspaceID ? checklistKey(userID, workspaceID) : null;
     const storageKeyRef = useRef(storageKey);
-    storageKeyRef.current = storageKey;
+
+    useLayoutEffect(() => {
+        workspaceRef.current = workspaceID;
+        storageKeyRef.current = storageKey;
+    }, [workspaceID, storageKey]);
 
     // access functions
     const dropBoard = useCallback(err => {

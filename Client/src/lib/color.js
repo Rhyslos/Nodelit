@@ -75,7 +75,7 @@ export function hsvToRgb({ h, s, v }) {
     const second = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
     const match = v - chroma;
 
-    let parts = [0, 0, 0];
+    let parts;
 
     if (hue < 60) parts = [chroma, second, 0];
     else if (hue < 120) parts = [second, chroma, 0];

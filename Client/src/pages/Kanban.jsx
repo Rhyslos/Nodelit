@@ -74,8 +74,8 @@ export default function Kanban() {
     const boardRef = useRef(null);
 
     // animations
-    const { registerElement: registerTaskElement, snapshot: snapshotTasks } = useFlipAnimation(tasks);
-    const { registerElement: registerListElement, snapshot: snapshotLists } = useFlipAnimation(lists);
+    const { registerElement: registerTaskElement, snapshot: snapshotTasks } = useFlipAnimation();
+    const { registerElement: registerListElement, snapshot: snapshotLists } = useFlipAnimation();
     
     const { triggerRemoval: triggerTaskRemoval, isRemoving: isTaskRemoving } = useAnimatedRemoval(deleteTask);
     const { triggerRemoval: triggerListRemoval, isRemoving: isListRemoving } = useAnimatedRemoval(handleDeleteList);

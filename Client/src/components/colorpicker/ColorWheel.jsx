@@ -63,7 +63,7 @@ export default function ColorWheel({ hsv, shape, size = 220, onChange }) {
 
     function applyTriangle(point) {
         const weights = normalizeWeights(barycentric(point, vertices));
-        const [hue, white, black] = weights;
+        const [hue, white] = weights;
 
         const value = hue + white;
         const saturation = value === 0 ? 0 : hue / value;
@@ -132,7 +132,7 @@ export default function ColorWheel({ hsv, shape, size = 220, onChange }) {
         y: hueRadius * Math.sin(hueAngle)
     };
 
-    let handle = { x: 0, y: 0 };
+    let handle;
 
     if (shape === 'triangle') {
         const weights = [hsv.s * hsv.v, (1 - hsv.s) * hsv.v, 1 - hsv.v];
