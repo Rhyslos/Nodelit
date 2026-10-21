@@ -423,7 +423,7 @@
     align-items: center;
     justify-content: center;
     padding: 4px 6px;
-    border: 2px solid var(--accent);
+    border: 2px solid #000000;
     border-radius: 8px;
     background: var(--ink);
     box-shadow: 0 2px 8px var(--shadow);
