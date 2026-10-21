@@ -679,7 +679,19 @@ export default function Calendar() {
                         }}
                         title={`${meeting.title} · ${formatRange(new Date(meeting.startsAt), new Date(meeting.endsAt))}`}
                     >
-                        <span className="calendar-meeting-block-title">{meeting.title}</span>
+                        <span className="calendar-meeting-block-body">
+                            <span className="calendar-meeting-block-time">
+                                {formatRange(new Date(meeting.startsAt), new Date(meeting.endsAt))}
+                            </span>
+
+                            <span className="calendar-meeting-block-title">{meeting.title}</span>
+
+                            <MeetingTimer
+                                startsAt={meeting.startsAt}
+                                endsAt={meeting.endsAt}
+                                className="calendar-meeting-block-timer"
+                            />
+                        </span>
 
                         {canEdit && (
                             <button

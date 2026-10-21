@@ -439,6 +439,45 @@
     text-overflow: ellipsis;
 }
 
+/* meeting block time and timer */
+.calendar-meeting-block-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 0 22px;
+    text-align: center;
+}
+
+.calendar-meeting-block-time {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--on-ink);
+    opacity: 0.7;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.calendar-meeting-block-title {
+    max-width: 100%;
+}
+
+.calendar-meeting-block .meeting-timer:not(.is-live):not(.is-soon) {
+    border-color: color-mix(in srgb, var(--on-ink) 30%, transparent);
+    color: var(--on-ink);
+}
+
+.calendar-meeting-block.is-compact .calendar-meeting-block-body {
+    flex-direction: row;
+    gap: 6px;
+}
+
+.calendar-meeting-block.is-compact .calendar-meeting-block-timer {
+    display: none;
+}
+
 /* month styles */
 .calendar-month {
     border: 1px solid var(--border);
