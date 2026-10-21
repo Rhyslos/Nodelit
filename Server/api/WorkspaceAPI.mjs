@@ -3,8 +3,7 @@ import { Router } from 'express';
 import db from '../database/Database.mjs';
 import { revalidateStreams } from '../modules/Networking.mjs';
 import { revalidateCollaboration } from '../modules/Collaboration.mjs';
-import { requireText, requireID, optionalID, optionalColor, optionalBoolean, requireMemberRole } from '../modules/Validation.mjs';
-import { discordStatus, parseWebhookURL, parseGuildID, forgetDiscordSettings, testDiscord } from '../modules/Discord.mjs';
+import { requireText, requireID, optionalID, optionalColor, requireMemberRole } from '../modules/Validation.mjs';
 
 // configuration constants
 const UPCOMING_WINDOW_DAYS = 7;
@@ -15,23 +14,6 @@ const UPCOMING_LIMIT = 25;
 function cutLiveConnections() {
     revalidateStreams();
     revalidateCollaboration();
-}
-
-// discord functions
-function maskWebhook(url) {
-    return url ? `…${url.slice(-6)}` : null;
-}
-
-function discordView(settings) {
-    return {
-        ...discordStatus(),
-        webhookSet: Boolean(settings?.webhookURL),
-        webhookHint: maskWebhook(settings?.webhookURL),
-        guildID: settings?.guildID ?? '',
-        postKanban: settings?.postKanban ?? true,
-        postMeetings: settings?.postMeetings ?? true,
-        syncEvents: settings?.syncEvents ?? true
-    };
 }
 
 // router configuration
@@ -203,59 +185,6 @@ export default function createWorkspaceRouter(authz) {
             });
 
             res.json({ removed: userID });
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    // discord routes
-    router.get('/:workspaceID/discord', authz.workspaceOwnerParam(), async (req, res, next) => {
-        try {
-            res.json(discordView(await db.getDiscordSettings(req.workspaceID)));
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.put('/:workspaceID/discord', authz.workspaceOwnerParam(), async (req, res, next) => {
-        try {
-            const body = req.body ?? {};
-
-            const settings = await db.saveDiscordSettings(req.workspaceID, req.user.id, {
-                webhookURL: body.webhookURL === undefined ? undefined : parseWebhookURL(body.webhookURL),
-                guildID: body.guildID === undefined ? undefined : parseGuildID(body.guildID),
-                postKanban: optionalBoolean(body.postKanban, 'postKanban'),
-                postMeetings: optionalBoolean(body.postMeetings, 'postMeetings'),
-                syncEvents: optionalBoolean(body.syncEvents, 'syncEvents')
-            });
-
-            forgetDiscordSettings(req.workspaceID);
-
-            await db.recordAudit({
-                actorID: req.user.id,
-                actorName: req.user.username,
-                action: 'discord.updated',
-                targetType: 'workspace',
-                targetID: req.workspaceID,
-                detail: {
-                    webhookSet: Boolean(settings.webhookURL),
-                    guildID: settings.guildID,
-                    postKanban: settings.postKanban,
-                    postMeetings: settings.postMeetings,
-                    syncEvents: settings.syncEvents
-                },
-                ip: req.ip
-            });
-
-            res.json(discordView(settings));
-        } catch (error) {
-            next(error);
-        }
-    });
-
-    router.post('/:workspaceID/discord/test', authz.workspaceOwnerParam(), async (req, res, next) => {
-        try {
-            res.json(await testDiscord(req.workspaceID, req.user));
         } catch (error) {
             next(error);
         }

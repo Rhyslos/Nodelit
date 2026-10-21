@@ -460,3 +460,19 @@ CREATE TABLE IF NOT EXISTS meeting_discord_events (
     event_id   text NOT NULL,
     created_at timestamptz(3) NOT NULL DEFAULT now()
 );
+
+-- discord connected workspace (additive: one row naming the single workspace that posts to Discord)
+CREATE TABLE IF NOT EXISTS discord_connection (
+    id           smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    workspace_id text REFERENCES workspaces(id) ON DELETE SET NULL,
+    updated_by   text REFERENCES users(id) ON DELETE SET NULL,
+    updated_at   timestamptz(3) NOT NULL DEFAULT now()
+);
+
+-- carries over an existing per-workspace setup the first time this runs
+INSERT INTO discord_connection (id, workspace_id)
+SELECT 1, workspace_id FROM workspace_discord
+WHERE webhook_url IS NOT NULL OR guild_id IS NOT NULL
+ORDER BY updated_at DESC
+LIMIT 1
+ON CONFLICT (id) DO NOTHING;

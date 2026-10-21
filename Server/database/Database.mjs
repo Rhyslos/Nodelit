@@ -1342,6 +1342,23 @@ class Database {
         return this.getDiscordSettings(workspaceID);
     }
 
+    async getDiscordConnection() {
+        const row = await queryOne('SELECT workspace_id AS "workspaceID" FROM discord_connection WHERE id = 1');
+        return row?.workspaceID ?? null;
+    }
+
+    async setDiscordConnection(workspaceID, userID) {
+        await query(
+            `INSERT INTO discord_connection (id, workspace_id, updated_by, updated_at)
+             VALUES (1, $1, $2, now())
+             ON CONFLICT (id) DO UPDATE SET
+                 workspace_id = EXCLUDED.workspace_id,
+                 updated_by = EXCLUDED.updated_by,
+                 updated_at = now()`,
+            [workspaceID, userID]
+        );
+    }
+
     async getMeetingDiscordEvent(meetingID) {
         return queryOne(
             `SELECT meeting_id AS "meetingID", guild_id AS "guildID", event_id AS "eventID"
