@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import pool, { applySchema, closePool } from './database/Pool.mjs';
+import { flushAllDigests } from './modules/Discord.mjs';
 import db from './database/Database.mjs';
 import Authentication from './modules/Authentication.mjs';
 import Authorization from './modules/Authorization.mjs';
@@ -20,6 +21,7 @@ import { attachCollaboration, stopCollaboration } from './modules/Collaboration.
 
 // configuration constants
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const DISCORD_FLUSH_MS = 4000;
 const SHUTDOWN_GRACE_MS = 10000;
 const HEALTH_CACHE_MS = 5000;
 const HEALTH_PROBE_MS = 2000;
@@ -275,6 +277,13 @@ class Server {
         this.httpServer?.closeAllConnections?.();
 
         await closed;
+
+        // send board activity still waiting in the Discord digest before the database closes
+        await Promise.race([
+            flushAllDigests().catch(() => {}),
+            new Promise(resolve => setTimeout(resolve, DISCORD_FLUSH_MS))
+        ]);
+
         await closePool();
         clearTimeout(forceExit);
         process.exit(0);

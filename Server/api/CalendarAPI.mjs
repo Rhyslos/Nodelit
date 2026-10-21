@@ -3,6 +3,7 @@ import { Router } from 'express';
 import db from '../database/Database.mjs';
 import { broadcastToWorkspace } from '../modules/Networking.mjs';
 import { clearStats } from './KanbanAPI.mjs';
+import { meetingCreated, meetingUpdated, meetingDeleted } from '../modules/Discord.mjs';
 import {
     requireText,
     optionalText,
@@ -89,6 +90,7 @@ export default function createCalendarRouter(authz) {
             });
 
             publish(req, { meetings: [meeting] });
+            meetingCreated(req.workspaceID, meeting, req.user);
             res.status(201).json(meeting);
         } catch (error) {
             next(error);
@@ -100,9 +102,10 @@ export default function createCalendarRouter(authz) {
             const startsAt = optionalTimestamp(req.body?.startsAt, 'startsAt');
             const endsAt = optionalTimestamp(req.body?.endsAt, 'endsAt');
 
+            const current = await db.getMeeting(req.params.id);
+            if (!current) return res.status(404).json({ error: 'Not found' });
+
             if (startsAt || endsAt) {
-                const current = await db.getMeeting(req.params.id);
-                if (!current) return res.status(404).json({ error: 'Not found' });
 
                 const effectiveStart = startsAt ?? current.startsAt;
                 const effectiveEnd = endsAt ?? current.endsAt;
@@ -124,6 +127,7 @@ export default function createCalendarRouter(authz) {
             if (!meeting) return res.status(404).json({ error: 'Not found' });
 
             publish(req, { meetings: [meeting] });
+            meetingUpdated(req.workspaceID, current, meeting, req.user);
             res.json(meeting);
         } catch (error) {
             next(error);
@@ -132,10 +136,16 @@ export default function createCalendarRouter(authz) {
 
     router.delete('/meetings/:id', authz.meetingEdit(), async (req, res, next) => {
         try {
+            const [meeting, discordLink] = await Promise.all([
+                db.getMeeting(req.params.id),
+                db.getMeetingDiscordEvent(req.params.id)
+            ]);
+
             const removed = await db.deleteMeeting(req.params.id);
             if (!removed) return res.status(404).json({ error: 'Not found' });
 
             publish(req, { removedMeetings: [req.params.id] });
+            meetingDeleted(req.workspaceID, meeting, discordLink, req.user);
             res.json({ removed: [req.params.id] });
         } catch (error) {
             next(error);

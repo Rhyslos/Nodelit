@@ -1297,6 +1297,84 @@ class Database {
         return rowCount > 0;
     }
 
+    // discord integration functions
+    async getDiscordSettings(workspaceID) {
+        return queryOne(
+            `SELECT workspace_id AS "workspaceID",
+                    webhook_url AS "webhookURL",
+                    guild_id AS "guildID",
+                    post_kanban AS "postKanban",
+                    post_meetings AS "postMeetings",
+                    sync_events AS "syncEvents",
+                    updated_at AS "updatedAt"
+             FROM workspace_discord
+             WHERE workspace_id = $1`,
+            [workspaceID]
+        );
+    }
+
+    async saveDiscordSettings(workspaceID, userID, fields) {
+        const current = await this.getDiscordSettings(workspaceID);
+
+        const next = {
+            webhookURL: fields.webhookURL !== undefined ? fields.webhookURL : (current?.webhookURL ?? null),
+            guildID: fields.guildID !== undefined ? fields.guildID : (current?.guildID ?? null),
+            postKanban: fields.postKanban ?? current?.postKanban ?? true,
+            postMeetings: fields.postMeetings ?? current?.postMeetings ?? true,
+            syncEvents: fields.syncEvents ?? current?.syncEvents ?? true
+        };
+
+        await query(
+            `INSERT INTO workspace_discord
+                 (workspace_id, webhook_url, guild_id, post_kanban, post_meetings, sync_events, updated_by, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+             ON CONFLICT (workspace_id) DO UPDATE SET
+                 webhook_url = EXCLUDED.webhook_url,
+                 guild_id = EXCLUDED.guild_id,
+                 post_kanban = EXCLUDED.post_kanban,
+                 post_meetings = EXCLUDED.post_meetings,
+                 sync_events = EXCLUDED.sync_events,
+                 updated_by = EXCLUDED.updated_by,
+                 updated_at = now()`,
+            [workspaceID, next.webhookURL, next.guildID, next.postKanban, next.postMeetings, next.syncEvents, userID]
+        );
+
+        return this.getDiscordSettings(workspaceID);
+    }
+
+    async getMeetingDiscordEvent(meetingID) {
+        return queryOne(
+            `SELECT meeting_id AS "meetingID", guild_id AS "guildID", event_id AS "eventID"
+             FROM meeting_discord_events WHERE meeting_id = $1`,
+            [meetingID]
+        );
+    }
+
+    async saveMeetingDiscordEvent(meetingID, guildID, eventID) {
+        // the meeting may have been deleted while Discord was answering; then there is nothing to link
+        await query(
+            `INSERT INTO meeting_discord_events (meeting_id, guild_id, event_id)
+             SELECT $1, $2, $3 WHERE EXISTS (SELECT 1 FROM meetings WHERE id = $1)
+             ON CONFLICT (meeting_id) DO UPDATE SET guild_id = EXCLUDED.guild_id, event_id = EXCLUDED.event_id`,
+            [meetingID, guildID, eventID]
+        );
+    }
+
+    async deleteMeetingDiscordEvent(meetingID) {
+        await query('DELETE FROM meeting_discord_events WHERE meeting_id = $1', [meetingID]);
+    }
+
+    async getTaskListIDs(taskIDs) {
+        if (taskIDs.length === 0) return new Map();
+
+        const { rows } = await query(
+            'SELECT id, list_id AS "listID" FROM tasks WHERE id = ANY($1::text[])',
+            [taskIDs]
+        );
+
+        return new Map(rows.map(row => [row.id, row.listID]));
+    }
+
     async getUpcomingMeetings(userID, days, limit) {
         const { rows } = await query(
             `SELECT mt.id,
