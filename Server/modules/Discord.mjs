@@ -13,8 +13,8 @@ const EVENT_LOCATION_MAX = 100;
 const EVENT_NAME_MAX = 100;
 const EVENT_DESCRIPTION_MAX = 1000;
 
-// CREATE_EVENTS (1 << 44): lets the bot create external events and edit or delete the ones it made
-const BOT_PERMISSIONS = (1n << 44n).toString();
+// MANAGE_EVENTS (1 << 33) and CREATE_EVENTS (1 << 44): create external events and edit or delete any event
+const BOT_PERMISSIONS = ((1n << 33n) | (1n << 44n)).toString();
 
 const WEBHOOK_PATTERN = /^https:\/\/(?:canary\.|ptb\.)?(?:discord|discordapp)\.com\/api\/webhooks\/\d{17,20}\/[\w-]{20,}$/;
 const GUILD_PATTERN = /^\d{17,20}$/;
