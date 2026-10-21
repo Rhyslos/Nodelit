@@ -1,6 +1,7 @@
 // component imports
 import { Mail, CalendarClock } from 'lucide-react';
 import Subbar from './Subbar';
+import MeetingTimer from '../MeetingTimer';
 
 // configuration constants
 const MAX_VISIBLE = 8;
@@ -85,7 +86,9 @@ export default function DefaultSubbar({ items = [], itemsLoading = false, onOpen
                         title={itemTooltip(item)}
                     >
                         <span className="subbar-deadline-head">
-                            <span className="subbar-deadline-when">{urgencyLabel(item.daysRemaining)}</span>
+                            {item.kind === 'meeting'
+                                ? <MeetingTimer startsAt={item.startsAt} endsAt={item.endsAt} />
+                                : <span className="subbar-deadline-when">{urgencyLabel(item.daysRemaining)}</span>}
                             <span className="subbar-deadline-date">{itemDate(item)}</span>
                         </span>
 

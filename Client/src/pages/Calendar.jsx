@@ -7,6 +7,7 @@ import { useKanban } from '../contexts/KanbanContext';
 import { useWorkspacePresence } from '../hooks/useWorkspacePresence';
 import { useCalendar } from '../hooks/useCalendar';
 import ConfirmModal from '../components/kanban/ConfirmModal';
+import MeetingTimer from '../components/MeetingTimer';
 
 // configuration constants
 const SLOT_MINUTES = 30;
@@ -989,6 +990,8 @@ export default function Calendar() {
                             </span>
 
                             <span className="calendar-meeting-title">{meeting.title}</span>
+
+                            <MeetingTimer startsAt={meeting.startsAt} endsAt={meeting.endsAt} />
 
                             {canEdit && (
                                 <button
