@@ -441,3 +441,22 @@ CREATE TABLE IF NOT EXISTS tracked_tasks (
 
 CREATE INDEX IF NOT EXISTS tracked_tasks_workspace_created_idx
     ON tracked_tasks (workspace_id, created_at);
+
+-- discord integration tables (additive: new tables only)
+CREATE TABLE IF NOT EXISTS workspace_discord (
+    workspace_id  text PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    webhook_url   text,
+    guild_id      text,
+    post_kanban   boolean NOT NULL DEFAULT true,
+    post_meetings boolean NOT NULL DEFAULT true,
+    sync_events   boolean NOT NULL DEFAULT true,
+    updated_by    text REFERENCES users(id) ON DELETE SET NULL,
+    updated_at    timestamptz(3) NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS meeting_discord_events (
+    meeting_id text PRIMARY KEY REFERENCES meetings(id) ON DELETE CASCADE,
+    guild_id   text NOT NULL,
+    event_id   text NOT NULL,
+    created_at timestamptz(3) NOT NULL DEFAULT now()
+);

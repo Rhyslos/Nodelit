@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import db from '../database/Database.mjs';
 import { broadcastKanbanChange } from '../modules/Networking.mjs';
+import { recordKanbanActivity } from '../modules/Discord.mjs';
 import {
     requireID,
     optionalID,
@@ -67,6 +68,26 @@ function originOf(req) {
 function publish(req, changes) {
     clearStats(req.workspaceID);
     broadcastKanbanChange(req.workspaceID, buildDelta(changes), originOf(req));
+}
+
+// turns a task edit into Discord activity entries (completed, assigned, due date)
+function taskActivity(before, after) {
+    if (!before || !after) return [];
+
+    const entries = [];
+
+    if (before.isCompleted !== after.isCompleted) {
+        entries.push({ type: after.isCompleted ? 'completed' : 'reopened', taskID: after.id });
+    }
+
+    const added = (after.assignedUsers ?? []).filter(id => !(before.assignedUsers ?? []).includes(id));
+    if (added.length > 0) entries.push({ type: 'assigned', taskID: after.id, assignees: added });
+
+    if (after.deadline && after.deadline !== before.deadline) {
+        entries.push({ type: 'deadline', taskID: after.id, deadline: after.deadline });
+    }
+
+    return entries;
 }
 
 // configuration constants
@@ -147,6 +168,7 @@ export default function createKanbanRouter(authz) {
             });
 
             publish(req, { upsert: { tabs: [tab] } });
+            recordKanbanActivity(req.workspaceID, req.user, { type: 'board', tabID: tab.id });
             res.status(201).json(tab);
         } catch (error) {
             next(error);
@@ -372,6 +394,7 @@ export default function createKanbanRouter(authz) {
             });
 
             publish(req, { upsert: { tasks: [task] } });
+            recordKanbanActivity(req.workspaceID, req.user, { type: 'created', taskID: task.id });
             res.status(201).json(task);
         } catch (error) {
             next(error);
@@ -383,9 +406,13 @@ export default function createKanbanRouter(authz) {
         resolveBatchScope(ids => db.getWorkspaceScopeForTasks(ids), 'listID', ids => db.getWorkspaceScopeForLists(ids)),
         async (req, res, next) => {
             try {
+                const previousLists = await db.getTaskListIDs(req.batchUpdates.map(update => update.id));
                 const tasks = await db.reorderTasks(req.batchUpdates);
 
                 publish(req, { upsert: { tasks } });
+                recordKanbanActivity(req.workspaceID, req.user, tasks
+                    .filter(task => previousLists.has(task.id) && previousLists.get(task.id) !== task.listID)
+                    .map(task => ({ type: 'moved', taskID: task.id, fromListID: previousLists.get(task.id), toListID: task.listID })));
                 res.json({ tasks });
             } catch (error) {
                 next(error);
@@ -404,6 +431,10 @@ export default function createKanbanRouter(authz) {
             };
 
             const expectedUpdatedAt = optionalTimestamp(req.body?.updatedAt, 'updatedAt');
+            const tracksActivity = changes.isCompleted !== undefined
+                || changes.deadline !== undefined
+                || changes.assignedUsers !== undefined;
+            const before = tracksActivity ? await db.getTask(req.params.id) : null;
             const result = await db.updateTask(req.params.id, changes, expectedUpdatedAt);
 
             if (result.error) {
@@ -411,6 +442,7 @@ export default function createKanbanRouter(authz) {
             }
 
             publish(req, { upsert: { tasks: [result.record] } });
+            recordKanbanActivity(req.workspaceID, req.user, taskActivity(before, result.record));
             res.json(result.record);
         } catch (error) {
             next(error);

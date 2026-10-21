@@ -7,6 +7,7 @@ import { useWorkspacePresence } from '../../hooks/useWorkspacePresence';
 import HamburgerMenu from './HamburgerMenu';
 import AssignedTasksModal from './AssignedTasksModal';
 import MembersModal from '../workspace/MembersModal';
+import DiscordModal from '../workspace/DiscordModal';
 import TagManager from '../kanban/TagManager';
 import { appName } from '../../App';
 
@@ -54,6 +55,7 @@ export default function Navbar() {
     // state variables
     const [menuOpen, setMenuOpen] = useState(false);
     const [membersOpen, setMembersOpen] = useState(false);
+    const [discordOpen, setDiscordOpen] = useState(false);
     const [tagsOpen, setTagsOpen] = useState(false);
     const [assignedMemberID, setAssignedMemberID] = useState(null);
 
@@ -111,6 +113,16 @@ export default function Navbar() {
                                 </button>
                             )}
 
+                            {isOwner && (
+                                <button
+                                    className="navbar-members-btn"
+                                    onClick={() => setDiscordOpen(true)}
+                                    title="Connect this workspace to Discord"
+                                >
+                                    Discord
+                                </button>
+                            )}
+
                             {members.map(member => (
                                 <button
                                     key={member.id}
@@ -148,6 +160,10 @@ export default function Navbar() {
                     member={assignedMember}
                     onClose={() => setAssignedMemberID(null)}
                 />
+            )}
+
+            {discordOpen && workspaceID && (
+                <DiscordModal workspaceID={workspaceID} onClose={() => setDiscordOpen(false)} />
             )}
 
             {membersOpen && workspaceID && (
