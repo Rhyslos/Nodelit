@@ -974,3 +974,19 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* responsive list styles */
+@media (max-width: 1100px) {
+    .stat-list-row {
+        flex-wrap: wrap;
+        row-gap: 4px;
+    }
+
+    .stat-list-title {
+        flex: 1 1 140px;
+    }
+
+    .stat-list-where {
+        flex: 1 1 auto;
+    }
+}

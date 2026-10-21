@@ -3,6 +3,7 @@
     display: flex;
     flex-direction: column;
     height: calc(100vh - var(--navbar-h));
+    height: calc(100dvh - var(--navbar-h));
     overflow: clip;
 }
 
@@ -2083,4 +2084,12 @@
     animation: insertFade 0.15s ease both;
     pointer-events: none;
     z-index: 3;
+}
+
+/* responsive kanban styles */
+@media (max-width: 640px) {
+    .kanban-board {
+        padding: 12px;
+        padding-bottom: 24px;
+    }
 }

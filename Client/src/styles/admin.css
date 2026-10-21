@@ -340,3 +340,27 @@
     font-size: 13px;
     color: var(--muted);
 }
+
+/* responsive admin styles */
+@media (max-width: 860px) {
+    .admin-root {
+        padding: 24px 16px 48px;
+    }
+
+    .admin-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+}
+
+@media (max-width: 640px) {
+    .admin-head {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .discord-modal {
+        max-height: calc(100dvh - 32px);
+    }
+}

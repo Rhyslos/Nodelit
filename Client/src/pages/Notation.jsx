@@ -56,6 +56,10 @@ function renderCaret(user) {
 }
 
 // page functions
+function isNarrowScreen() {
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches;
+}
+
 export default function Notation() {
     const { user } = useAuth();
     const { notationData, loading, error, canEdit, workspaceID, setActionError } = useNotation();
@@ -63,7 +67,7 @@ export default function Notation() {
     // state variables
     const [activePageID, setActivePageID] = useState(null);
     const [searchParams, setSearchParams] = useSearchParams();
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [sidebarOpen, setSidebarOpen] = useState(() => !isNarrowScreen());
     const [reading, setReading] = useState(false);
 
     const selectPage = useCallback(pageID => {
@@ -76,6 +80,9 @@ export default function Notation() {
         else next.delete('page');
 
         setSearchParams(next, { replace: true });
+
+        // on narrow screens the page list covers the editor, so get it out of the way
+        if (isNarrowScreen()) setSidebarOpen(false);
     }, [workspaceID, searchParams, setSearchParams]);
 
     const handleUpload = useCallback(
@@ -190,6 +197,10 @@ export default function Notation() {
                 >
                     ‹
                 </button>
+
+                {sidebarOpen && (
+                    <div className="notation-sidebar-scrim" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
+                )}
 
                 {sidebarOpen && (
                     <NotationSidebar

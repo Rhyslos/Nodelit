@@ -440,3 +440,43 @@
     border-radius: 8px;
     padding: 10px 12px;
 }
+/* responsive dashboard and modal styles */
+@media (max-width: 640px) {
+    .dashboard-main {
+        padding: 20px 16px;
+    }
+
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+    }
+
+    .modal-overlay {
+        align-items: flex-end;
+        padding: 16px;
+    }
+
+    .modal {
+        padding: 24px 20px;
+        border-radius: 16px;
+        max-height: calc(100dvh - 32px);
+        overflow-y: auto;
+    }
+
+    .modal-title {
+        font-size: 20px;
+        margin-bottom: 16px;
+    }
+
+    .modal-actions {
+        flex-wrap: wrap;
+    }
+
+    .modal-actions > button {
+        flex: 1 1 auto;
+    }
+
+    .catfilter-workspace-search {
+        max-width: none;
+    }
+}

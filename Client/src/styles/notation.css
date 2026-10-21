@@ -4,6 +4,7 @@
     display: flex;
     flex-direction: column;
     height: calc(100vh - var(--navbar-h));
+    height: calc(100dvh - var(--navbar-h));
     overflow: clip;
 }
 
@@ -1644,4 +1645,36 @@
 .tiptap-size-step:disabled {
     opacity: 0.35;
     cursor: default;
+}
+
+/* responsive notation styles */
+.notation-sidebar-scrim {
+    display: none;
+}
+
+@media (max-width: 760px) {
+    .notation-root {
+        --notation-sidebar-w: min(280px, 82vw);
+    }
+
+    .notation-sidebar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 9;
+        box-shadow: 4px 0 24px var(--shadow);
+    }
+
+    .notation-sidebar-scrim {
+        display: block;
+        position: absolute;
+        inset: 0;
+        z-index: 8;
+        background: var(--overlay);
+    }
+
+    .notation-editor-area {
+        padding: 48px 12px 96px;
+    }
 }
