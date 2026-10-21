@@ -5,6 +5,20 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 const EDGE_RATIO = 0.28;
 const AUTO_SCROLL_EDGE = 56;
 const AUTO_SCROLL_MAX = 9;
+const TOUCH_HOLD_MS = 500;
+const TOUCH_HOLD_SLOP = 10;
+const INTERACTIVE = 'input, button, a, select, textarea, label, [contenteditable="true"]';
+
+// after a touch drag ends, the browser still sends a click; swallow it so the dropped task doesn't open
+function swallowNextClick() {
+    const swallow = e => {
+        e.stopPropagation();
+        e.preventDefault();
+    };
+
+    window.addEventListener('click', swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 600);
+}
 
 // touch events keep their coordinates on the touch, not on the event
 function pointOf(e) {
@@ -57,6 +71,7 @@ export function useDragDrop({
     const scrollerRef = useRef(null);
     const autoScrollRef = useRef(null);
     const moveRef = useRef(null);
+    const holdRef = useRef(null);
 
     // callback references
     const onGhostDropRef = useRef(onGhostDrop);
@@ -197,6 +212,7 @@ export function useDragDrop({
         if (!draggingRef.current) return;
 
         const e = pointOf(event);
+        if (event.type === 'touchend') swallowNextClick();
 
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
@@ -254,8 +270,51 @@ export function useDragDrop({
         window.removeEventListener('touchcancel', onMouseUp);
     }, [onMouseMove]);
 
+    // on touch screens a drag only starts after the finger is held still, so scrolling never moves a task
+    function beginTouchHold(event, item, element, type) {
+        if (event.touches.length !== 1 || draggingRef.current) return;
+        if (event.target.closest?.(INTERACTIVE)) return;
+
+        holdRef.current?.cancel();
+
+        const start = pointOf(event);
+        let latest = { clientX: start.clientX, clientY: start.clientY };
+
+        const cancel = () => {
+            clearTimeout(timer);
+            element.classList.remove('is-pressing');
+            window.removeEventListener('touchmove', onHoldMove);
+            window.removeEventListener('touchend', cancel);
+            window.removeEventListener('touchcancel', cancel);
+            holdRef.current = null;
+        };
+
+        function onHoldMove(moveEvent) {
+            const point = pointOf(moveEvent);
+            latest = { clientX: point.clientX, clientY: point.clientY };
+
+            if (Math.hypot(point.clientX - start.clientX, point.clientY - start.clientY) > TOUCH_HOLD_SLOP) cancel();
+        }
+
+        const timer = setTimeout(() => {
+            cancel();
+            startDrag({ type: 'touchstart', held: true, touches: [latest] }, item, element, type);
+        }, TOUCH_HOLD_MS);
+
+        element.classList.add('is-pressing');
+        window.addEventListener('touchmove', onHoldMove, { passive: true });
+        window.addEventListener('touchend', cancel);
+        window.addEventListener('touchcancel', cancel);
+        holdRef.current = { cancel };
+    }
+
     function startDrag(event, item, element, type = 'task') {
         const touch = event.type === 'touchstart';
+
+        if (touch && !event.held) {
+            beginTouchHold(event, item, element, type);
+            return;
+        }
 
         if (!touch && event.button !== 0) return;
         if (touch && event.touches.length !== 1) return;

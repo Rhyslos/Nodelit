@@ -281,3 +281,24 @@
         height: 20px;
     }
 }
+
+/* touch drag: hold a task or list header still for half a second to pick it up */
+@media (pointer: coarse) {
+    .kanban-task-drag-handle {
+        display: none;
+    }
+
+    .kanban-task,
+    .kanban-list-header {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    .kanban-task.is-pressing,
+    .kanban-list.is-pressing {
+        transform: scale(0.97);
+        box-shadow: 0 6px 18px var(--shadow);
+        transition: transform 0.45s ease, box-shadow 0.45s ease;
+    }
+}

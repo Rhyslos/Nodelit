@@ -114,7 +114,16 @@ export default function KanbanTask({
                 task.isCompleted ? 'is-completed' : ''
             ].filter(Boolean).join(' ')}
             onClick={handleClick}
+            onTouchStart={e => {
+                if (canEdit && !isClone) onStartDrag(e, task, taskRef.current);
+            }}
             onContextMenu={e => {
+                // a long press is a drag on touch screens, not a right click
+                if (isTouchScreen()) {
+                    e.preventDefault();
+                    return;
+                }
+
                 if (!onContextMenu) return;
                 e.preventDefault();
                 e.stopPropagation();
@@ -153,7 +162,6 @@ export default function KanbanTask({
                         <div
                             className="kanban-task-drag-handle"
                             onMouseDown={e => onStartDrag(e, task, taskRef.current)}
-                            onTouchStart={e => onStartDrag(e, task, taskRef.current)}
                             title="Drag to move"
                         >
                             <GripVertical size={14} strokeWidth={2} />
