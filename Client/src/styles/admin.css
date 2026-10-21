@@ -364,3 +364,19 @@
         max-height: calc(100dvh - 32px);
     }
 }
+
+/* admin discord styles */
+.admin-discord {
+    max-width: 560px;
+    margin-top: 8px;
+}
+
+.admin-discord .modal-form {
+    margin-top: 4px;
+}
+
+.admin-discord-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}

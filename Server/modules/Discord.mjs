@@ -119,8 +119,21 @@ function postWebhook(webhookURL, payload) {
 
 // settings functions
 const settingsCache = new Map();
+let connectionCache = null;
 
+async function connectedWorkspace() {
+    if (connectionCache && Date.now() - connectionCache.at < SETTINGS_CACHE_MS) return connectionCache.value;
+
+    const value = await db.getDiscordConnection();
+    connectionCache = { at: Date.now(), value };
+
+    return value;
+}
+
+// only the one connected workspace talks to Discord; every other workspace gets nothing
 async function settingsFor(workspaceID) {
+    if (!workspaceID || await connectedWorkspace() !== workspaceID) return null;
+
     const cached = settingsCache.get(workspaceID);
     if (cached && Date.now() - cached.at < SETTINGS_CACHE_MS) return cached.value;
 
@@ -130,8 +143,26 @@ async function settingsFor(workspaceID) {
     return value;
 }
 
-export function forgetDiscordSettings(workspaceID) {
-    settingsCache.delete(workspaceID);
+export function forgetDiscordSettings() {
+    settingsCache.clear();
+    connectionCache = null;
+}
+
+function maskWebhook(url) {
+    return url ? `…${url.slice(-6)}` : null;
+}
+
+export function discordView(workspaceID, settings) {
+    return {
+        ...discordStatus(),
+        workspaceID: workspaceID ?? null,
+        webhookSet: Boolean(settings?.webhookURL),
+        webhookHint: maskWebhook(settings?.webhookURL),
+        guildID: settings?.guildID ?? '',
+        postKanban: settings?.postKanban ?? true,
+        postMeetings: settings?.postMeetings ?? true,
+        syncEvents: settings?.syncEvents ?? true
+    };
 }
 
 // formatting functions

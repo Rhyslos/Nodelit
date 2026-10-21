@@ -2,10 +2,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import DiscordSettings from '../components/admin/DiscordSettings';
 
 // configuration constants
 const EMPTY_FORM = { username: '', displayName: '', password: '', role: 'member' };
-const TABS = ['users', 'deleted', 'audit'];
+const TABS = ['users', 'deleted', 'audit', 'discord'];
 
 // component functions
 export default function Admin() {
@@ -305,6 +306,8 @@ export default function Admin() {
                     )}
                 </>
             )}
+
+            {tab === 'discord' && <DiscordSettings />}
 
             {!loading && tab === 'audit' && (
                 <table className="admin-table">

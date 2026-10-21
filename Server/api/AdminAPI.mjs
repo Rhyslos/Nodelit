@@ -9,8 +9,11 @@ import {
     requireUsername,
     requirePassword,
     requireRole,
-    optionalColor
+    optionalColor,
+    optionalID,
+    optionalBoolean
 } from '../modules/Validation.mjs';
+import { discordView, parseWebhookURL, parseGuildID, forgetDiscordSettings, testDiscord } from '../modules/Discord.mjs';
 
 // revocation functions
 function cutLiveConnections() {
@@ -33,6 +36,90 @@ export default function createAdminRouter(authz) {
     const router = Router();
 
     router.use(authz.requireAdmin());
+
+    // discord routes
+    async function discordState() {
+        const workspaceID = await db.getDiscordConnection();
+        const settings = workspaceID ? await db.getDiscordSettings(workspaceID) : null;
+        const workspaces = (await db.getAllWorkspaces()).map(({ id, name }) => ({ id, name }));
+
+        return { ...discordView(workspaceID, settings), workspaces };
+    }
+
+    router.get('/discord', async (req, res, next) => {
+        try {
+            res.json(await discordState());
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.put('/discord', async (req, res, next) => {
+        try {
+            const body = req.body ?? {};
+            const previousID = await db.getDiscordConnection();
+            const workspaceID = body.workspaceID === undefined ? previousID : (optionalID(body.workspaceID, 'workspaceID') ?? null);
+
+            if (workspaceID && !(await db.getWorkspace(workspaceID))) {
+                return res.status(404).json({ error: 'That workspace no longer exists' });
+            }
+
+            if (workspaceID) {
+                // moving the connection to another workspace keeps the same webhook and server unless new ones are given
+                const previous = previousID && previousID !== workspaceID ? await db.getDiscordSettings(previousID) : null;
+
+                const webhookURL = body.webhookURL === undefined
+                    ? (previous ? previous.webhookURL : undefined)
+                    : parseWebhookURL(body.webhookURL);
+                const guildID = body.guildID === undefined
+                    ? (previous ? previous.guildID : undefined)
+                    : parseGuildID(body.guildID);
+
+                await db.saveDiscordSettings(workspaceID, req.user.id, {
+                    webhookURL,
+                    guildID,
+                    postKanban: optionalBoolean(body.postKanban, 'postKanban') ?? previous?.postKanban,
+                    postMeetings: optionalBoolean(body.postMeetings, 'postMeetings') ?? previous?.postMeetings,
+                    syncEvents: optionalBoolean(body.syncEvents, 'syncEvents') ?? previous?.syncEvents
+                });
+            }
+
+            await db.setDiscordConnection(workspaceID, req.user.id);
+            forgetDiscordSettings();
+
+            const state = await discordState();
+
+            await audit(req, {
+                action: 'discord.updated',
+                targetType: 'workspace',
+                targetID: workspaceID,
+                detail: {
+                    workspaceID,
+                    previousWorkspaceID: previousID,
+                    webhookSet: state.webhookSet,
+                    guildID: state.guildID,
+                    postKanban: state.postKanban,
+                    postMeetings: state.postMeetings,
+                    syncEvents: state.syncEvents
+                }
+            });
+
+            res.json(state);
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.post('/discord/test', async (req, res, next) => {
+        try {
+            const workspaceID = await db.getDiscordConnection();
+            if (!workspaceID) return res.status(400).json({ error: 'Pick a workspace and save first' });
+
+            res.json(await testDiscord(workspaceID, req.user));
+        } catch (error) {
+            next(error);
+        }
+    });
 
     // user routes
     router.get('/users', async (req, res, next) => {

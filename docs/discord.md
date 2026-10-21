@@ -1,6 +1,6 @@
 # Discord integration
 
-Nodelit can post workspace activity to a Discord channel and turn meetings into Discord events. It only sends from Nodelit to Discord, and runs inside the existing Nodelit server, so there is nothing extra to host.
+Nodelit can post one workspace's activity to a Discord channel and turn its meetings into Discord events. Only that connected workspace posts; all others are ignored. It only sends from Nodelit to Discord, and runs inside the existing Nodelit server, so there is nothing extra to host.
 
 ## What gets posted
 
@@ -23,10 +23,10 @@ Nobody is ever @-mentioned by these posts.
 ### 1. Update channel (no bot needed)
 
 1. In Discord, open the channel's settings → **Integrations** → **Webhooks** → **New Webhook**, then **Copy Webhook URL**.
-2. In Nodelit, open the workspace and click **Discord** in the top bar (owners only).
-3. Paste the link, choose what to post, click **Save**, then **Send test**.
+2. In Nodelit, open **Admin** (admins only) → the **Discord** tab.
+3. Pick the **Connected workspace**, paste the link, choose what to post, click **Save**, then **Send test**.
 
-Each workspace has its own settings, so several workspaces can post to one Discord server, or each to its own.
+Choosing a different workspace later moves the webhook and server over to it. Choosing **None** turns Discord off.
 
 ### 2. Meetings as Discord events (needs the bot, one-time server setup)
 
@@ -36,19 +36,20 @@ Each workspace has its own settings, so several workspaces can post to one Disco
    - `DISCORD_BOT_TOKEN`: the bot token
    - `DISCORD_APPLICATION_ID`: the Application ID from **General Information** (this makes the invite link appear in Nodelit)
    - `PUBLIC_URL` (optional): Nodelit's address, e.g. `https://nodelit.onrender.com`. Used for links in posts and as the event location. Falls back to the first `CLIENT_ORIGIN`.
-4. Redeploy. Then in Nodelit's **Discord** window, click **Invite the bot to your Discord server** and pick the server. It asks for the **Create Events** and **Manage Events** permissions.
+4. Redeploy. Then in **Admin → Discord**, click **Invite the bot to your Discord server** and pick the server. It asks for the **Create Events** and **Manage Events** permissions.
 5. Paste the **Discord server ID** (in Discord: Settings → Advanced → turn on Developer Mode, then right-click the server icon → **Copy Server ID**), tick **Create a Discord event for each meeting**, **Save**, then **Send test**.
 
 ## Notes
 
-- The webhook link works like a password for posting to that channel. Nodelit stores it, only workspace owners can change it, and it is never shown again after saving.
+- The webhook link works like a password for posting to that channel. Nodelit stores it, only admins can change it, and it is never shown again after saving.
 - Meetings that have already started don't get an event, since Discord only accepts events in the future.
 - On Render's free plan the server sleeps after 15 minutes without visitors. That's fine here: Nodelit only posts when someone is using it, so the server is awake anyway. Board activity waiting to be posted is sent when the server shuts down.
 - If Discord is down or a setting is wrong, Nodelit carries on as normal and logs a warning. Nothing in Nodelit waits on Discord.
 
 ## Database
 
-Two new tables, nothing changed in existing ones:
+Three new tables, nothing changed in existing ones:
 
-- `workspace_discord`: one row per workspace with its webhook link, Discord server ID and toggles.
+- `discord_connection`: a single row naming the connected workspace.
+- `workspace_discord`: the webhook link, Discord server ID and toggles for a workspace.
 - `meeting_discord_events`: links each meeting to the Discord event made for it, so edits and deletes reach the right event.
