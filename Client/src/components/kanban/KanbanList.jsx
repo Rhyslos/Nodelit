@@ -101,18 +101,28 @@ export default function KanbanList({
                 className={`kanban-list ${isDraggingList ? 'is-dragging-list' : ''}`}
                 ref={listRef}
                 onContextMenu={e => {
+                    // a long press is a drag on touch screens, not a right click
+                    if (window.matchMedia('(pointer: coarse)').matches) {
+                        e.preventDefault();
+                        return;
+                    }
+
                     if (!onListContextMenu) return;
                     e.preventDefault();
                     e.stopPropagation();
                     onListContextMenu(e, list);
                 }}
             >
-                <div className="kanban-list-header">
+                <div
+                    className="kanban-list-header"
+                    onTouchStart={e => {
+                        if (canEdit) onStartListDrag(e, list, listRef.current);
+                    }}
+                >
                     {canEdit && (
                         <div
                             className="kanban-list-drag-handle"
                             onMouseDown={e => onStartListDrag(e, list, listRef.current)}
-                            onTouchStart={e => onStartListDrag(e, list, listRef.current)}
                             title="Drag to move list"
                         >
                             <GripVertical size={14} strokeWidth={2} />
