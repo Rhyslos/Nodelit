@@ -6,6 +6,11 @@ import AssigneeDropdown from './AssigneeDropdown';
 import { useKanban } from '../../contexts/KanbanContext';
 
 // component functions
+// on touch screens a tap opens the task window instead of editing the title in place
+function isTouchScreen() {
+    return typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+}
+
 export default function KanbanTask({
     task,
     tags = [],
@@ -74,7 +79,7 @@ export default function KanbanTask({
     // event handlers
     function handleClick(e) {
         if (
-            e.target.closest('.kanban-task-title') ||
+            (!isTouchScreen() && e.target.closest('.kanban-task-title')) ||
             e.target.closest('.kanban-task-checkbox') ||
             e.target.closest('.kanban-task-tag-btn') ||
             e.target.closest('.kanban-task-eye-btn') ||
@@ -131,11 +136,12 @@ export default function KanbanTask({
                     <span
                         ref={titleRef}
                         className="kanban-task-title"
-                        contentEditable={canEdit && !isClone}
+                        contentEditable={canEdit && !isClone && !isTouchScreen()}
                         suppressContentEditableWarning
                         onBlur={handleTitleBlur}
                         onKeyDown={handleTitleKeyDown}
                         onMouseDown={e => {
+                            if (isTouchScreen()) return;
                             e.stopPropagation();
                             setTimeout(() => titleRef.current?.focus(), 0);
                         }}
@@ -147,6 +153,7 @@ export default function KanbanTask({
                         <div
                             className="kanban-task-drag-handle"
                             onMouseDown={e => onStartDrag(e, task, taskRef.current)}
+                            onTouchStart={e => onStartDrag(e, task, taskRef.current)}
                             title="Drag to move"
                         >
                             <GripVertical size={14} strokeWidth={2} />

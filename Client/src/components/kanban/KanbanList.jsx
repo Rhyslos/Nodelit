@@ -112,6 +112,7 @@ export default function KanbanList({
                         <div
                             className="kanban-list-drag-handle"
                             onMouseDown={e => onStartListDrag(e, list, listRef.current)}
+                            onTouchStart={e => onStartListDrag(e, list, listRef.current)}
                             title="Drag to move list"
                         >
                             <GripVertical size={14} strokeWidth={2} />

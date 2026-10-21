@@ -3,6 +3,22 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 
 // hook functions
 const EDGE_RATIO = 0.28;
+const AUTO_SCROLL_EDGE = 56;
+const AUTO_SCROLL_MAX = 9;
+
+// touch events keep their coordinates on the touch, not on the event
+function pointOf(e) {
+    if (e.touches?.length) return e.touches[0];
+    if (e.changedTouches?.length) return e.changedTouches[0];
+    return e;
+}
+
+// how fast to scroll when the pointer is held near an edge of the board
+function edgeSpeed(position, start, end) {
+    if (position < start + AUTO_SCROLL_EDGE) return -Math.ceil(AUTO_SCROLL_MAX * (1 - Math.max(0, position - start) / AUTO_SCROLL_EDGE));
+    if (position > end - AUTO_SCROLL_EDGE) return Math.ceil(AUTO_SCROLL_MAX * (1 - Math.max(0, end - position) / AUTO_SCROLL_EDGE));
+    return 0;
+}
 
 export function useDragDrop({
     tasks,
@@ -38,6 +54,9 @@ export function useDragDrop({
     const tiltRef = useRef(0);
     const targetTiltRef = useRef(0);
     const rafRef = useRef(null);
+    const scrollerRef = useRef(null);
+    const autoScrollRef = useRef(null);
+    const moveRef = useRef(null);
 
     // callback references
     const onGhostDropRef = useRef(onGhostDrop);
@@ -90,11 +109,49 @@ export function useDragDrop({
     }
 
     // event functions
-    const onMouseMove = useCallback((e) => {
+    const onMouseMove = useCallback((event) => {
         if (!draggingRef.current) return;
+
+        // stop the page from scrolling while a task is held by touch
+        if (event.type === 'touchmove' && event.cancelable) event.preventDefault();
+
+        const e = pointOf(event);
 
         const dx = e.clientX - lastPos.current.x;
         lastPos.current = { x: e.clientX, y: e.clientY };
+
+        // scroll the board while the pointer is held near its edges
+        const scroller = scrollerRef.current;
+
+        if (scroller && event.type !== 'autoscroll') {
+            const rect = scroller.getBoundingClientRect();
+            const speed = {
+                x: edgeSpeed(e.clientX, rect.left, rect.right),
+                y: edgeSpeed(e.clientY, rect.top, rect.bottom)
+            };
+
+            if ((speed.x || speed.y) && !autoScrollRef.current) {
+                autoScrollRef.current = { speed, frame: null };
+
+                const step = () => {
+                    const state = autoScrollRef.current;
+                    if (!state || !draggingRef.current) return;
+
+                    scroller.scrollBy(state.speed.x, state.speed.y);
+                    moveRef.current?.({ type: 'autoscroll', clientX: lastPos.current.x, clientY: lastPos.current.y });
+                    state.frame = requestAnimationFrame(step);
+                };
+
+                autoScrollRef.current.frame = requestAnimationFrame(step);
+            } else if (autoScrollRef.current) {
+                if (speed.x || speed.y) {
+                    autoScrollRef.current.speed = speed;
+                } else {
+                    cancelAnimationFrame(autoScrollRef.current.frame);
+                    autoScrollRef.current = null;
+                }
+            }
+        }
 
         targetTiltRef.current = Math.max(-15, Math.min(15, dx * 0.8));
 
@@ -136,10 +193,17 @@ export function useDragDrop({
         });
     }, []);
 
-    const onMouseUp = useCallback((e) => {
+    const onMouseUp = useCallback((event) => {
         if (!draggingRef.current) return;
 
+        const e = pointOf(event);
+
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+        if (autoScrollRef.current) {
+            cancelAnimationFrame(autoScrollRef.current.frame);
+            autoScrollRef.current = null;
+        }
 
         if (isPointOverDeleteZone(e.clientX, e.clientY)) {
             onDeleteDropRef.current?.(
@@ -185,11 +249,21 @@ export function useDragDrop({
 
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('mouseup', onMouseUp);
+        window.removeEventListener('touchmove', onMouseMove);
+        window.removeEventListener('touchend', onMouseUp);
+        window.removeEventListener('touchcancel', onMouseUp);
     }, [onMouseMove]);
 
-    function startDrag(e, item, element, type = 'task') {
-        if (e.button !== 0) return;
-        e.preventDefault();
+    function startDrag(event, item, element, type = 'task') {
+        const touch = event.type === 'touchstart';
+
+        if (!touch && event.button !== 0) return;
+        if (touch && event.touches.length !== 1) return;
+        if (!touch) event.preventDefault();
+
+        const e = pointOf(event);
+        scrollerRef.current = element.closest('.kanban-board');
+        moveRef.current = onMouseMove;
 
         const rect = element.getBoundingClientRect();
         dragOffset.current = {
@@ -218,8 +292,14 @@ export function useDragDrop({
             }
         });
 
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
+        if (touch) {
+            window.addEventListener('touchmove', onMouseMove, { passive: false });
+            window.addEventListener('touchend', onMouseUp);
+            window.addEventListener('touchcancel', onMouseUp);
+        } else {
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        }
     }
 
     // calculation functions

@@ -1,7 +1,7 @@
 // import functions
 import { useState } from 'react';
 import { useNavigate, useLocation, matchPath } from 'react-router-dom';
-import { Waypoints } from 'lucide-react';
+import { Waypoints, LayoutDashboard, SquareKanban, NotebookPen, CalendarDays } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspacePresence } from '../../hooks/useWorkspacePresence';
 import HamburgerMenu from './HamburgerMenu';
@@ -12,10 +12,10 @@ import { appName } from '../../App';
 
 // configuration constants
 const WORKSPACE_PAGES = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'kanban', label: 'Kanban' },
-    { key: 'notation', label: 'Notation' },
-    { key: 'calendar', label: 'Calendar' }
+    { key: 'overview', label: 'Overview', short: 'Overview', Icon: LayoutDashboard },
+    { key: 'kanban', label: 'Kanban', short: 'Kanban', Icon: SquareKanban },
+    { key: 'notation', label: 'Notation', short: 'Notes', Icon: NotebookPen },
+    { key: 'calendar', label: 'Calendar', short: 'Calendar', Icon: CalendarDays }
 ];
 
 // helper functions
@@ -135,6 +135,23 @@ export default function Navbar() {
                     </button>
                 </div>
             </nav>
+
+            {inWorkspace && (
+                <nav className="tabbar" aria-label="Workspace pages">
+                    {WORKSPACE_PAGES.map(({ key, short, Icon }) => (
+                        <button
+                            key={key}
+                            type="button"
+                            className={`tabbar-btn ${isActive(key) ? 'active' : ''}`}
+                            aria-current={isActive(key) ? 'page' : undefined}
+                            onClick={() => navTo(key)}
+                        >
+                            <Icon size={22} strokeWidth={isActive(key) ? 2.4 : 2} />
+                            <span>{short}</span>
+                        </button>
+                    ))}
+                </nav>
+            )}
 
             <HamburgerMenu
                 open={menuOpen}

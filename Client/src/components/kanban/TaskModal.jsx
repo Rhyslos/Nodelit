@@ -21,7 +21,12 @@ function toDraft(task) {
 }
 
 // component functions
-export default function TaskModal({ task, tags = [], members = [], onChange, onSetTags, onClose }) {
+// touch screens open the keyboard on focus, so the title isn't focused there
+function isTouchScreen() {
+    return typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+}
+
+export default function TaskModal({ task, tags = [], members = [], lists = [], focusTitle, onMove, onChange, onSetTags, onClose }) {
     const taskID = task?.id ?? null;
 
     // state variables
@@ -203,7 +208,7 @@ export default function TaskModal({ task, tags = [], members = [], onChange, onS
                     onBlur={() => flush()}
                     onKeyDown={commitOnEnter}
                     placeholder="Task title"
-                    autoFocus
+                    autoFocus={focusTitle ?? !isTouchScreen()}
                 />
 
                 <label className="kanban-modal-check">
@@ -228,6 +233,22 @@ export default function TaskModal({ task, tags = [], members = [], onChange, onS
                             onKeyDown={commitOnEnter}
                         />
                     </div>
+
+                    {onMove && lists.length > 1 && (
+                        <div className="kanban-modal-group kanban-modal-group--grow">
+                            <label htmlFor="task-list">List</label>
+                            <select
+                                id="task-list"
+                                className="kanban-modal-select"
+                                value={task.listID}
+                                onChange={e => onMove(e.target.value)}
+                            >
+                                {lists.map(list => (
+                                    <option key={list.id} value={list.id}>{list.name || 'Untitled list'}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 <textarea
