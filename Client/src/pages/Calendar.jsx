@@ -27,8 +27,10 @@ const COMPACT_HEIGHT = 46;
 const COMPACT_AVATARS = 3;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const OVERLAP_COLOR = '#16a34a';
-const OVERLAP_MIN_STRENGTH = 28;
-const OVERLAP_MAX_STRENGTH = 78;
+const OVERLAP_FULL_STRENGTH = 78;
+const PARTIAL_OVERLAP_COLOR = '#6b8f71';
+const PARTIAL_MIN_STRENGTH = 16;
+const PARTIAL_MAX_STRENGTH = 40;
 const SINGLE_STRENGTH = 30;
 const NOW_TICK_MS = 30000;
 
@@ -98,14 +100,23 @@ function blockColors(userIDs, memberByID, memberCount) {
         };
     }
 
-    const ratio = memberCount > 2
-        ? Math.min(1, (userIDs.length - 2) / (memberCount - 2))
-        : 1;
-    const strength = Math.round(OVERLAP_MIN_STRENGTH + ratio * (OVERLAP_MAX_STRENGTH - OVERLAP_MIN_STRENGTH));
+    // everyone free: the strong green, so a full overlap stands out
+    if (userIDs.length >= memberCount) {
+        return {
+            background: `color-mix(in srgb, ${OVERLAP_COLOR} ${OVERLAP_FULL_STRENGTH}%, var(--panel))`,
+            borderColor: OVERLAP_COLOR
+        };
+    }
+
+    // some but not all free: a muted sage green, a little stronger per extra person
+    const ratio = memberCount > 3
+        ? (userIDs.length - 2) / (memberCount - 3)
+        : 0;
+    const strength = Math.round(PARTIAL_MIN_STRENGTH + Math.min(1, ratio) * (PARTIAL_MAX_STRENGTH - PARTIAL_MIN_STRENGTH));
 
     return {
-        background: `color-mix(in srgb, ${OVERLAP_COLOR} ${strength}%, var(--panel))`,
-        borderColor: OVERLAP_COLOR
+        background: `color-mix(in srgb, ${PARTIAL_OVERLAP_COLOR} ${strength}%, var(--panel))`,
+        borderColor: `color-mix(in srgb, ${PARTIAL_OVERLAP_COLOR} 70%, var(--panel))`
     };
 }
 
