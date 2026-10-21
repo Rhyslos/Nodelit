@@ -5,7 +5,8 @@ import db from '../database/Database.mjs';
 const API_BASE = 'https://discord.com/api/v10';
 const REQUEST_TIMEOUT_MS = 8000;
 const MAX_RETRY_WAIT_MS = 5000;
-const DIGEST_DELAY_MS = 60 * 1000;
+const DIGEST_QUIET_MS = 20 * 1000;
+const DIGEST_MAX_WAIT_MS = 90 * 1000;
 const SETTINGS_CACHE_MS = 30 * 1000;
 const MAX_DIGEST_LINES = 25;
 const EMBED_COLOR = 0xc8502a;
@@ -185,10 +186,15 @@ export function recordKanbanActivity(workspaceID, actor, entries) {
         let digest = digests.get(workspaceID);
 
         if (!digest) {
-            digest = { items: [], timer: setTimeout(() => flushDigest(workspaceID), DIGEST_DELAY_MS) };
-            digest.timer.unref?.();
+            digest = { items: [], startedAt: Date.now(), timer: null };
             digests.set(workspaceID, digest);
         }
+
+        // send once things go quiet for a moment, but never hold activity longer than the max wait
+        clearTimeout(digest.timer);
+        const wait = Math.min(DIGEST_QUIET_MS, Math.max(0, digest.startedAt + DIGEST_MAX_WAIT_MS - Date.now()));
+        digest.timer = setTimeout(() => flushDigest(workspaceID), wait);
+        digest.timer.unref?.();
 
         for (const entry of list) {
             digest.items.push({ ...entry, actorID: actor?.id ?? null, actorName: actor?.displayName ?? actor?.username ?? 'Someone' });
@@ -240,7 +246,11 @@ async function flushDigest(workspaceID) {
 
     try {
         const settings = await settingsFor(workspaceID);
-        if (!settings?.webhookURL || !settings.postKanban) return;
+
+        if (!settings?.webhookURL || !settings.postKanban) {
+            console.log(`Discord digest for ${workspaceID} skipped: ${!settings?.webhookURL ? 'no webhook set' : 'board activity is turned off'}`);
+            return;
+        }
 
         const workspace = await db.getWorkspace(workspaceID);
         if (!workspace) return;
@@ -318,7 +328,10 @@ async function flushDigest(workspaceID) {
             }
         }
 
-        if (lines.length === 0) return;
+        if (lines.length === 0) {
+            console.log(`Discord digest for ${workspaceID} skipped: ${digest.items.length} changes left nothing to post`);
+            return;
+        }
 
         const shown = lines.slice(0, MAX_DIGEST_LINES);
         if (lines.length > shown.length) shown.push(`…and ${lines.length - shown.length} more`);
@@ -333,9 +346,10 @@ async function flushDigest(workspaceID) {
             }]
         });
 
-        if (!result.ok) console.warn(`Discord digest for ${workspaceID} failed: ${result.error}`);
+        if (result.ok) console.log(`Discord digest for ${workspaceID} sent: ${lines.length} line(s)`);
+        else console.warn(`Discord digest for ${workspaceID} failed: ${result.error}`);
     } catch (error) {
-        console.warn('Discord digest failed:', error.message);
+        console.warn(`Discord digest for ${workspaceID} failed:`, error.message);
     }
 }
 

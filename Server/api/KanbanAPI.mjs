@@ -323,6 +323,7 @@ export default function createKanbanRouter(authz) {
             if (!result) return res.status(404).json({ error: 'Not found' });
 
             publish(req, { upsert: { tasks: result.tasks } });
+            recordKanbanActivity(req.workspaceID, req.user, result.task ? { type: 'created', taskID: result.task.id } : null);
             res.status(201).json(result);
         } catch (error) {
             next(error);
