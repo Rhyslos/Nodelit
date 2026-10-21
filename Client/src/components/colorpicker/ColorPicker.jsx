@@ -1,5 +1,5 @@
 // component imports
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { CircleDot, Triangle, Plus, X, Copy, Check } from 'lucide-react';
 import ColorWheel from './ColorWheel';
 import ColorHexGrid from './ColorHexGrid';
@@ -7,7 +7,6 @@ import {
     clamp,
     normalizeHex,
     hexToRgb,
-    rgbToHex,
     rgbToHsv,
     hsvToHex,
     readableTextOn
@@ -64,8 +63,11 @@ export default function ColorPicker({
     const lastEmitted = useRef(normalizeHex(value) ?? '#000000');
     const commitRef = useRef(null);
     const commitHandler = useRef(onCommit);
-    commitHandler.current = onCommit;
     const copyRef = useRef(null);
+
+    useLayoutEffect(() => {
+        commitHandler.current = onCommit;
+    }, [onCommit]);
 
     // lifecycle functions
     useEffect(() => {

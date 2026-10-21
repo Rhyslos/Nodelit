@@ -201,7 +201,7 @@
 }
 
 .subbar-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -288,7 +288,7 @@
     padding: 1px 7px;
     border: 1px solid var(--border);
     border-radius: 20px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.02em;
     text-transform: uppercase;
@@ -309,7 +309,7 @@
 }
 
 .subbar-deadline-date {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
 }
@@ -338,7 +338,7 @@
     max-width: 100%;
     padding-left: 7px;
     border-left: 2px solid var(--tab-color, var(--border));
-    font-size: 11px;
+    font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
@@ -549,7 +549,7 @@
     border-left: 3px solid var(--tab-color, var(--border));
     background: none;
     font-family: inherit;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -617,7 +617,7 @@
 .assigned-row-list {
     flex: 0 1 auto;
     max-width: 35%;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;

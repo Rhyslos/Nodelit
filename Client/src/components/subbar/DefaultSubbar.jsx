@@ -1,5 +1,5 @@
 // component imports
-import { Mail, CalendarClock } from 'lucide-react';
+import { CalendarClock } from 'lucide-react';
 import Subbar from './Subbar';
 import MeetingTimer from '../MeetingTimer';
 
@@ -65,17 +65,6 @@ export default function DefaultSubbar({ items = [], itemsLoading = false, onOpen
 
     return (
         <Subbar>
-            <button
-                type="button"
-                className="subbar-notify-btn"
-                title="Notifications"
-                aria-label="Notifications"
-            >
-                <Mail size={18} strokeWidth={2} />
-            </button>
-
-            <span className="subbar-divider" />
-
             <div className="subbar-content">
                 {!itemsLoading && visible.map(item => (
                     <button

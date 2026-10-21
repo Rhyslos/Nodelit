@@ -1,5 +1,6 @@
 // component imports
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, matchPath } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { StreamProvider } from './contexts/StreamContext';
@@ -8,18 +9,54 @@ import { KanbanProvider } from './contexts/KanbanContext';
 import { NotationProvider } from './contexts/NotationContext';
 import Navbar from './components/navbar/Navbar';
 import ToastStack from './components/toast/ToastStack';
+import { useWorkspaces } from './hooks/useWorkspaces';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import Overview from './pages/Overview';
-import Kanban from './pages/Kanban';
-import Notation from './pages/Notation';
-import Calendar from './pages/Calendar';
-import Admin from './pages/Admin';
-import Profile from './pages/Profile';
-import Privacy from './pages/Privacy';
+
+// lazily loaded pages, so the first load only ships what the login and dashboard need
+const Overview = lazy(() => import('./pages/Overview'));
+const Kanban = lazy(() => import('./pages/Kanban'));
+const Notation = lazy(() => import('./pages/Notation'));
+const Calendar = lazy(() => import('./pages/Calendar'));
+const Admin = lazy(() => import('./pages/Admin'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Privacy = lazy(() => import('./pages/Privacy'));
 
 // application constants
 export const appName = 'Nodelit';
+
+const PAGE_TITLES = {
+    overview: 'Overview',
+    kanban: 'Kanban',
+    notation: 'Notation',
+    calendar: 'Calendar',
+    dashboard: 'Dashboard',
+    profile: 'Profile',
+    admin: 'Admin',
+    privacy: 'Privacy',
+    login: 'Sign in'
+};
+
+// title components
+function DocumentTitle() {
+    const { user } = useAuth();
+    const location = useLocation();
+    const { workspaces } = useWorkspaces(user?.id);
+
+    const match = matchPath({ path: '/workspace/:workspaceID/:page' }, location.pathname);
+    const page = match?.params?.page ?? location.pathname.split('/')[1];
+    const workspaceName = match
+        ? workspaces.find(workspace => workspace.id === match.params.workspaceID)?.name
+        : null;
+
+    const title = [PAGE_TITLES[page], workspaceName, appName].filter(Boolean).join(' · ');
+
+    useEffect(() => {
+        document.title = title;
+    }, [title]);
+
+    return null;
+}
 
 // guard components
 function ProtectedRoute() {
@@ -75,8 +112,10 @@ function AppLayout() {
 
     return (
         <>
+            <DocumentTitle />
             {!hideNavbar && <Navbar />}
             <ToastStack />
+            <Suspense fallback={<div className="route-loading">Loading…</div>}>
             <Routes>
                 <Route element={<PublicRoute />}>
                     <Route path="/login" element={<Login />} />
@@ -107,6 +146,7 @@ function AppLayout() {
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
+            </Suspense>
         </>
     );
 }
