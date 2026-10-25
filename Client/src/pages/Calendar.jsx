@@ -1146,7 +1146,7 @@ export default function Calendar() {
             <ConfirmModal
                 open={!!confirmMeeting}
                 title="Delete meeting?"
-                message={confirmMeeting ? `"${confirmMeeting.title}" will be removed for everyone.` : ''}
+                message={confirmMeeting ? `"${confirmMeeting.title}" will be moved to the Archive, where it can be restored.` : ''}
                 confirmLabel="Delete"
                 cancelLabel="Cancel"
                 onConfirm={() => { deleteMeeting(confirmMeeting.id); setConfirmMeeting(null); }}

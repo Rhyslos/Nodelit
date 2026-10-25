@@ -18,6 +18,7 @@ const Overview = lazy(() => import('./pages/Overview'));
 const Kanban = lazy(() => import('./pages/Kanban'));
 const Notation = lazy(() => import('./pages/Notation'));
 const Calendar = lazy(() => import('./pages/Calendar'));
+const Archive = lazy(() => import('./pages/Archive'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Privacy = lazy(() => import('./pages/Privacy'));
@@ -30,6 +31,7 @@ const PAGE_TITLES = {
     kanban: 'Kanban',
     notation: 'Notation',
     calendar: 'Calendar',
+    archive: 'Archive',
     dashboard: 'Dashboard',
     profile: 'Profile',
     admin: 'Admin',
@@ -134,6 +136,7 @@ function AppLayout() {
                         <Route path="overview" element={<Overview />} />
                         <Route path="kanban" element={<Kanban />} />
                         <Route path="calendar" element={<Calendar />} />
+                        <Route path="archive" element={<Archive />} />
 
                         <Route element={<NotationLayout />}>
                             <Route path="notation" element={<Notation />} />

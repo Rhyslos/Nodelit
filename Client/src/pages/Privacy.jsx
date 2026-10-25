@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { appName } from '../App';
 
 // configuration constants
-const UPDATED_ON = '28 September 2026';
+const UPDATED_ON = '25 October 2026';
 
 // component functions
 export default function Privacy() {
@@ -102,6 +102,10 @@ export default function Privacy() {
                     <ul className="privacy-list">
                         <li>Sessions expire after 7 days, and immediately when you sign out or change your password.</li>
                         <li>Security log entries are deleted automatically after 90 days.</li>
+                        <li>
+                            Deleted tasks, lists, boards, pages and meetings go to the workspace's Archive first. They
+                            stay there until someone restores them or deletes them for good.
+                        </li>
                         <li>
                             Your account and content are kept for as long as you use {appName}. When an account or
                             workspace is deleted, it is first hidden so it can be restored if it was deleted by
