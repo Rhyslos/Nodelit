@@ -17,6 +17,7 @@ import createWorkspaceRouter from './api/WorkspaceAPI.mjs';
 import createAdminRouter from './api/AdminAPI.mjs';
 import createNotationRouter from './api/NotationAPI.mjs';
 import createCalendarRouter from './api/CalendarAPI.mjs';
+import createArchiveRouter from './api/ArchiveAPI.mjs';
 import { attachCollaboration, stopCollaboration } from './modules/Collaboration.mjs';
 
 // configuration constants
@@ -179,6 +180,7 @@ class Server {
         this.app.use('/api/workspaces', this.authn.authenticate, createWorkspaceRouter(this.authz));
         this.app.use('/api/notation', this.authn.authenticate, createNotationRouter(this.authz));
         this.app.use('/api/calendar', this.authn.authenticate, createCalendarRouter(this.authz));
+        this.app.use('/api/archive', this.authn.authenticate, createArchiveRouter(this.authz));
         this.app.use('/api/admin', this.authn.authenticate, createAdminRouter(this.authz));
 
         this.setupClientRoutes();

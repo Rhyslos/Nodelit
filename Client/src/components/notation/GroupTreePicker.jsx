@@ -7,7 +7,7 @@ const INDENT_STEP = 14;
 const ROOT_KEY = 'root';
 
 // utility functions
-export function buildGroupTree(groups) {
+function buildGroupTree(groups) {
     const byParent = new Map();
 
     for (const group of groups) {
@@ -30,7 +30,7 @@ export function buildGroupTree(groups) {
     return branch(ROOT_KEY, 0);
 }
 
-export function ancestorsOf(groups, groupID) {
+function ancestorsOf(groups, groupID) {
     const byID = new Map(groups.map(group => [group.id, group]));
     const chain = [];
 

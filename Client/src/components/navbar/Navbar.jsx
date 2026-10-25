@@ -1,7 +1,7 @@
 // import functions
 import { useState } from 'react';
 import { useNavigate, useLocation, matchPath } from 'react-router-dom';
-import { Waypoints, LayoutDashboard, SquareKanban, NotebookPen, CalendarDays } from 'lucide-react';
+import { Waypoints, LayoutDashboard, SquareKanban, NotebookPen, CalendarDays, Archive } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspacePresence } from '../../hooks/useWorkspacePresence';
 import HamburgerMenu from './HamburgerMenu';
@@ -15,7 +15,8 @@ const WORKSPACE_PAGES = [
     { key: 'overview', label: 'Overview', short: 'Overview', Icon: LayoutDashboard },
     { key: 'kanban', label: 'Kanban', short: 'Kanban', Icon: SquareKanban },
     { key: 'notation', label: 'Notation', short: 'Notes', Icon: NotebookPen },
-    { key: 'calendar', label: 'Calendar', short: 'Calendar', Icon: CalendarDays }
+    { key: 'calendar', label: 'Calendar', short: 'Calendar', Icon: CalendarDays },
+    { key: 'archive', label: 'Archive', short: 'Archive', Icon: Archive }
 ];
 
 // helper functions

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNotationSidebar } from '../../hooks/useNotationSidebar';
 import ContextMenu, { ContextMenuItem, ContextMenuDivider, ContextMenuLabel } from './ContextMenu';
@@ -295,6 +295,12 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
     const term = query.trim();
     const isSearching = term.length > 0;
 
+    const searchRef = useRef(searchContent);
+
+    useLayoutEffect(() => {
+        searchRef.current = searchContent;
+    });
+
     useEffect(() => {
         if (mode !== 'thorough' || term.length === 0) {
             setContentMatches(null);
@@ -309,7 +315,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
         setSearching(true);
 
         const timer = setTimeout(() => {
-            searchContent(term, controller.signal)
+            searchRef.current(term, controller.signal)
                 .then(ids => {
                     if (!active) return;
                     setContentMatches(new Set(ids));
@@ -821,7 +827,7 @@ export default function NotationSidebar({ activePageID, onPageSelect }) {
                         <>
                             <ContextMenuLabel>
                                 {contextTarget.kind === 'page'
-                                    ? 'This permanently deletes the page and its contents'
+                                    ? 'The page moves to the Archive, where it can be restored'
                                     : 'Pages in this group are kept and moved out'}
                             </ContextMenuLabel>
 

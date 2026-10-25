@@ -253,13 +253,13 @@ export function useTabDrag({ slots, allTabs = [], collapsedGroups, onReorder }) 
         });
     }, []);
 
-    const onMouseUp = useCallback(e => {
+    const onMouseUp = useCallback(function handleMouseUp(e) {
         const current = draggingRef.current;
 
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
         window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
+        window.removeEventListener('mouseup', handleMouseUp);
 
         pendingRef.current = null;
 

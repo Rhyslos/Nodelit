@@ -1,5 +1,5 @@
 // component imports
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import ColorPicker from './ColorPicker';
 
@@ -16,7 +16,7 @@ export default function ColorPickerPopover({ anchorRect, align = 'left', onClose
     const [pos, setPos] = useState({ top: 0, left: 0 });
 
     // layout functions
-    function place() {
+    const place = useCallback(() => {
         if (!anchorRect) return;
 
         const rect = ref.current ? ref.current.getBoundingClientRect() : null;
@@ -35,7 +35,7 @@ export default function ColorPickerPopover({ anchorRect, align = 'left', onClose
         }
 
         setPos({ top, left: Math.max(MENU_MARGIN, left) });
-    }
+    }, [anchorRect, align]);
 
     useLayoutEffect(() => {
         place();
@@ -47,7 +47,7 @@ export default function ColorPickerPopover({ anchorRect, align = 'left', onClose
         observer.observe(element);
 
         return () => observer.disconnect();
-    }, [anchorRect, align]);
+    }, [place]);
 
     // lifecycle functions
     useEffect(() => {

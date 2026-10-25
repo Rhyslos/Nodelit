@@ -2093,3 +2093,61 @@
         padding-bottom: 24px;
     }
 }
+
+/* completed section styles: completed tasks collect in a collapsible section at the bottom of each list */
+.kanban-completed {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+}
+
+.kanban-completed-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    align-self: flex-start;
+    padding: 6px 8px 6px 4px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--muted);
+    font-family: 'Noto Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.kanban-completed-toggle:hover {
+    background: var(--accent-lt);
+    color: var(--accent);
+}
+
+.kanban-completed-chevron {
+    transition: transform 0.15s;
+}
+
+.kanban-completed.is-open .kanban-completed-chevron {
+    transform: rotate(90deg);
+}
+
+.kanban-completed-count {
+    padding: 0 7px;
+    border-radius: 20px;
+    background: var(--border);
+    color: var(--ink);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.kanban-completed-tasks .kanban-task {
+    opacity: 0.75;
+}
+
+@media (max-width: 640px) {
+    .kanban-completed-toggle {
+        min-height: 44px;
+        font-size: 15px;
+    }
+}

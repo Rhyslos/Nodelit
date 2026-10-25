@@ -538,6 +538,7 @@ export async function meetingDeleted(workspaceID, meeting, link, actor) {
         if (!settings) return;
 
         await removeEvent(link);
+        if (link) await db.deleteMeetingDiscordEvent(link.meetingID);
 
         if (!meeting || !settings.webhookURL || !settings.postMeetings) return;
         if (Date.parse(meeting.endsAt) <= Date.now()) return;
@@ -555,6 +556,16 @@ export async function meetingDeleted(workspaceID, meeting, link, actor) {
         });
 
         if (!result.ok) console.warn(`Discord meeting post failed: ${result.error}`);
+    } catch (error) {
+        console.warn('Discord meeting sync failed:', error.message);
+    }
+}
+
+// a meeting brought back from the Archive gets its Discord event again, without a channel post
+export async function meetingRestored(workspaceID, meeting) {
+    try {
+        const settings = await settingsFor(workspaceID);
+        if (settings) await syncEvent(settings, workspaceID, meeting);
     } catch (error) {
         console.warn('Discord meeting sync failed:', error.message);
     }

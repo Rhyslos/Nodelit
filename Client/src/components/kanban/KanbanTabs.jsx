@@ -554,10 +554,10 @@ export default function KanbanTabs({
 
             <ConfirmModal
                 open={!!confirmTab}
-                title="Delete tab?"
+                title="Delete board?"
                 message={
                     confirmTab
-                        ? `"${confirmTab.name}" and all its columns, lists, and tasks will be permanently deleted. This cannot be undone.`
+                        ? `"${confirmTab.name}" and all its lists and tasks will be moved to the Archive, where you can restore them.`
                         : ''
                 }
                 confirmLabel="Delete"
