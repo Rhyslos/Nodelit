@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 // component functions
-export default function HamburgerMenu({ open, onClose, userName, workspaceActions = [] }) {
+export default function HamburgerMenu({ open, onClose, userName, onArchive, archiveActive, workspaceActions = [] }) {
     const { logout } = useAuth();
     const navigate = useNavigate();
 
@@ -21,6 +21,19 @@ export default function HamburgerMenu({ open, onClose, userName, workspaceAction
                 <button className="hamburger-close" onClick={onClose} aria-label="Close menu">✕</button>
                 <div className="hamburger-links">
                     {userName && <span className="hamburger-user">Signed in as {userName}</span>}
+
+                    {onArchive && (
+                        <>
+                            <button
+                                className={`hamburger-item ${archiveActive ? 'is-active' : ''}`}
+                                onClick={() => { onClose(); onArchive(); }}
+                            >
+                                Archive
+                            </button>
+
+                            <hr className="hamburger-divider" />
+                        </>
+                    )}
 
                     {workspaceActions.length > 0 && (
                         <div className="hamburger-workspace">
