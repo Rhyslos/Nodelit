@@ -56,6 +56,15 @@ function renderCaret(user) {
 }
 
 // page functions
+// the image extension reads its upload and error callbacks from editor storage, TipTap's way of passing them in
+function attachImageHandlers(editor, upload, onError) {
+    const storage = editor?.storage?.notationImage;
+    if (!storage) return;
+
+    storage.upload = upload;
+    storage.onError = onError;
+}
+
 function isNarrowScreen() {
     return typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches;
 }
@@ -142,10 +151,7 @@ export default function Notation() {
     }, [editor, canEdit, reading]);
 
     useEffect(() => {
-        if (!editor?.storage?.notationImage) return;
-
-        editor.storage.notationImage.upload = handleUpload;
-        editor.storage.notationImage.onError = setActionError;
+        attachImageHandlers(editor, handleUpload, setActionError);
     }, [editor, handleUpload, setActionError]);
 
 

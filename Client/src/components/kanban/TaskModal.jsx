@@ -109,8 +109,14 @@ export default function TaskModal({ task, tags = [], members = [], lists = [], f
     }, [schedule]);
 
     // lifecycle functions
+    const latestTask = useRef(task);
+
+    useLayoutEffect(() => {
+        latestTask.current = task;
+    });
+
     useEffect(() => {
-        const next = toDraft(task);
+        const next = toDraft(latestTask.current);
 
         draftRef.current = next;
         dirty.current = false;

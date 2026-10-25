@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import { THEME_KEYS, THEME_LABELS, THEME_PRESETS, resolveTheme } from '../contexts/ThemeContext';
+import { THEME_KEYS, THEME_LABELS, THEME_PRESETS, resolveTheme } from '../lib/theme';
 import { PALETTE } from '../lib/color';
 import { usePalette } from '../hooks/usePalette';
 import ColorPickerPopover from '../components/colorpicker/ColorPickerPopover';
