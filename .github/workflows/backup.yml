@@ -1,0 +1,93 @@
+name: Database backup
+
+# Nightly, encrypted backup of the production database. Needs two repository secrets:
+#   DATABASE_URL       the database's EXTERNAL connection string (Render: database page, Connect, External)
+#   BACKUP_PASSPHRASE  a long passphrase; keep a copy somewhere safe, backups can't be opened without it
+# The repository is public, so backups are only ever stored encrypted. See docs/backups.md.
+
+on:
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      restore-check:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Check the secrets are set
+        id: settings
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::warning::Backups are off: add the DATABASE_URL and BACKUP_PASSPHRASE repository secrets (see docs/backups.md)."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dump the database
+        if: steps.settings.outputs.enabled == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          url="$DATABASE_URL"
+          case "$url" in *sslmode=*) ;; *\?*) url="$url&sslmode=require" ;; *) url="$url?sslmode=require" ;; esac
+          docker run --rm --network host -e DUMP_URL="$url" postgres:18 \
+            sh -c 'pg_dump --format=custom --no-owner --no-privileges --dbname "$DUMP_URL"' > nodelit.dump
+          test -s nodelit.dump
+          echo "Dump size: $(du -h nodelit.dump | cut -f1)"
+
+      # restores the dump into a throwaway database, so a backup that can't be restored fails loudly
+      - name: Check the backup restores
+        if: steps.settings.outputs.enabled == 'true'
+        run: |
+          docker run --rm --network host -v "$PWD:/backup" -e PGPASSWORD=postgres postgres:18 \
+            pg_restore --no-owner --no-privileges --exit-on-error \
+              --host localhost --username postgres --dbname postgres /backup/nodelit.dump
+          docker run --rm --network host -e PGPASSWORD=postgres postgres:18 \
+            psql --host localhost --username postgres --dbname postgres --tuples-only --command \
+              "SELECT 'users: ' || count(*) FROM users UNION ALL SELECT 'workspaces: ' || count(*) FROM workspaces UNION ALL SELECT 'tasks: ' || count(*) FROM tasks"
+
+      - name: Encrypt
+        if: steps.settings.outputs.enabled == 'true'
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          stamp="$(date -u +%Y-%m-%d)"
+          gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 --output "nodelit-$stamp.dump.gpg" nodelit.dump <<< "$BACKUP_PASSPHRASE"
+          shred -u nodelit.dump
+          echo "BACKUP_FILE=nodelit-$stamp.dump.gpg" >> "$GITHUB_ENV"
+
+      - name: Keep the encrypted backup for 30 days
+        if: steps.settings.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodelit-backup-${{ github.run_number }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 30
+          if-no-files-found: error
