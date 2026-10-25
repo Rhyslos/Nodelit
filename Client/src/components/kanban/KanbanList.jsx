@@ -1,11 +1,32 @@
 // component imports
 import { useEffect, useRef, useState } from 'react';
-import { Tag as TagIcon, GripVertical, Plus } from 'lucide-react';
+import { Tag as TagIcon, GripVertical, Plus, ChevronRight } from 'lucide-react';
+import { orderListTasks } from '../../lib/taskOrder';
 import KanbanTask from './KanbanTask';
 import AnimatedRemoval from '../AnimatedRemoval';
 import TagPicker from './TagPicker';
 
 // component functions
+// completed section helpers: each list remembers whether its Completed section is open, per browser
+const COMPLETED_STORAGE_PREFIX = 'nodelit:completed-open:';
+
+function readCompletedOpen(listID) {
+    try {
+        return localStorage.getItem(COMPLETED_STORAGE_PREFIX + listID) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function writeCompletedOpen(listID, open) {
+    try {
+        if (open) localStorage.setItem(COMPLETED_STORAGE_PREFIX + listID, '1');
+        else localStorage.removeItem(COMPLETED_STORAGE_PREFIX + listID);
+    } catch {
+        // storage can be unavailable, the section just starts closed next time
+    }
+}
+
 export default function KanbanList({
     list,
     tasks,
@@ -89,11 +110,51 @@ export default function KanbanList({
 
     // derived variables
     const listTags = tags.filter(tag => list.tagIDs?.includes(tag.id));
-    const sortedTasks = [...tasks].sort((a, b) => a.taskOrder - b.taskOrder);
+    const sortedTasks = orderListTasks(tasks);
+    const openCount = sortedTasks.filter(task => !task.isCompleted).length;
+    const completedCount = sortedTasks.length - openCount;
+    const [completedOpen, setCompletedOpen] = useState(() => readCompletedOpen(list.id));
 
     const taskInsertionIndex = insertionPoint?.type === 'task' && insertionPoint.listId === list.id
         ? insertionPoint.insertIndex
         : null;
+
+    // render functions
+    function renderTask(task, index) {
+        return (
+            <div key={task.id}>
+                {taskInsertionIndex === index && index !== openCount && (
+                    <div className="kanban-insertion-indicator" />
+                )}
+
+                <AnimatedRemoval removing={isTaskRemoving?.(task.id) ?? false}>
+                    <KanbanTask
+                        task={task}
+                        tags={tags}
+                        members={members}
+                        isDragging={dragging === task.id}
+                        isFocused={focusedTaskId === task.id}
+                        canEdit={canEdit}
+                        onUpdate={changes => onUpdateTask(task.id, changes)}
+                        onSetTags={tagIDs => onSetTaskTags(task.id, tagIDs)}
+                        onStartDrag={onStartTaskDrag}
+                        onOpen={() => onOpenTask(task)}
+                        onFocusClear={onFocusClear}
+                        onContextMenu={onTaskContextMenu}
+                        registerTask={registerTask}
+                        registerElement={registerTaskElement}
+                    />
+                </AnimatedRemoval>
+            </div>
+        );
+    }
+
+    function toggleCompleted() {
+        setCompletedOpen(current => {
+            writeCompletedOpen(list.id, !current);
+            return !current;
+        });
+    }
 
     return (
         <AnimatedRemoval removing={isListRemoving?.(list.id) ?? false}>
@@ -178,34 +239,11 @@ export default function KanbanList({
                 </div>
 
                 <div className="kanban-task-container">
-                    {sortedTasks.map((task, index) => (
-                        <div key={task.id}>
-                            {taskInsertionIndex === index && (
-                                <div className="kanban-insertion-indicator" />
-                            )}
+                    {sortedTasks.slice(0, openCount).map((task, index) => renderTask(task, index))}
 
-                            <AnimatedRemoval removing={isTaskRemoving?.(task.id) ?? false}>
-                                <KanbanTask
-                                    task={task}
-                                    tags={tags}
-                                    members={members}
-                                    isDragging={dragging === task.id}
-                                    isFocused={focusedTaskId === task.id}
-                                    canEdit={canEdit}
-                                    onUpdate={changes => onUpdateTask(task.id, changes)}
-                                    onSetTags={tagIDs => onSetTaskTags(task.id, tagIDs)}
-                                    onStartDrag={onStartTaskDrag}
-                                    onOpen={() => onOpenTask(task)}
-                                    onFocusClear={onFocusClear}
-                                    onContextMenu={onTaskContextMenu}
-                                    registerTask={registerTask}
-                                    registerElement={registerTaskElement}
-                                />
-                            </AnimatedRemoval>
-                        </div>
-                    ))}
-
-                    {taskInsertionIndex === sortedTasks.length && (
+                    {/* the indicator sits at the end of the open tasks when dropping below them */}
+                    {taskInsertionIndex !== null && taskInsertionIndex >= openCount
+                        && (!completedOpen || taskInsertionIndex === openCount) && (
                         <div className="kanban-insertion-indicator" />
                     )}
                 </div>
@@ -215,6 +253,31 @@ export default function KanbanList({
                         <Plus size={14} strokeWidth={2} />
                         Add task
                     </button>
+                )}
+
+                {completedCount > 0 && (
+                    <div className={`kanban-completed ${completedOpen ? 'is-open' : ''}`}>
+                        <button
+                            type="button"
+                            className="kanban-completed-toggle"
+                            aria-expanded={completedOpen}
+                            onClick={() => toggleCompleted()}
+                        >
+                            <ChevronRight size={14} strokeWidth={2.4} className="kanban-completed-chevron" />
+                            Completed
+                            <span className="kanban-completed-count">{completedCount}</span>
+                        </button>
+
+                        {completedOpen && (
+                            <div className="kanban-task-container kanban-completed-tasks">
+                                {sortedTasks.slice(openCount).map((task, index) => renderTask(task, openCount + index))}
+
+                                {taskInsertionIndex === sortedTasks.length && taskInsertionIndex > openCount && (
+                                    <div className="kanban-insertion-indicator" />
+                                )}
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
         </AnimatedRemoval>

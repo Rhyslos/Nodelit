@@ -1,5 +1,6 @@
 // initialization functions
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { orderListTasks } from '../lib/taskOrder';
 
 // hook functions
 const EDGE_RATIO = 0.28;
@@ -72,6 +73,7 @@ export function useDragDrop({
     const autoScrollRef = useRef(null);
     const moveRef = useRef(null);
     const holdRef = useRef(null);
+    const helpersRef = useRef({});
 
     // callback references
     const onGhostDropRef = useRef(onGhostDrop);
@@ -122,6 +124,17 @@ export function useDragDrop({
         const r = el.getBoundingClientRect();
         return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
     }
+
+    // the window listeners below stay the same during a drag, so they reach these helpers through a ref
+    useLayoutEffect(() => {
+        helpersRef.current = {
+            getListInsertionPoint,
+            getTaskInsertionPoint,
+            isPointOverDeleteZone,
+            commitTaskReorder,
+            commitListReorder
+        };
+    });
 
     // event functions
     const onMouseMove = useCallback((event) => {
@@ -185,7 +198,7 @@ export function useDragDrop({
             }
         });
 
-        const overDelete = isPointOverDeleteZone(e.clientX, e.clientY);
+        const overDelete = helpersRef.current.isPointOverDeleteZone(e.clientX, e.clientY);
         setIsOverDeleteZone(prev => prev === overDelete ? prev : overDelete);
 
         if (overDelete) {
@@ -194,8 +207,8 @@ export function useDragDrop({
         }
 
         const point = draggingRef.current.type === 'list'
-            ? getListInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id)
-            : getTaskInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id);
+            ? helpersRef.current.getListInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id)
+            : helpersRef.current.getTaskInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id);
 
         setInsertionPoint(prev => {
             if (!prev && !point) return prev;
@@ -221,7 +234,7 @@ export function useDragDrop({
             autoScrollRef.current = null;
         }
 
-        if (isPointOverDeleteZone(e.clientX, e.clientY)) {
+        if (helpersRef.current.isPointOverDeleteZone(e.clientX, e.clientY)) {
             onDeleteDropRef.current?.(
                 draggingRef.current.item,
                 draggingRef.current.type
@@ -229,16 +242,16 @@ export function useDragDrop({
         } else {
             const isListDrag = draggingRef.current.type === 'list';
             const point = isListDrag
-                ? getListInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id)
-                : getTaskInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id);
+                ? helpersRef.current.getListInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id)
+                : helpersRef.current.getTaskInsertionPoint(e.clientX, e.clientY, draggingRef.current.item.id);
 
             if (point) {
                 if (point.type === 'column') {
                     onMoveListToColumnRef.current?.(draggingRef.current.item.id, point.columnIndex);
                 } else if (isListDrag) {
-                    commitListReorder(draggingRef.current.item, point);
+                    helpersRef.current.commitListReorder(draggingRef.current.item, point);
                 } else {
-                    commitTaskReorder(draggingRef.current.item, point);
+                    helpersRef.current.commitTaskReorder(draggingRef.current.item, point);
                 }
             } else {
                 for (const [key, el] of Object.entries(ghostRefs.current)) {
@@ -375,9 +388,8 @@ export function useDragDrop({
 
         if (!targetListId) return null;
 
-        const listTasks = tasksRef.current
-            .filter(t => t.listID === targetListId && t.id !== draggedId)
-            .sort((a, b) => a.taskOrder - b.taskOrder);
+        const listTasks = orderListTasks(tasksRef.current
+            .filter(t => t.listID === targetListId && t.id !== draggedId));
 
         let insertIndex = listTasks.length;
 
@@ -466,9 +478,8 @@ export function useDragDrop({
     function commitTaskReorder(task, point) {
         const { listId, insertIndex } = point;
 
-        const listTasks = tasksRef.current
-            .filter(t => t.listID === listId && t.id !== task.id)
-            .sort((a, b) => a.taskOrder - b.taskOrder);
+        const listTasks = orderListTasks(tasksRef.current
+            .filter(t => t.listID === listId && t.id !== task.id));
 
         const clampedIndex = Math.min(Math.max(insertIndex, 0), listTasks.length);
         const newOrder = [...listTasks];
