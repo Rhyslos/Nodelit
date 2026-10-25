@@ -196,6 +196,11 @@
     background: var(--accent-lt);
 }
 
+.hamburger-item.is-active {
+    background: var(--accent-lt);
+    color: var(--accent);
+}
+
 .hamburger-item--danger {
     color: var(--accent);
 }
