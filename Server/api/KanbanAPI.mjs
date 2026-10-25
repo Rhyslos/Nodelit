@@ -201,6 +201,17 @@ export default function createKanbanRouter(authz) {
                 isArchived: optionalBoolean(req.body?.isArchived, 'isArchived')
             };
 
+            // archiving a board sends it, with its lists and tasks, to the Archive page
+            if (changes.isArchived === true) {
+                const { removed, tab } = await db.archiveTab(req.params.id, req.user.id);
+                if (!tab) return res.status(404).json({ error: 'Not found' });
+
+                publish(req, { upsert: { tabs: [tab] }, remove: { ...removed, tabs: [] } });
+                return res.json(tab);
+            }
+
+            if (changes.isArchived === false) delete changes.isArchived;
+
             const tab = await db.updateTab(req.params.id, changes);
             if (!tab) return res.status(404).json({ error: 'Not found' });
 
@@ -213,7 +224,9 @@ export default function createKanbanRouter(authz) {
 
     router.delete('/tabs/:id', authz.tabEdit(), async (req, res, next) => {
         try {
-            const { removed, tabs } = await db.deleteTab(req.params.id);
+            // deleting moves the board to the Archive
+            const { removed, tab } = await db.archiveTab(req.params.id, req.user.id);
+            const tabs = tab ? [tab] : [];
 
             publish(req, { upsert: { tabs }, remove: removed });
             res.json({ removed, tabs });
@@ -291,7 +304,7 @@ export default function createKanbanRouter(authz) {
 
     router.delete('/columns/:id', authz.columnEdit(), async (req, res, next) => {
         try {
-            const { removed, columns } = await db.deleteColumn(req.params.id);
+            const { removed, columns } = await db.archiveColumn(req.params.id, req.user.id);
 
             publish(req, { upsert: { columns }, remove: removed });
             res.json({ removed, columns });
@@ -376,7 +389,7 @@ export default function createKanbanRouter(authz) {
 
     router.delete('/lists/:id', authz.listEdit(), async (req, res, next) => {
         try {
-            const { removed, columns } = await db.deleteList(req.params.id);
+            const { removed, columns } = await db.archiveList(req.params.id, req.user.id);
 
             publish(req, { upsert: { columns }, remove: removed });
             res.json({ removed, columns });
@@ -451,7 +464,7 @@ export default function createKanbanRouter(authz) {
 
     router.delete('/tasks/:id', authz.taskEdit(), async (req, res, next) => {
         try {
-            const removed = await db.deleteTask(req.params.id);
+            const removed = await db.archiveTask(req.params.id, req.user.id);
 
             publish(req, { remove: removed });
             res.json({ removed });

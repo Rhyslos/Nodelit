@@ -17,6 +17,8 @@ const MAX_IMAGES_PER_WORKSPACE = 500;
 const MAX_TABS_PER_WORKSPACE = 100;
 const MAX_TAB_GROUPS_PER_WORKSPACE = 50;
 const MAX_COLUMNS_PER_TAB = 50;
+const ARCHIVE_COLUMN_INDEX = -1;
+const ARCHIVE_KINDS = new Set(['task', 'list', 'board', 'page', 'meeting']);
 const MAX_LISTS_PER_COLUMN = 200;
 const MAX_TASKS_PER_WORKSPACE = 10000;
 const MAX_TAGS_PER_WORKSPACE = 500;
@@ -83,6 +85,7 @@ const TAB_SELECT = `
     t.color,
     t.tab_order AS "tabOrder",
     t.is_archived AS "isArchived",
+    t.archived_at AS "archivedAt",
     t.updated_at AS "updatedAt"
 `;
 
@@ -94,6 +97,7 @@ const MEETING_SELECT = `
     to_char(mt.starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt",
     to_char(mt.ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
     mt.created_by AS "createdBy",
+    mt.archived_at AS "archivedAt",
     mt.updated_at AS "updatedAt"
 `;
 
@@ -133,6 +137,7 @@ const LIST_SELECT = `
     t.workspace_id AS "workspaceID",
     l.name,
     l.list_order AS "listOrder",
+    l.archived_at AS "archivedAt",
     l.updated_at AS "updatedAt",
     COALESCE((
         SELECT array_agg(lt.tag_id ORDER BY lt.tag_id)
@@ -155,6 +160,7 @@ const TASK_SELECT = `
     k.task_order AS "taskOrder",
     COALESCE(to_char(k.deadline, 'YYYY-MM-DD'), '') AS deadline,
     k.checklists,
+    k.archived_at AS "archivedAt",
     k.updated_at AS "updatedAt",
     COALESCE((
         SELECT array_agg(a.user_id ORDER BY a.user_id)
@@ -193,8 +199,81 @@ const NOTATION_PAGE_SELECT = `
     p.title,
     p.layout,
     p.page_order AS "pageOrder",
+    p.archived_at AS "archivedAt",
     p.updated_at AS "updatedAt"
 `;
+
+// archive helpers
+function conflict(message) {
+    const error = new Error(message);
+    error.status = 409;
+    return error;
+}
+
+// archived lists are parked in a hidden column (index -1) so the board's columns don't shift
+async function ensureArchiveColumn(client, tabID) {
+    const existing = await client.query(
+        'SELECT id FROM board_columns WHERE tab_id = $1 AND column_index = $2',
+        [tabID, ARCHIVE_COLUMN_INDEX]
+    );
+
+    if (existing.rowCount > 0) return existing.rows[0].id;
+
+    const id = newID('col');
+    await client.query(
+        'INSERT INTO board_columns (id, tab_id, column_index) VALUES ($1, $2, $3)',
+        [id, tabID, ARCHIVE_COLUMN_INDEX]
+    );
+
+    return id;
+}
+
+async function dropEmptyArchiveColumn(client, tabID) {
+    await client.query(
+        `DELETE FROM board_columns c
+         WHERE c.tab_id = $1 AND c.column_index = $2
+           AND NOT EXISTS (SELECT 1 FROM lists l WHERE l.column_id = c.id)`,
+        [tabID, ARCHIVE_COLUMN_INDEX]
+    );
+}
+
+async function archiveListWith(client, listID, userID) {
+    const removed = emptyChangeSet();
+
+    const scope = await client.query(
+        `SELECT l.list_order, c.column_index, c.tab_id
+         FROM lists l JOIN board_columns c ON c.id = l.column_id
+         WHERE l.id = $1 AND l.archived_at IS NULL
+         FOR UPDATE OF l`,
+        [listID]
+    );
+
+    if (scope.rowCount === 0) return { removed, tabID: null };
+
+    const { list_order: listOrder, column_index: columnIndex, tab_id: tabID } = scope.rows[0];
+    const archiveColumnID = await ensureArchiveColumn(client, tabID);
+
+    await client.query(
+        `UPDATE lists
+         SET column_id = $2, archived_at = now(), archived_by = $3, archived_via = id,
+             archive_origin = jsonb_build_object('columnIndex', $4::int, 'listOrder', $5::int)
+         WHERE id = $1`,
+        [listID, archiveColumnID, userID, columnIndex, listOrder]
+    );
+
+    const { rows } = await client.query(
+        `UPDATE tasks SET archived_at = now(), archived_by = $2, archived_via = $1
+         WHERE list_id = $1 AND archived_at IS NULL
+         RETURNING id`,
+        [listID, userID]
+    );
+
+    removed.lists.push(listID);
+    removed.tasks = rows.map(row => row.id);
+
+    return { removed, tabID };
+}
+
 
 // utility functions
 function newID(prefix) {
@@ -275,7 +354,7 @@ async function normalizeColumns(client, tabIDs) {
             `SELECT c.id, c.column_index,
                     EXISTS (SELECT 1 FROM lists l WHERE l.column_id = c.id) AS occupied
              FROM board_columns c
-             WHERE c.tab_id = $1
+             WHERE c.tab_id = $1 AND c.column_index >= 0
              ORDER BY c.column_index`,
             [tabID]
         );
@@ -378,11 +457,11 @@ async function collectTagTargets(client, tagIDs) {
 
 async function hydrateTagTargets(client, listIDs, taskIDs) {
     const lists = listIDs.length > 0
-        ? (await client.query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = ANY($1::text[])`, [listIDs])).rows
+        ? (await client.query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = ANY($1::text[]) AND l.archived_at IS NULL`, [listIDs])).rows
         : [];
 
     const tasks = taskIDs.length > 0
-        ? (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = ANY($1::text[])`, [taskIDs])).rows
+        ? (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = ANY($1::text[]) AND k.archived_at IS NULL`, [taskIDs])).rows
         : [];
 
     return { lists, tasks };
@@ -1170,6 +1249,7 @@ class Database {
                 `SELECT ${MEETING_SELECT}
                  FROM meetings mt
                  WHERE mt.workspace_id = $1 AND mt.starts_at < $3 AND mt.ends_at > $2
+                   AND mt.archived_at IS NULL
                  ORDER BY mt.starts_at`,
                 [workspaceID, fromISO, toISO]
             )
@@ -1404,6 +1484,7 @@ class Database {
              JOIN workspaces w ON w.id = mt.workspace_id
              JOIN memberships m ON m.workspace_id = w.id AND m.user_id = $1
              WHERE w.deleted_at IS NULL
+               AND mt.archived_at IS NULL
                AND mt.ends_at >= now()
                AND mt.starts_at < now() + ($2::int * INTERVAL '1 day')
              ORDER BY mt.starts_at
@@ -1437,6 +1518,7 @@ class Database {
              JOIN memberships m ON m.workspace_id = w.id AND m.user_id = $1
              WHERE k.deadline IS NOT NULL
                AND k.is_completed = false
+               AND k.archived_at IS NULL
                AND t.is_archived = false
                AND w.deleted_at IS NULL
                AND k.deadline <= CURRENT_DATE + $2::int
@@ -1647,9 +1729,9 @@ class Database {
         const [tabs, tabGroups, columns, lists, tasks, tags] = await Promise.all([
             query(`SELECT ${TAB_SELECT} FROM tabs t WHERE t.workspace_id = $1 ORDER BY t.tab_order`, [workspaceID]),
             query(`SELECT ${TAB_GROUP_SELECT} FROM tab_groups g WHERE g.workspace_id = $1 ORDER BY g.id`, [workspaceID]),
-            query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE t.workspace_id = $1 ORDER BY c.column_index`, [workspaceID]),
-            query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE t.workspace_id = $1 ORDER BY l.list_order`, [workspaceID]),
-            query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE t.workspace_id = $1 ORDER BY k.task_order`, [workspaceID]),
+            query(`SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE t.workspace_id = $1 AND c.column_index >= 0 ORDER BY c.column_index`, [workspaceID]),
+            query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE t.workspace_id = $1 AND l.archived_at IS NULL ORDER BY l.list_order`, [workspaceID]),
+            query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE t.workspace_id = $1 AND k.archived_at IS NULL ORDER BY k.task_order`, [workspaceID]),
             query(`SELECT ${TAG_SELECT} FROM tags tg WHERE tg.workspace_id = $1 ORDER BY tg.name`, [workspaceID])
         ]);
 
@@ -1765,12 +1847,509 @@ class Database {
         return row?.workspaceID ?? null;
     }
 
+    // archive functions
+    async archiveTask(taskID, userID) {
+        const removed = emptyChangeSet();
+
+        const { rowCount } = await query(
+            `UPDATE tasks SET archived_at = now(), archived_by = $2, archived_via = id
+             WHERE id = $1 AND archived_at IS NULL`,
+            [taskID, userID]
+        );
+
+        if (rowCount > 0) removed.tasks.push(taskID);
+        return removed;
+    }
+
+    async archiveList(listID, userID) {
+        return withTransaction(async client => {
+            const { removed, tabID } = await archiveListWith(client, listID, userID);
+            if (!tabID) return { removed, columns: [] };
+
+            const { removedColumnIDs, updatedColumns } = await normalizeColumns(client, [tabID]);
+            removed.columns = removedColumnIDs;
+
+            return { removed, columns: updatedColumns };
+        });
+    }
+
+    async archiveColumn(columnID, userID) {
+        return withTransaction(async client => {
+            const removed = emptyChangeSet();
+
+            const scope = await client.query(
+                'SELECT tab_id AS "tabID" FROM board_columns WHERE id = $1 AND column_index >= 0',
+                [columnID]
+            );
+
+            if (scope.rowCount === 0) return { removed, columns: [] };
+
+            const { rows: lists } = await client.query(
+                'SELECT id FROM lists WHERE column_id = $1 AND archived_at IS NULL ORDER BY list_order',
+                [columnID]
+            );
+
+            for (const { id } of lists) {
+                const result = await archiveListWith(client, id, userID);
+                removed.lists.push(...result.removed.lists);
+                removed.tasks.push(...result.removed.tasks);
+            }
+
+            const { removedColumnIDs, updatedColumns } = await normalizeColumns(client, [scope.rows[0].tabID]);
+            removed.columns = removedColumnIDs;
+
+            return { removed, columns: updatedColumns };
+        });
+    }
+
+    async archiveTab(tabID, userID) {
+        return withTransaction(async client => {
+            const removed = emptyChangeSet();
+
+            const { rowCount } = await client.query(
+                `UPDATE tabs
+                 SET is_archived = true, archived_at = now(), archived_by = $2, archived_via = id, updated_at = now()
+                 WHERE id = $1 AND archived_at IS NULL`,
+                [tabID, userID]
+            );
+
+            if (rowCount === 0) return { removed, tab: null };
+
+            const { rows: lists } = await client.query(
+                `UPDATE lists AS l SET archived_at = now(), archived_by = $2, archived_via = $1
+                 FROM board_columns c
+                 WHERE c.id = l.column_id AND c.tab_id = $1 AND l.archived_at IS NULL
+                 RETURNING l.id`,
+                [tabID, userID]
+            );
+
+            const { rows: tasks } = await client.query(
+                `UPDATE tasks AS k SET archived_at = now(), archived_by = $2, archived_via = $1
+                 FROM lists l JOIN board_columns c ON c.id = l.column_id
+                 WHERE l.id = k.list_id AND c.tab_id = $1 AND k.archived_at IS NULL
+                 RETURNING k.id`,
+                [tabID, userID]
+            );
+
+            const { rows: columns } = await client.query(
+                'SELECT id FROM board_columns WHERE tab_id = $1 AND column_index >= 0',
+                [tabID]
+            );
+
+            removed.tabs.push(tabID);
+            removed.columns = columns.map(row => row.id);
+            removed.lists = lists.map(row => row.id);
+            removed.tasks = tasks.map(row => row.id);
+
+            const tab = (await client.query(`SELECT ${TAB_SELECT} FROM tabs t WHERE t.id = $1`, [tabID])).rows[0];
+
+            return { removed, tab };
+        });
+    }
+
+    async archiveNotationPage(pageID, userID) {
+        const removed = emptyNotationChangeSet();
+
+        const { rowCount } = await query(
+            `UPDATE notation_pages SET archived_at = now(), archived_by = $2
+             WHERE id = $1 AND archived_at IS NULL`,
+            [pageID, userID]
+        );
+
+        if (rowCount > 0) removed.pages.push(pageID);
+        return removed;
+    }
+
+    async archiveMeeting(meetingID, userID) {
+        return queryOne(
+            `UPDATE meetings mt SET archived_at = now(), archived_by = $2
+             WHERE mt.id = $1 AND mt.archived_at IS NULL
+             RETURNING ${MEETING_SELECT}`,
+            [meetingID, userID]
+        );
+    }
+
+    async getWorkspaceIDForArchiveItem(kind, id) {
+        const sql = {
+            task: 'SELECT workspace_id AS "workspaceID" FROM tasks WHERE id = $1',
+            list: `SELECT t.workspace_id AS "workspaceID"
+                   FROM lists l JOIN board_columns c ON c.id = l.column_id JOIN tabs t ON t.id = c.tab_id
+                   WHERE l.id = $1`,
+            board: 'SELECT workspace_id AS "workspaceID" FROM tabs WHERE id = $1',
+            page: 'SELECT workspace_id AS "workspaceID" FROM notation_pages WHERE id = $1',
+            meeting: 'SELECT workspace_id AS "workspaceID" FROM meetings WHERE id = $1'
+        }[kind];
+
+        if (!sql) return null;
+
+        const row = await queryOne(sql, [id]);
+        return row?.workspaceID ?? null;
+    }
+
+    // everything someone archived on purpose; things archived along with a list or board travel with it
+    async getArchive(workspaceID) {
+        const [tasks, lists, boards, pages, meetings] = await Promise.all([
+            query(
+                `SELECT 'task' AS kind, k.id, k.title, k.archived_at AS "archivedAt", u.display_name AS "archivedBy",
+                        k.is_completed AS "isCompleted",
+                        json_build_object('list', l.name, 'board', t.name, 'boardColor', t.color) AS context
+                 FROM tasks k
+                 JOIN lists l ON l.id = k.list_id
+                 JOIN board_columns c ON c.id = l.column_id
+                 JOIN tabs t ON t.id = c.tab_id
+                 LEFT JOIN users u ON u.id = k.archived_by
+                 WHERE k.workspace_id = $1 AND k.archived_via = k.id`,
+                [workspaceID]
+            ),
+            query(
+                `SELECT 'list' AS kind, l.id, l.name AS title, l.archived_at AS "archivedAt", u.display_name AS "archivedBy",
+                        json_build_object(
+                            'board', t.name, 'boardColor', t.color,
+                            'tasks', (SELECT count(*) FROM tasks k WHERE k.archived_via = l.id)
+                        ) AS context
+                 FROM lists l
+                 JOIN board_columns c ON c.id = l.column_id
+                 JOIN tabs t ON t.id = c.tab_id
+                 LEFT JOIN users u ON u.id = l.archived_by
+                 WHERE t.workspace_id = $1 AND l.archived_via = l.id`,
+                [workspaceID]
+            ),
+            query(
+                `SELECT 'board' AS kind, t.id, t.name AS title, t.archived_at AS "archivedAt", u.display_name AS "archivedBy",
+                        json_build_object(
+                            'boardColor', t.color,
+                            'lists', (SELECT count(*) FROM lists l WHERE l.archived_via = t.id),
+                            'tasks', (SELECT count(*) FROM tasks k WHERE k.archived_via = t.id)
+                        ) AS context
+                 FROM tabs t
+                 LEFT JOIN users u ON u.id = t.archived_by
+                 WHERE t.workspace_id = $1 AND t.archived_via = t.id`,
+                [workspaceID]
+            ),
+            query(
+                `SELECT 'page' AS kind, p.id, p.title, p.archived_at AS "archivedAt", u.display_name AS "archivedBy",
+                        json_build_object('group', g.name) AS context
+                 FROM notation_pages p
+                 LEFT JOIN notation_groups g ON g.id = p.group_id
+                 LEFT JOIN users u ON u.id = p.archived_by
+                 WHERE p.workspace_id = $1 AND p.archived_at IS NOT NULL`,
+                [workspaceID]
+            ),
+            query(
+                `SELECT 'meeting' AS kind, mt.id, mt.title, mt.archived_at AS "archivedAt", u.display_name AS "archivedBy",
+                        json_build_object(
+                            'startsAt', to_char(mt.starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+                            'endsAt', to_char(mt.ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+                        ) AS context
+                 FROM meetings mt
+                 LEFT JOIN users u ON u.id = mt.archived_by
+                 WHERE mt.workspace_id = $1 AND mt.archived_at IS NOT NULL`,
+                [workspaceID]
+            )
+        ]);
+
+        return [...tasks.rows, ...lists.rows, ...boards.rows, ...pages.rows, ...meetings.rows]
+            .sort((a, b) => new Date(b.archivedAt) - new Date(a.archivedAt));
+    }
+
+    async getArchiveItem(kind, id) {
+        if (kind === 'task') {
+            const task = await queryOne(
+                `SELECT ${TASK_SELECT}, l.name AS "listName", t.name AS "boardName",
+                        COALESCE((SELECT array_agg(u.display_name ORDER BY u.display_name)
+                                  FROM task_assignees a JOIN users u ON u.id = a.user_id
+                                  WHERE a.task_id = k.id), '{}') AS "assigneeNames",
+                        COALESCE((SELECT array_agg(tg.name ORDER BY tg.name)
+                                  FROM task_tags tt JOIN tags tg ON tg.id = tt.tag_id
+                                  WHERE tt.task_id = k.id AND tg.name <> ''), '{}') AS "tagNames"
+                 ${TASK_FROM}
+                 WHERE k.id = $1 AND k.archived_via = k.id`,
+                [id]
+            );
+
+            return task ? { kind, ...task } : null;
+        }
+
+        if (kind === 'list') {
+            const list = await queryOne(
+                `SELECT ${LIST_SELECT}, t.name AS "boardName" ${LIST_FROM} WHERE l.id = $1 AND l.archived_via = l.id`,
+                [id]
+            );
+
+            if (!list) return null;
+
+            const { rows: tasks } = await query(
+                `SELECT k.id, k.title, k.is_completed AS "isCompleted" FROM tasks k
+                 WHERE k.archived_via = $1 ORDER BY k.task_order`,
+                [id]
+            );
+
+            return { kind, ...list, tasks };
+        }
+
+        if (kind === 'board') {
+            const board = await queryOne(`SELECT ${TAB_SELECT} FROM tabs t WHERE t.id = $1 AND t.archived_via = t.id`, [id]);
+            if (!board) return null;
+
+            const { rows: lists } = await query(
+                `SELECT l.id, l.name,
+                        COALESCE((SELECT json_agg(json_build_object('id', k.id, 'title', k.title, 'isCompleted', k.is_completed)
+                                                  ORDER BY k.task_order)
+                                  FROM tasks k WHERE k.list_id = l.id AND k.archived_via = $1), '[]') AS tasks
+                 FROM lists l JOIN board_columns c ON c.id = l.column_id
+                 WHERE l.archived_via = $1
+                 ORDER BY c.column_index, l.list_order`,
+                [id]
+            );
+
+            return { kind, ...board, lists };
+        }
+
+        if (kind === 'page') {
+            const page = await queryOne(
+                `SELECT ${NOTATION_PAGE_SELECT}, COALESCE(d.content, '') AS content
+                 FROM notation_pages p LEFT JOIN notation_documents d ON d.page_id = p.id
+                 WHERE p.id = $1 AND p.archived_at IS NOT NULL`,
+                [id]
+            );
+
+            return page ? { kind, ...page } : null;
+        }
+
+        if (kind === 'meeting') {
+            const meeting = await queryOne(
+                `SELECT ${MEETING_SELECT} FROM meetings mt WHERE mt.id = $1 AND mt.archived_at IS NOT NULL`,
+                [id]
+            );
+
+            return meeting ? { kind, ...meeting } : null;
+        }
+
+        return null;
+    }
+
+    async restoreArchiveItem(kind, id) {
+        return withTransaction(async client => {
+            if (kind === 'task') {
+                const scope = await client.query(
+                    `SELECT k.list_id, l.archived_at AS "listArchived"
+                     FROM tasks k JOIN lists l ON l.id = k.list_id
+                     WHERE k.id = $1 AND k.archived_via = k.id
+                     FOR UPDATE OF k`,
+                    [id]
+                );
+
+                if (scope.rowCount === 0) return null;
+                if (scope.rows[0].listArchived) throw conflict('This task\'s list is in the Archive too. Restore the list first.');
+
+                await client.query(
+                    `UPDATE tasks
+                     SET archived_at = NULL, archived_by = NULL, archived_via = NULL,
+                         task_order = (SELECT COALESCE(MAX(task_order), -1) + 1 FROM tasks
+                                       WHERE list_id = $2 AND archived_at IS NULL),
+                         updated_at = now()
+                     WHERE id = $1`,
+                    [id, scope.rows[0].list_id]
+                );
+
+                const task = (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = $1`, [id])).rows[0];
+                return { kanban: { tasks: [task] } };
+            }
+
+            if (kind === 'list') {
+                const scope = await client.query(
+                    `SELECT l.archive_origin AS origin, c.tab_id AS "tabID", t.archived_at AS "boardArchived"
+                     FROM lists l JOIN board_columns c ON c.id = l.column_id JOIN tabs t ON t.id = c.tab_id
+                     WHERE l.id = $1 AND l.archived_via = l.id
+                     FOR UPDATE OF l`,
+                    [id]
+                );
+
+                if (scope.rowCount === 0) return null;
+
+                const { origin, tabID, boardArchived } = scope.rows[0];
+                if (boardArchived) throw conflict('This list\'s board is in the Archive too. Restore the board first.');
+
+                // back into the column it came from, or a new column at the end if that one is gone
+                const wanted = Number.isInteger(origin?.columnIndex) ? origin.columnIndex : 0;
+                let target = (await client.query(
+                    'SELECT id FROM board_columns WHERE tab_id = $1 AND column_index = $2 AND column_index >= 0',
+                    [tabID, wanted]
+                )).rows[0]?.id;
+
+                if (!target) {
+                    target = newID('col');
+                    await client.query(
+                        `INSERT INTO board_columns (id, tab_id, column_index)
+                         VALUES ($1, $2, (SELECT COUNT(*) FROM board_columns WHERE tab_id = $2 AND column_index >= 0))`,
+                        [target, tabID]
+                    );
+                }
+
+                await client.query(
+                    `UPDATE lists
+                     SET column_id = $2,
+                         list_order = (SELECT COALESCE(MAX(list_order), -1) + 1 FROM lists
+                                       WHERE column_id = $2 AND archived_at IS NULL),
+                         archived_at = NULL, archived_by = NULL, archived_via = NULL, archive_origin = NULL,
+                         updated_at = now()
+                     WHERE id = $1`,
+                    [id, target]
+                );
+
+                await client.query(
+                    'UPDATE tasks SET archived_at = NULL, archived_by = NULL, archived_via = NULL WHERE archived_via = $1',
+                    [id]
+                );
+
+                await dropEmptyArchiveColumn(client, tabID);
+
+                const columns = (await client.query(
+                    `SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE c.tab_id = $1 AND c.column_index >= 0 ORDER BY c.column_index`,
+                    [tabID]
+                )).rows;
+                const lists = (await client.query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = $1`, [id])).rows;
+                const tasks = (await client.query(
+                    `SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.list_id = $1 AND k.archived_at IS NULL ORDER BY k.task_order`,
+                    [id]
+                )).rows;
+
+                return { kanban: { columns, lists, tasks } };
+            }
+
+            if (kind === 'board') {
+                const { rowCount } = await client.query(
+                    `UPDATE tabs
+                     SET is_archived = false, archived_at = NULL, archived_by = NULL, archived_via = NULL, updated_at = now()
+                     WHERE id = $1 AND archived_via = id`,
+                    [id]
+                );
+
+                if (rowCount === 0) return null;
+
+                await client.query(
+                    'UPDATE lists SET archived_at = NULL, archived_by = NULL, archived_via = NULL WHERE archived_via = $1',
+                    [id]
+                );
+                await client.query(
+                    'UPDATE tasks SET archived_at = NULL, archived_by = NULL, archived_via = NULL WHERE archived_via = $1',
+                    [id]
+                );
+
+                const tabs = (await client.query(`SELECT ${TAB_SELECT} FROM tabs t WHERE t.id = $1`, [id])).rows;
+                const columns = (await client.query(
+                    `SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE c.tab_id = $1 AND c.column_index >= 0 ORDER BY c.column_index`,
+                    [id]
+                )).rows;
+                const lists = (await client.query(
+                    `SELECT ${LIST_SELECT} ${LIST_FROM} WHERE c.tab_id = $1 AND l.archived_at IS NULL ORDER BY l.list_order`,
+                    [id]
+                )).rows;
+                const tasks = (await client.query(
+                    `SELECT ${TASK_SELECT} ${TASK_FROM} WHERE c.tab_id = $1 AND k.archived_at IS NULL ORDER BY k.task_order`,
+                    [id]
+                )).rows;
+
+                return { kanban: { tabs, columns, lists, tasks } };
+            }
+
+            if (kind === 'page') {
+                const { rows } = await client.query(
+                    `UPDATE notation_pages AS p
+                     SET archived_at = NULL, archived_by = NULL, updated_at = now(),
+                         page_order = (SELECT COALESCE(MAX(o.page_order), -1) + 1 FROM notation_pages o
+                                       WHERE o.workspace_id = p.workspace_id AND o.archived_at IS NULL
+                                         AND o.group_id IS NOT DISTINCT FROM p.group_id)
+                     WHERE p.id = $1 AND p.archived_at IS NOT NULL
+                     RETURNING p.id`,
+                    [id]
+                );
+
+                if (rows.length === 0) return null;
+
+                const page = (await client.query(`SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p WHERE p.id = $1`, [id])).rows[0];
+                return { notation: { pages: [page] } };
+            }
+
+            if (kind === 'meeting') {
+                const meeting = (await client.query(
+                    `UPDATE meetings mt SET archived_at = NULL, archived_by = NULL, updated_at = now()
+                     WHERE mt.id = $1 AND mt.archived_at IS NOT NULL
+                     RETURNING ${MEETING_SELECT}`,
+                    [id]
+                )).rows[0];
+
+                return meeting ? { meeting } : null;
+            }
+
+            return null;
+        });
+    }
+
+    // permanent delete, only for things already in the Archive
+    async purgeArchiveItem(kind, id) {
+        return withTransaction(async client => {
+            if (kind === 'task') {
+                const { rowCount } = await client.query('DELETE FROM tasks WHERE id = $1 AND archived_via = id', [id]);
+                return rowCount > 0 ? {} : null;
+            }
+
+            if (kind === 'list') {
+                const scope = await client.query(
+                    `SELECT c.tab_id AS "tabID" FROM lists l JOIN board_columns c ON c.id = l.column_id
+                     WHERE l.id = $1 AND l.archived_via = l.id`,
+                    [id]
+                );
+
+                if (scope.rowCount === 0) return null;
+
+                await client.query('DELETE FROM lists WHERE id = $1', [id]);
+                await dropEmptyArchiveColumn(client, scope.rows[0].tabID);
+                return {};
+            }
+
+            if (kind === 'board') {
+                const { rows } = await client.query(
+                    'DELETE FROM tabs WHERE id = $1 AND archived_via = id RETURNING workspace_id AS "workspaceID"',
+                    [id]
+                );
+
+                if (rows.length === 0) return null;
+
+                const { tabs } = await normalizeTabs(client, [rows[0].workspaceID]);
+                return { kanban: { tabs } };
+            }
+
+            if (kind === 'page') {
+                const { rowCount } = await client.query(
+                    'DELETE FROM notation_pages WHERE id = $1 AND archived_at IS NOT NULL',
+                    [id]
+                );
+                return rowCount > 0 ? {} : null;
+            }
+
+            if (kind === 'meeting') {
+                const { rowCount } = await client.query(
+                    'DELETE FROM meetings WHERE id = $1 AND archived_at IS NOT NULL',
+                    [id]
+                );
+                return rowCount > 0 ? {} : null;
+            }
+
+            return null;
+        });
+    }
+
+    isArchiveKind(kind) {
+        return ARCHIVE_KINDS.has(kind);
+    }
+
     // statistics functions
     async getWorkspaceStats(workspaceID, weeks) {
         const { rows } = await query(
             `WITH scope AS (
                  SELECT id, is_completed, deadline, created_at, completed_at
-                 FROM tasks WHERE workspace_id = $1
+                 FROM tasks WHERE workspace_id = $1 AND archived_at IS NULL
              ),
              open_tasks AS (
                  SELECT * FROM scope WHERE is_completed = false
@@ -1881,6 +2460,7 @@ class Database {
                    AND k.is_completed = false
                    AND k.deadline IS NOT NULL
                    AND k.deadline <= CURRENT_DATE + 7
+                   AND k.archived_at IS NULL
                    AND t.is_archived = false
                  ORDER BY k.deadline, k.title
                  LIMIT 8
@@ -1900,7 +2480,7 @@ class Database {
                  JOIN lists l ON l.id = k.list_id
                  JOIN board_columns c ON c.id = l.column_id
                  JOIN tabs t ON t.id = c.tab_id
-                 WHERE tr.workspace_id = $1
+                 WHERE tr.workspace_id = $1 AND k.archived_at IS NULL
                  ORDER BY tr.created_at
              ),
              meetings_ahead AS (
@@ -1910,6 +2490,7 @@ class Database {
                         to_char(mt.ends_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt"
                  FROM meetings mt
                  WHERE mt.workspace_id = $1
+                   AND mt.archived_at IS NULL
                    AND mt.ends_at > now()
                  ORDER BY mt.starts_at, mt.title
                  LIMIT 4
@@ -1946,7 +2527,7 @@ class Database {
         return queryOne(
             `INSERT INTO tracked_tasks (workspace_id, task_id, created_by)
              SELECT $1, $2, $3
-             WHERE EXISTS (SELECT 1 FROM tasks WHERE id = $2 AND workspace_id = $1)
+             WHERE EXISTS (SELECT 1 FROM tasks WHERE id = $2 AND workspace_id = $1 AND archived_at IS NULL)
                AND (SELECT count(*) FROM tracked_tasks WHERE workspace_id = $1) < $4
              ON CONFLICT DO NOTHING
              RETURNING task_id AS "taskID"`,
@@ -2070,11 +2651,11 @@ class Database {
             const taskIDs = tasks.rows.map(row => row.task_id);
 
             const touchedLists = listIDs.length > 0
-                ? (await client.query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = ANY($1::text[])`, [listIDs])).rows
+                ? (await client.query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = ANY($1::text[]) AND l.archived_at IS NULL`, [listIDs])).rows
                 : [];
 
             const touchedTasks = taskIDs.length > 0
-                ? (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = ANY($1::text[])`, [taskIDs])).rows
+                ? (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.id = ANY($1::text[]) AND k.archived_at IS NULL`, [taskIDs])).rows
                 : [];
 
             return { removed, lists: touchedLists, tasks: touchedTasks };
@@ -2125,7 +2706,7 @@ class Database {
 
             const list = (await client.query(`SELECT ${LIST_SELECT} ${LIST_FROM} WHERE l.id = $1`, [listID])).rows[0] ?? null;
             const tasks = taskIDs.length > 0
-                ? (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.list_id = $1 ORDER BY k.task_order`, [listID])).rows
+                ? (await client.query(`SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.list_id = $1 AND k.archived_at IS NULL ORDER BY k.task_order`, [listID])).rows
                 : [];
 
             return { list, tasks };
@@ -2422,7 +3003,7 @@ class Database {
     async createColumn(tabID, columnIndex) {
         await assertBelow(
             { query },
-            'SELECT COUNT(*)::int AS total FROM board_columns WHERE tab_id = $1',
+            'SELECT COUNT(*)::int AS total FROM board_columns WHERE tab_id = $1 AND column_index >= 0',
             [tabID],
             MAX_COLUMNS_PER_TAB,
             `A board cannot contain more than ${MAX_COLUMNS_PER_TAB} columns`
@@ -2430,7 +3011,7 @@ class Database {
 
         const created = await queryOne(
             `INSERT INTO board_columns (id, tab_id, column_index)
-             VALUES ($1, $2, LEAST($3, (SELECT COUNT(*) FROM board_columns WHERE tab_id = $2)))
+             VALUES ($1, $2, LEAST($3, (SELECT COUNT(*) FROM board_columns WHERE tab_id = $2 AND column_index >= 0)))
              ON CONFLICT (tab_id, column_index) DO NOTHING
              RETURNING id`,
             [newID('col'), tabID, columnIndex]
@@ -2561,7 +3142,7 @@ class Database {
             const { tabID } = scope.rows[0];
 
             const total = await client.query(
-                'SELECT count(*)::int AS count FROM board_columns WHERE tab_id = $1',
+                'SELECT count(*)::int AS count FROM board_columns WHERE tab_id = $1 AND column_index >= 0',
                 [tabID]
             );
 
@@ -2594,12 +3175,12 @@ class Database {
             const { removedColumnIDs } = await normalizeColumns(client, [tabID]);
 
             const { rows: columns } = await client.query(
-                `SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE c.tab_id = $1 ORDER BY c.column_index`,
+                `SELECT ${COLUMN_SELECT} ${COLUMN_FROM} WHERE c.tab_id = $1 AND c.column_index >= 0 ORDER BY c.column_index`,
                 [tabID]
             );
 
             const { rows: lists } = await client.query(
-                `SELECT ${LIST_SELECT} ${LIST_FROM} WHERE c.tab_id = $1 ORDER BY l.list_order`,
+                `SELECT ${LIST_SELECT} ${LIST_FROM} WHERE c.tab_id = $1 AND l.archived_at IS NULL ORDER BY l.list_order`,
                 [tabID]
             );
 
@@ -2712,7 +3293,7 @@ class Database {
             );
 
             const { rows: tasks } = await client.query(
-                `SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.list_id = $1 ORDER BY k.task_order`,
+                `SELECT ${TASK_SELECT} ${TASK_FROM} WHERE k.list_id = $1 AND k.archived_at IS NULL ORDER BY k.task_order`,
                 [listID]
             );
 
@@ -2891,7 +3472,7 @@ class Database {
             ),
             query(
                 `SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p
-                 WHERE p.workspace_id = $1 ORDER BY p.page_order, p.id`,
+                 WHERE p.workspace_id = $1 AND p.archived_at IS NULL ORDER BY p.page_order, p.id`,
                 [workspaceID]
             )
         ]);
@@ -3150,7 +3731,7 @@ class Database {
 
             const { rows: pages } = await client.query(
                 `SELECT ${NOTATION_PAGE_SELECT} FROM notation_pages p
-                 WHERE p.id = ANY($1::text[]) ORDER BY p.page_order`,
+                 WHERE p.id = ANY($1::text[]) AND p.archived_at IS NULL ORDER BY p.page_order`,
                 [orphanIDs]
             );
 
@@ -3195,7 +3776,7 @@ class Database {
             `SELECT p.id
              FROM notation_pages p
              JOIN notation_documents d ON d.page_id = p.id
-             WHERE p.workspace_id = $1 AND d.content ILIKE $2
+             WHERE p.workspace_id = $1 AND p.archived_at IS NULL AND d.content ILIKE $2
              ORDER BY p.page_order, p.id`,
             [workspaceID, pattern]
         );

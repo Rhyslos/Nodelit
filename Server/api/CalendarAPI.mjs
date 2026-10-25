@@ -136,13 +136,11 @@ export default function createCalendarRouter(authz) {
 
     router.delete('/meetings/:id', authz.meetingEdit(), async (req, res, next) => {
         try {
-            const [meeting, discordLink] = await Promise.all([
-                db.getMeeting(req.params.id),
-                db.getMeetingDiscordEvent(req.params.id)
-            ]);
+            const discordLink = await db.getMeetingDiscordEvent(req.params.id);
 
-            const removed = await db.deleteMeeting(req.params.id);
-            if (!removed) return res.status(404).json({ error: 'Not found' });
+            // deleting moves the meeting to the Archive
+            const meeting = await db.archiveMeeting(req.params.id, req.user.id);
+            if (!meeting) return res.status(404).json({ error: 'Not found' });
 
             publish(req, { removedMeetings: [req.params.id] });
             meetingDeleted(req.workspaceID, meeting, discordLink, req.user);

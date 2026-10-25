@@ -302,13 +302,13 @@ export default function createNotationRouter(authz) {
             const pageID = requireID(req.params.id, 'id');
             const target = await db.getNotationPage(pageID);
 
-            const removed = await db.deleteNotationPage(pageID);
+            const removed = await db.archiveNotationPage(pageID, req.user.id);
 
             if (removed.pages.length > 0) {
                 closeRoom(pageID);
 
                 await audit(req, {
-                    action: 'notation.page_deleted',
+                    action: 'notation.page_archived',
                     targetType: 'notation_page',
                     targetID: pageID,
                     detail: { workspaceID: req.workspaceID, title: target?.title }

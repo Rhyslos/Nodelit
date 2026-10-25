@@ -463,3 +463,45 @@ WHERE webhook_url IS NOT NULL OR guild_id IS NOT NULL
 ORDER BY updated_at DESC
 LIMIT 1
 ON CONFLICT (id) DO NOTHING;
+
+-- archive columns: deleting moves things here instead of removing them.
+-- archived_via names the item that was archived; everything archived along with it
+-- (a list's tasks, a board's lists and tasks) shares that id, so a restore brings it all back.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived_at timestamptz(3);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived_by text;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived_via text;
+
+ALTER TABLE lists ADD COLUMN IF NOT EXISTS archived_at timestamptz(3);
+ALTER TABLE lists ADD COLUMN IF NOT EXISTS archived_by text;
+ALTER TABLE lists ADD COLUMN IF NOT EXISTS archived_via text;
+ALTER TABLE lists ADD COLUMN IF NOT EXISTS archive_origin jsonb;
+
+ALTER TABLE tabs ADD COLUMN IF NOT EXISTS archived_at timestamptz(3);
+ALTER TABLE tabs ADD COLUMN IF NOT EXISTS archived_by text;
+ALTER TABLE tabs ADD COLUMN IF NOT EXISTS archived_via text;
+
+ALTER TABLE notation_pages ADD COLUMN IF NOT EXISTS archived_at timestamptz(3);
+ALTER TABLE notation_pages ADD COLUMN IF NOT EXISTS archived_by text;
+
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS archived_at timestamptz(3);
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS archived_by text;
+
+CREATE INDEX IF NOT EXISTS tasks_archived_via_idx ON tasks (archived_via) WHERE archived_via IS NOT NULL;
+CREATE INDEX IF NOT EXISTS lists_archived_via_idx ON lists (archived_via) WHERE archived_via IS NOT NULL;
+
+-- boards archived before the Archive page existed join it, together with their lists and tasks
+DO $$
+BEGIN
+    IF pg_temp.run_once('2026-archive-legacy-boards') THEN
+        UPDATE tabs SET archived_at = updated_at, archived_via = id
+        WHERE is_archived AND archived_at IS NULL;
+
+        UPDATE lists AS l SET archived_at = t.archived_at, archived_via = t.id
+        FROM board_columns c JOIN tabs t ON t.id = c.tab_id
+        WHERE c.id = l.column_id AND t.archived_via = t.id AND l.archived_at IS NULL;
+
+        UPDATE tasks AS k SET archived_at = l.archived_at, archived_via = l.archived_via
+        FROM lists l
+        WHERE l.id = k.list_id AND l.archived_via IS NOT NULL AND k.archived_at IS NULL;
+    END IF;
+END $$;
