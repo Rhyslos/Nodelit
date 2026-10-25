@@ -1,5 +1,6 @@
 // database imports
 import { readFile } from 'node:fs/promises';
+import { assertSchemaSafe } from '../modules/SchemaGuard.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import pg from 'pg';
@@ -89,6 +90,10 @@ export async function withTransaction(handler) {
 // schema functions
 export async function applySchema() {
     const sql = await readFile(SCHEMA_PATH, 'utf8');
+
+    // refuses to run anything that could remove or rewrite production data
+    assertSchemaSafe(sql);
+
     const client = await pool.connect();
 
     try {
