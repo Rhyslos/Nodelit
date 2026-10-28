@@ -14,6 +14,11 @@ const MODES = [
     { value: 'custom', label: 'Custom', hint: 'Pick every colour yourself' }
 ];
 
+const CALENDAR_STYLES = [
+    { value: 'overlap', label: 'Overlaps', hint: 'Green where people are free together, with names' },
+    { value: 'split', label: 'Split colours', hint: "Each person's colour side by side" }
+];
+
 // component functions
 export default function Profile() {
     const { user, updateUser } = useAuth();
@@ -24,6 +29,7 @@ export default function Profile() {
     const [displayName, setDisplayName] = useState(user?.displayName ?? '');
     const [cursorColor, setCursorColor] = useState(user?.cursorColor ?? '#c8502a');
     const [mode, setMode] = useState(user?.theme?.mode ?? 'default');
+    const calendarStyle = user?.calendarStyle ?? 'overlap';
     const [custom, setCustom] = useState(() => ({
         ...THEME_PRESETS.default,
         ...resolveTheme(user?.theme),
@@ -200,6 +206,26 @@ export default function Profile() {
                         <button type="button" className="profile-btn" onClick={handleResetCustom}>
                             Reset custom colours
                         </button>
+                    </div>
+                </section>
+
+                <section className="profile-section">
+                    <h2 className="profile-section-title">Calendar</h2>
+
+                    <div className="profile-modes profile-modes--last">
+                        {CALENDAR_STYLES.map(option => (
+                            <button
+                                key={option.value}
+                                type="button"
+                                className={`profile-mode ${calendarStyle === option.value ? 'selected' : ''}`}
+                                aria-pressed={calendarStyle === option.value}
+                                disabled={busy}
+                                onClick={() => persist({ calendarStyle: option.value }, 'Calendar style updated')}
+                            >
+                                <span className="profile-mode-label">{option.label}</span>
+                                <span className="profile-mode-hint">{option.hint}</span>
+                            </button>
+                        ))}
                     </div>
                 </section>
 

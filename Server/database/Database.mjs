@@ -35,7 +35,7 @@ const LIST_FIELDS = ['name', 'columnID', 'listOrder'];
 const TASK_FIELDS = ['title', 'description', 'isCompleted', 'listID', 'taskOrder', 'deadline', 'checklists'];
 const NOTATION_GROUP_FIELDS = ['name', 'color', 'groupOrder', 'parentID'];
 const NOTATION_PAGE_FIELDS = ['title', 'groupID', 'pageOrder', 'layout'];
-const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor', 'theme', 'palette'];
+const PUBLIC_USER_FIELDS = ['id', 'username', 'displayName', 'role', 'cursorColor', 'theme', 'palette', 'calendarStyle'];
 
 const FIELD_DEFINITIONS = {
     name: { column: 'name' },
@@ -66,7 +66,8 @@ const USER_SELECT = `
     role,
     cursor_color AS "cursorColor",
     theme,
-    palette
+    palette,
+    calendar_style AS "calendarStyle"
 `;
 
 const WORKSPACE_SELECT = `
@@ -918,6 +919,11 @@ class Database {
         if (changes.palette !== undefined) {
             assignments.push(`palette = $${assignments.length + 1}::jsonb`);
             values.push(JSON.stringify(changes.palette));
+        }
+
+        if (changes.calendarStyle !== undefined) {
+            assignments.push(`calendar_style = $${assignments.length + 1}`);
+            values.push(changes.calendarStyle);
         }
 
         if (assignments.length === 0) return this.getUserByID(userID);

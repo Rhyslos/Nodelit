@@ -17,6 +17,7 @@ const USER_ROLES = ['admin', 'member'];
 const MEMBER_ROLES = ['member', 'viewer'];
 const MAX_ASSIGNEES = 20;
 const THEME_MODES = ['default', 'dark', 'custom'];
+const CALENDAR_STYLES = ['overlap', 'split'];
 const NOTATION_LAYOUTS = ['paged', 'pageless'];
 const THEME_KEYS = ['navbar', 'subbar', 'background', 'surface', 'accent', 'text'];
 
@@ -442,6 +443,16 @@ export function optionalNotationLayout(value, field = 'layout') {
 
     if (typeof value !== 'string' || !NOTATION_LAYOUTS.includes(value)) {
         throw new ValidationError(`${field} must be one of ${NOTATION_LAYOUTS.join(', ')}`);
+    }
+
+    return value;
+}
+
+export function optionalCalendarStyle(value, field = 'calendarStyle') {
+    if (value === undefined || value === null) return undefined;
+
+    if (!CALENDAR_STYLES.includes(value)) {
+        throw new ValidationError(`${field} must be one of ${CALENDAR_STYLES.join(', ')}`);
     }
 
     return value;

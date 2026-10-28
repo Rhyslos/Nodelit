@@ -112,7 +112,9 @@ test('upgrading a database built with the previous schema keeps every row', asyn
         for (const [table, rows] of Object.entries(before)) {
             assert.equal(after[table].length, rows.length, `${table} kept all its rows`);
 
-            const strip = row => Object.fromEntries(Object.entries(row).filter(([key]) => !/^archive/.test(key)));
+            // new columns may appear; every column that already existed must keep its values
+            const known = new Set(Object.keys(rows[0] ?? {}));
+            const strip = row => Object.fromEntries(Object.entries(row).filter(([key]) => known.has(key) && !/^archive/.test(key)));
             const beforeRows = rows.map(strip);
             const afterRows = after[table].map(strip);
 

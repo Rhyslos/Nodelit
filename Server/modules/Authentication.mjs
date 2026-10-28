@@ -2,7 +2,7 @@
 import crypto from 'crypto';
 import { promisify } from 'node:util';
 import db, { SCRYPT_OPTIONS } from '../database/Database.mjs';
-import { requirePassword, requireText, optionalColor, optionalTheme, optionalPalette } from './Validation.mjs';
+import { requirePassword, requireText, optionalColor, optionalTheme, optionalPalette, optionalCalendarStyle } from './Validation.mjs';
 import { revalidateStreams } from './Networking.mjs';
 import { revalidateCollaboration } from './Collaboration.mjs';
 
@@ -282,7 +282,8 @@ class Authentication {
                     : requireText(req.body.displayName, 'displayName', 80),
                 cursorColor: optionalColor(req.body?.cursorColor, 'cursorColor'),
                 theme: optionalTheme(req.body?.theme, 'theme'),
-                palette: optionalPalette(req.body?.palette, 'palette')
+                palette: optionalPalette(req.body?.palette, 'palette'),
+                calendarStyle: optionalCalendarStyle(req.body?.calendarStyle)
             };
 
             const user = await db.updateProfile(req.user.id, changes);
