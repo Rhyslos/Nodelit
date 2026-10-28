@@ -139,8 +139,6 @@
 
 .calendar-week-body {
     align-content: start;
-    overflow-y: auto;
-    overscroll-behavior: contain;
 }
 
 .calendar-week-head {
@@ -808,7 +806,6 @@
     padding: 5px 4px;
     border-left: 1px solid var(--border);
     overflow-y: auto;
-    overscroll-behavior: contain;
 }
 
 .calendar-deadline {
