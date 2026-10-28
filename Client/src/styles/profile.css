@@ -240,3 +240,6 @@
     color: var(--muted);
     width: 72px;
 }
+.profile-modes--last {
+    margin-bottom: 0;
+}

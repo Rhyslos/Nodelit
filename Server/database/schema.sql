@@ -505,3 +505,9 @@ BEGIN
         WHERE l.id = k.list_id AND l.archived_via IS NOT NULL AND k.archived_at IS NULL;
     END IF;
 END $$;
+
+-- calendar style preference: 'overlap' (green overlaps, the default) or 'split' (each person's colour side by side)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_style text NOT NULL DEFAULT 'overlap';
+
+SELECT pg_temp.add_constraint('users', 'users_calendar_style_check',
+    $c$CHECK (calendar_style IN ('overlap', 'split')) NOT VALID$c$);

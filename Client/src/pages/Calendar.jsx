@@ -91,6 +91,21 @@ function memberName(member) {
     return member?.displayName || member?.username || 'Member';
 }
 
+// split style: each free person's colour side by side, the original look
+function splitColors(userIDs, memberByID) {
+    const colors = userIDs.map(id => avatarColor(memberByID.get(id)));
+    if (colors.length === 0) return {};
+
+    const soften = color => `color-mix(in srgb, ${color} 55%, var(--panel))`;
+
+    if (colors.length === 1) return { background: soften(colors[0]) };
+
+    const step = 100 / colors.length;
+    const stops = colors.map((color, index) => `${soften(color)} ${index * step}% ${(index + 1) * step}%`);
+
+    return { background: `linear-gradient(90deg, ${stops.join(', ')})` };
+}
+
 // one person: their own colour; two or more: green, stronger the more people overlap
 function blockColors(userIDs, memberByID, memberCount, isDark) {
     if (userIDs.length === 0) return {};
@@ -725,7 +740,8 @@ export default function Calendar() {
                     const end = new Date(start.getTime() + segment.span * SLOT_MS);
                     const everyone = members.length > 0 && segment.userIDs.length >= members.length;
                     const compact = segment.span * rowHeight < COMPACT_HEIGHT;
-                    const overlap = segment.userIDs.length > 1;
+                    const split = user?.calendarStyle === 'split';
+                    const overlap = !split && segment.userIDs.length > 1;
                     const names = segment.userIDs.map(id => memberName(memberByID.get(id))).join(', ');
 
                     return (
@@ -742,7 +758,9 @@ export default function Calendar() {
                             style={{
                                 top: `calc(var(--slot-h) * ${segment.startIndex})`,
                                 height: `calc(var(--slot-h) * ${segment.span} - 2px)`,
-                                ...blockColors(segment.userIDs, memberByID, memberCount, isDark)
+                                ...(split
+                                    ? splitColors(segment.userIDs, memberByID)
+                                    : blockColors(segment.userIDs, memberByID, memberCount, isDark))
                             }}
                             title={`${formatRange(start, end)} · ${segment.userIDs.length}/${memberCount} free · ${names}`}
                         >
